@@ -4,12 +4,35 @@ defmodule ExAgent.Models.OpenCodeTest do
   alias ExAgent.Model
   alias ExAgent.Models.OpenCode
 
-  describe "new/1" do
-    test "applies the Zen gateway base URL by default" do
+  describe "new/1 — plan & base URL" do
+    test "Go is the default plan and uses the zen/go/v1 endpoint" do
       model = OpenCode.new(model: "deepseek-v4-flash")
+      assert model.plan == :go
+      assert model.base_url == "https://opencode.ai/zen/go/v1"
+    end
+
+    test "plan: :zen uses the zen/v1 endpoint (pay-as-you-go)" do
+      model = OpenCode.new(model: "deepseek-v4-flash", plan: :zen)
+      assert model.plan == :zen
       assert model.base_url == "https://opencode.ai/zen/v1"
     end
 
+    test "OPENCODE_PLAN env overrides the default plan" do
+      without_env("OPENCODE_PLAN", fn ->
+        System.put_env("OPENCODE_PLAN", "zen")
+        model = OpenCode.new(model: "deepseek-v4-flash")
+        assert model.plan == :zen
+        assert model.base_url == "https://opencode.ai/zen/v1"
+      end)
+    end
+
+    test "explicit :base_url overrides the plan-derived URL" do
+      model = OpenCode.new(model: "m", base_url: "https://proxy.example/v1")
+      assert model.base_url == "https://proxy.example/v1"
+    end
+  end
+
+  describe "new/1 — credentials & parity options" do
     test "api_key falls back to OPENCODE_API_KEY" do
       without_env("OPENCODE_API_KEY", fn ->
         System.put_env("OPENCODE_API_KEY", "sk-test-123")
@@ -26,11 +49,6 @@ defmodule ExAgent.Models.OpenCodeTest do
       System.delete_env("OPENCODE_API_KEY")
     end
 
-    test "explicit base_url overrides the default" do
-      model = OpenCode.new(model: "m", base_url: "https://example.test/v1")
-      assert model.base_url == "https://example.test/v1"
-    end
-
     test "app_title/app_url are accepted (call-site parity with OpenRouter) and ignored" do
       model =
         OpenCode.new(
@@ -41,6 +59,13 @@ defmodule ExAgent.Models.OpenCodeTest do
 
       assert model.model == "deepseek-v4-flash"
       assert model.extra_headers == []
+    end
+  end
+
+  describe "base_url/1" do
+    test "go -> zen/go/v1, zen -> zen/v1" do
+      assert OpenCode.base_url(:go) == "https://opencode.ai/zen/go/v1"
+      assert OpenCode.base_url(:zen) == "https://opencode.ai/zen/v1"
     end
   end
 
@@ -61,11 +86,12 @@ defmodule ExAgent.Models.OpenCodeTest do
   end
 
   describe "Model.resolve/1" do
-    test "\"opencode:<slug>\" builds an OpenCode model" do
+    test "\"opencode:<slug>\" builds a Go-plan OpenCode model by default" do
       assert {:ok, %OpenCode{model: "deepseek-v4-flash"} = model} =
                Model.resolve("opencode:deepseek-v4-flash")
 
-      assert model.base_url == "https://opencode.ai/zen/v1"
+      assert model.plan == :go
+      assert model.base_url == "https://opencode.ai/zen/go/v1"
     end
   end
 

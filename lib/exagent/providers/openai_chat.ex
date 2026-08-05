@@ -327,7 +327,7 @@ defmodule ExAgent.Providers.OpenAIChat do
 
   defp default_base_url(ExAgent.Models.OpenAI), do: "https://api.openai.com/v1"
   defp default_base_url(ExAgent.Models.OpenRouter), do: "https://openrouter.ai/api/v1"
-  defp default_base_url(ExAgent.Models.OpenCode), do: "https://opencode.ai/zen/v1"
+  defp default_base_url(ExAgent.Models.OpenCode), do: ExAgent.Models.OpenCode.base_url(:go)
   defp default_base_url(_), do: "https://api.openai.com/v1"
 
   # ----- request body ------------------------------------------------------

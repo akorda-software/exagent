@@ -13,9 +13,12 @@ Go** ($10/mo) and the pay-as-you-go **Zen** — differing only in the API key, s
 single adapter covers both. Additive, no breaking changes.
 
 - `ExAgent.Models.OpenCode` — thin provider mirroring `OpenRouter`, defaulting
-  to the Zen base URL and the `OPENCODE_API_KEY` env var. Model ids are the bare
-  Zen slugs (e.g. `deepseek-v4-flash`, `glm-5.2`), not the `opencode/<id>` form
-  used by the TUI config.
+  to the OpenCode gateway and the `OPENCODE_API_KEY` env var. The two plans —
+  flat-rate **Go** (`https://opencode.ai/zen/go/v1`, the default) and
+  pay-as-you-go **Zen** (`https://opencode.ai/zen/v1`) — share model ids and
+  auth but use distinct base URLs, selected via the `:plan` option or
+  `OPENCODE_PLAN`. Model ids are the bare Zen slugs (e.g. `deepseek-v4-flash`,
+  `glm-5.2`), not the `opencode/<id>` form used by the TUI config.
 - `ExAgent.Providers.OpenAIChat` recognises the new struct so errors are labeled
   `:opencode`, and `OPENCODE_API_KEY` / the Zen base URL fall back correctly
   when the model struct omits them.
