@@ -4,6 +4,23 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] — OpenCode Zen/Go provider
+
+A new provider adapter for the [OpenCode](https://opencode.ai/docs/zen) hosted
+gateway (`https://opencode.ai/zen/v1`), an OpenAI Chat Completions–compatible
+endpoint. Both subscription plans share this gateway — the flat-rate **OpenCode
+Go** ($10/mo) and the pay-as-you-go **Zen** — differing only in the API key, so a
+single adapter covers both. Additive, no breaking changes.
+
+- `ExAgent.Models.OpenCode` — thin provider mirroring `OpenRouter`, defaulting
+  to the Zen base URL and the `OPENCODE_API_KEY` env var. Model ids are the bare
+  Zen slugs (e.g. `deepseek-v4-flash`, `glm-5.2`), not the `opencode/<id>` form
+  used by the TUI config.
+- `ExAgent.Providers.OpenAIChat` recognises the new struct so errors are labeled
+  `:opencode`, and `OPENCODE_API_KEY` / the Zen base URL fall back correctly
+  when the model struct omits them.
+- `ExAgent.Model.resolve("opencode:<slug>")` resolves to an `%OpenCode{}`.
+
 ## [1.2.0] — turn handoff, prompt-cache accounting, refreshed docs
 
 Two small additions to the public API and a documentation overhaul. No breaking

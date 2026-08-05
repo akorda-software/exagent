@@ -134,6 +134,9 @@ defmodule ExAgent.Model do
   def resolve("openrouter:" <> name),
     do: {:ok, ExAgent.Models.OpenRouter.new(model: name)}
 
+  def resolve("opencode:" <> name),
+    do: {:ok, ExAgent.Models.OpenCode.new(model: name)}
+
   def resolve("anthropic:" <> name),
     do: {:ok, ExAgent.Models.Anthropic.new(model: name)}
 

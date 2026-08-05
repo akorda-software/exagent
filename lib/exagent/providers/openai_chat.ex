@@ -230,7 +230,14 @@ defmodule ExAgent.Providers.OpenAIChat do
 
     Stream.transform(
       sse,
-      %{text: <<>>, usage: nil, model: model_name, error: false, tool_calls: %{}, finish_reason: nil},
+      %{
+        text: <<>>,
+        usage: nil,
+        model: model_name,
+        error: false,
+        tool_calls: %{},
+        finish_reason: nil
+      },
       reducer
     )
   end
@@ -242,6 +249,7 @@ defmodule ExAgent.Providers.OpenAIChat do
   defp maybe_put_name(entry, name), do: %{entry | name: name}
 
   defp append_arguments(entry, nil), do: entry
+
   defp append_arguments(entry, frag) when is_binary(frag),
     do: %{entry | arguments: entry.arguments <> frag}
 
@@ -309,14 +317,17 @@ defmodule ExAgent.Providers.OpenAIChat do
 
   defp provider(ExAgent.Models.OpenAI), do: :openai
   defp provider(ExAgent.Models.OpenRouter), do: :openrouter
+  defp provider(ExAgent.Models.OpenCode), do: :opencode
   defp provider(_), do: :openai
 
   defp env_key(ExAgent.Models.OpenAI), do: System.get_env("OPENAI_API_KEY")
   defp env_key(ExAgent.Models.OpenRouter), do: System.get_env("OPENROUTER_API_KEY")
+  defp env_key(ExAgent.Models.OpenCode), do: System.get_env("OPENCODE_API_KEY")
   defp env_key(_), do: nil
 
   defp default_base_url(ExAgent.Models.OpenAI), do: "https://api.openai.com/v1"
   defp default_base_url(ExAgent.Models.OpenRouter), do: "https://openrouter.ai/api/v1"
+  defp default_base_url(ExAgent.Models.OpenCode), do: "https://opencode.ai/zen/v1"
   defp default_base_url(_), do: "https://api.openai.com/v1"
 
   # ----- request body ------------------------------------------------------

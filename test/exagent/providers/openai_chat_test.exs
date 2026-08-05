@@ -4,7 +4,7 @@ defmodule ExAgent.Providers.OpenAIChatTest do
   alias ExAgent.Message.{Part, Response}
   alias ExAgent.Message, as: Msg
   alias ExAgent.ModelRequestParameters
-  alias ExAgent.Models.{OpenAI, OpenRouter}
+  alias ExAgent.Models.{OpenAI, OpenRouter, OpenCode}
   alias ExAgent.Providers.OpenAIChat
   alias ExAgent.Tool
 
@@ -222,8 +222,18 @@ defmodule ExAgent.Providers.OpenAIChatTest do
                })
     end
 
+    test "OpenCode error bodies are labeled as opencode" do
+      body = %{"error" => %{"message" => "insufficient balance"}}
+
+      assert {:error, %ExAgent.RequestError{provider: :opencode, reason: :provider_error}} =
+               OpenAIChat.parse_body(body, %OpenAIChat.Config{
+                 provider: :opencode,
+                 system: "opencode"
+               })
+    end
+
     test "missing credentials preserve provider identity from model config" do
-      without_env(["OPENAI_API_KEY", "OPENROUTER_API_KEY"], fn ->
+      without_env(["OPENAI_API_KEY", "OPENROUTER_API_KEY", "OPENCODE_API_KEY"], fn ->
         params = %ModelRequestParameters{}
 
         assert {:error, %ExAgent.RequestError{provider: :openai, reason: :missing_credentials}} =
@@ -233,6 +243,14 @@ defmodule ExAgent.Providers.OpenAIChatTest do
                 %ExAgent.RequestError{provider: :openrouter, reason: :missing_credentials}} =
                  OpenAIChat.request(
                    %OpenRouter{model: "openai/gpt-4o-mini", api_key: nil},
+                   [],
+                   nil,
+                   params
+                 )
+
+        assert {:error, %ExAgent.RequestError{provider: :opencode, reason: :missing_credentials}} =
+                 OpenAIChat.request(
+                   %OpenCode{model: "deepseek-v4-flash", api_key: nil},
                    [],
                    nil,
                    params

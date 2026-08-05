@@ -2,7 +2,7 @@ defmodule ExAgent.MixProject do
   use Mix.Project
 
   @source_url "https://github.com/kukapu/exagent"
-  @version "1.2.0"
+  @version "1.3.0"
 
   def project do
     [
@@ -115,6 +115,7 @@ defmodule ExAgent.MixProject do
         Providers: [
           ExAgent.Models.OpenAI,
           ExAgent.Models.OpenRouter,
+          ExAgent.Models.OpenCode,
           ExAgent.Models.Anthropic,
           ExAgent.Models.Test,
           ExAgent.Providers.OpenAIChat,
