@@ -26,6 +26,31 @@ defmodule ExAgent.Models.OpenCodeTest do
       end)
     end
 
+    test "plan strings are case/whitespace-insensitive (go/ZEN/ Go )" do
+      assert OpenCode.new(model: "m", plan: "GO").plan == :go
+      assert OpenCode.new(model: "m", plan: "ZEN").plan == :zen
+      assert OpenCode.new(model: "m", plan: " Go ").plan == :go
+    end
+
+    test "OPENCODE_PLAN='' (empty) defaults to :go — common env-file mistake" do
+      without_env("OPENCODE_PLAN", fn ->
+        System.put_env("OPENCODE_PLAN", "")
+        assert OpenCode.new(model: "m").plan == :go
+      end)
+    end
+
+    test "an unrecognized string plan raises (loud, not a silent wrong-endpoint)" do
+      assert_raise ArgumentError, ~r/unknown OPENCODE_PLAN/, fn ->
+        OpenCode.new(model: "m", plan: "zne")
+      end
+    end
+
+    test "an unrecognized :plan atom raises (symmetric with the string path)" do
+      assert_raise ArgumentError, ~r/unknown :plan/, fn ->
+        OpenCode.new(model: "m", plan: :pro)
+      end
+    end
+
     test "explicit :base_url overrides the plan-derived URL" do
       model = OpenCode.new(model: "m", base_url: "https://proxy.example/v1")
       assert model.base_url == "https://proxy.example/v1"

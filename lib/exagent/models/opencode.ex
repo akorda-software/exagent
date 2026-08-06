@@ -9,7 +9,6 @@ defmodule ExAgent.Models.OpenCode do
 
     * **Go** (`:go`, the default) — flat-rate subscription ($10/mo) with rolling
       quotas (per 5h / week / month). Endpoint: `https://opencode.ai/zen/go/v1`.
-      Requests report `"cost": "0"`.
     * **Zen** (`:zen`) — pay-as-you-go, billed per token from a prepaid balance.
       Endpoint: `https://opencode.ai/zen/v1`.
 
@@ -78,7 +77,11 @@ defmodule ExAgent.Models.OpenCode do
   def base_url(:go), do: @go_base_url
   def base_url(:zen), do: @zen_base_url
 
-  # nil -> honor OPENCODE_PLAN; an explicit value wins.
+  # An explicit :plan wins; nil honors OPENCODE_PLAN. nil/empty -> :go (the
+  # documented default). Any OTHER unrecognized value RAISES rather than
+  # silently picking the wrong endpoint — a Go key against the Zen URL (or vice
+  # versa) comes back as an opaque CreditsError, so a loud config error is
+  # strictly more debuggable. Applied symmetrically to atoms and binaries.
   defp plan_from_env(nil), do: System.get_env("OPENCODE_PLAN")
   defp plan_from_env(plan), do: plan
 
@@ -86,11 +89,17 @@ defmodule ExAgent.Models.OpenCode do
   defp normalize_plan(:go), do: :go
   defp normalize_plan(:zen), do: :zen
 
-  defp normalize_plan("go"), do: :go
-  defp normalize_plan("zen"), do: :zen
-
   defp normalize_plan(other) when is_binary(other) do
-    other |> String.downcase() |> then(&if(&1 == "zen", do: :zen, else: :go))
+    case other |> String.trim() |> String.downcase() do
+      "" -> :go
+      "go" -> :go
+      "zen" -> :zen
+      _ -> raise ArgumentError, "unknown OPENCODE_PLAN #{inspect(other)} (expected :go or :zen)"
+    end
+  end
+
+  defp normalize_plan(other) do
+    raise ArgumentError, "unknown :plan #{inspect(other)} (expected :go or :zen)"
   end
 
   @impl true

@@ -7,10 +7,11 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [1.3.0] — OpenCode Zen/Go provider
 
 A new provider adapter for the [OpenCode](https://opencode.ai/docs/zen) hosted
-gateway (`https://opencode.ai/zen/v1`), an OpenAI Chat Completions–compatible
-endpoint. Both subscription plans share this gateway — the flat-rate **OpenCode
-Go** ($10/mo) and the pay-as-you-go **Zen** — differing only in the API key, so a
-single adapter covers both. Additive, no breaking changes.
+gateway, an OpenAI Chat Completions–compatible endpoint. Its two plans — the
+flat-rate **OpenCode Go** ($10/mo) and the pay-as-you-go **Zen** — share model
+ids and auth but use *distinct* base URLs, so the adapter routes to the right one
+via `:plan` (or `OPENCODE_PLAN`); a single key+plan pair is all a caller needs.
+Additive, no breaking changes.
 
 - `ExAgent.Models.OpenCode` — thin provider mirroring `OpenRouter`, defaulting
   to the OpenCode gateway and the `OPENCODE_API_KEY` env var. The two plans —
