@@ -13,8 +13,18 @@ defmodule ExAgent.OutputSchema do
       `{:error, errors}` — feeding the errors back to the model for a retry.
 
   The convention is the standard Ecto one: a `changeset(struct, attrs)` callback.
-  If the module doesn't define one, a default "cast all fields" changeset is
-  used.
+  Its declared required fields are authoritative, including an empty list.
+  Optional fields accept omission or `null` through an `anyOf` branch, keeping
+  reflected non-null constraints intact. Optional `embeds_many` is the Ecto
+  exception: it accepts omission or an array, not `null`. Required fields are
+  not nullable. These rules apply recursively to embedded schemas. Schemas
+  without a changeset keep the default that casts and requires all fields.
+
+  Reflection inspects a changeset built with empty attributes; it cannot fully
+  describe arbitrary custom or conditional validations. `validate/2` always
+  runs the actual changeset and remains the final authority. Provider support
+  for this JSON Schema (including `anyOf` and strict-mode restrictions) must
+  be checked against the actual backend.
 
   ## Example
 
@@ -47,6 +57,9 @@ defmodule ExAgent.OutputSchema do
   @doc "Derive a JSON Schema from an Ecto schema module."
   @spec json_schema(module()) :: map()
   def json_schema(mod) do
+    changeset = apply_changeset(mod, %{})
+    required = Enum.map(changeset.required, &Atom.to_string/1)
+
     properties =
       mod
       |> fields()
@@ -56,9 +69,16 @@ defmodule ExAgent.OutputSchema do
     # length → minLength/maxLength) so the model can actually comply with them.
     # Without this, a `validate_inclusion(:category, [...])` is invisible to the
     # model and every structured-output call needs wasteful retries.
-    properties = merge_changeset_validations(mod, properties)
-
-    required = required_fields(mod) |> Enum.map(&Atom.to_string/1)
+    properties =
+      changeset
+      |> merge_changeset_validations(properties)
+      |> Map.new(fn {field, schema} ->
+        if field in required or embeds_many?(mod, field) do
+          {field, schema}
+        else
+          {field, %{anyOf: [schema, %{type: "null"}]}}
+        end
+      end)
 
     %{type: "object", properties: properties, required: required}
   end
@@ -66,9 +86,7 @@ defmodule ExAgent.OutputSchema do
   # Fold the changeset's declared validations into the per-field schemas. We run
   # the schema's changeset once (on empty data) purely to read `.validations`,
   # the metadata Ecto attaches for each validate_* call.
-  defp merge_changeset_validations(mod, properties) do
-    changeset = apply_changeset(mod, %{})
-
+  defp merge_changeset_validations(changeset, properties) do
     Enum.reduce(changeset.validations, properties, fn {field, {kind, meta}}, props ->
       case Map.get(props, Atom.to_string(field)) do
         nil -> props
@@ -126,6 +144,10 @@ defmodule ExAgent.OutputSchema do
   # exception into a retryable validation error so the model gets a chance to
   # fix its arguments.
   defp apply_changeset(mod, data) do
+    # function_exported?/3 does not load modules; reflection must also work on
+    # the first use of a schema, before any __schema__/1 call has loaded it.
+    Code.ensure_loaded!(mod)
+
     try do
       if function_exported?(mod, :changeset, 2) do
         mod.changeset(struct(mod), data)
@@ -146,13 +168,12 @@ defmodule ExAgent.OutputSchema do
 
   defp fields(mod), do: mod.__schema__(:fields)
 
-  defp required_fields(mod) do
-    # The schema's own changeset is the source of truth for required-ness.
-    # We run it once with empty data to collect validate_required targets.
-    case apply_changeset(mod, %{}).required do
-      [] -> fields(mod)
-      required -> required
-    end
+  # Ecto allows nil for optional scalar fields and embeds_one, but an optional
+  # embeds_many must be omitted or an array, never null (cast_embed rejects it).
+  defp embeds_many?(mod, field) do
+    Enum.any?(mod.__schema__(:embeds), fn embed ->
+      Atom.to_string(embed) == field and mod.__schema__(:embed, embed).cardinality == :many
+    end)
   end
 
   # ----- Ecto type -> JSON Schema -----------------------------------------

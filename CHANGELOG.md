@@ -4,6 +4,70 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed — breaking observable schema contract
+
+- `OutputSchema.json_schema/1` now follows the changeset's declared required
+  fields, including an empty list. Previously an empty list made every field
+  required in the generated schema, despite the changeset accepting omissions.
+- Optional properties now permit `null` through `anyOf`, retaining reflected
+  constraints on the non-null branch. Optional `embeds_many` remains array-only,
+  matching Ecto; required fields remain non-null. These rules apply recursively
+  to embeds, including optional fields inside required embedded objects/arrays.
+  Schemas without a changeset keep the original all-required fallback.
+- There is one generation contract, with no mode option or additional agent
+  field. Keeping divergent schema/changeset semantics would add permanent API
+  and testing complexity solely to preserve a discrepancy. A single contract
+  favors long-term maintainability and a more accurate description to the model.
+- The original source APIs (`json_schema/1`, `new/1`, `validate/2`) and result
+  shapes remain, but **the JSON Schema emitted in `final_result` changes**.
+  Consumers and providers can observe this change: it is not a compatible
+  patch just because function signatures stay the same. The next release
+  containing it **must be a new major version under SemVer (2.0.0 or later),
+  not a 1.x release**. This work does not bump the version or publish anything.
+
+### Migration
+
+- Declare genuinely required scalar fields with `validate_required/2` in the
+  changeset. For required embeds use `cast_embed/3` with `required: true`.
+  Repeat this review in nested schemas rather than relying on the old
+  empty-required-list fallback.
+- Update schema snapshots and consumers that assumed optional fields were
+  always present or never null. Optional scalars and `embeds_one` can be omitted
+  or null; optional `embeds_many` can be omitted or an array, not null.
+- Test the generated schema against the actual provider/backend before adopting
+  the major release. It must support the emitted `anyOf`; strict structured-output
+  modes may impose additional requirements on `required` and other keywords.
+  Offline request tests prove the payload, not backend acceptance.
+- Reflection reads a changeset built with empty attributes. It cannot perfectly
+  represent arbitrary custom or conditional validations; `validate/2` remains
+  the final authority and validation failures still use the existing retry path.
+
+### Fixed
+
+- `Server.chat/3`, `send_message/3` and `steer/3` forward `:estimate_cost`,
+  `:permissions` and `:approve`, including queued requests. Explicit
+  `:message_history` remains supported; internal event/run options stay protected.
+- Active Server runs (including streams) are cancelled when their owner stops
+  or is killed. A per-run guardian monitors owner and worker, cleans itself up
+  on completion/abort/crash, and preserves isolation of run failures.
+- `OutputSchema` loads schema modules before checking for `changeset/2`, so
+  first-use reflection/validation does not accidentally choose the fallback.
+- OpenAIChat forwards `ModelSettings.extra` in normal and streaming requests,
+  enabling reasoning controls and explicit `tool_choice` (e.g. OpenRouter
+  `"auto"`). Typed non-nil settings take precedence; `model/messages/tools/stream`
+  cannot be overwritten, with atom/string keys normalized before merging.
+
+Server option forwarding, owner cancellation and OpenAIChat `extra` forwarding
+are fixes to existing run ownership/options contracts, not new configuration
+defaults. With omitted options / empty `extra`, their prior request defaults
+remain; supplied options now take effect and orphaned runs are cancelled.
+
+Offline verification: `EXAGENT_OFFLINE=1 MIX_ENV=test mix test` skips the Postgres
+bootstrap and real-provider tests; provider body tests use an in-process Req
+adapter, including end-to-end `final_result` payloads with optional/nested schemas.
+
 ## [1.2.0] — turn handoff, prompt-cache accounting, refreshed docs
 
 Two small additions to the public API and a documentation overhaul. No breaking

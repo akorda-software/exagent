@@ -60,7 +60,7 @@ Add `:exagent` to your list of dependencies in `mix.exs`:
 
 ```elixir
 def deps do
-  [{:exagent, "~> 1.0"}]
+  [{:exagent, "~> 1.2"}]
 end
 ```
 
@@ -82,7 +82,7 @@ using the built-in [`ExAgent.Models.Test`] model, **no API key needed**:
 
 ```elixir
 Mix.install([
-  {:exagent, "~> 1.0"}
+  {:exagent, "~> 1.2"}
 ])
 
 agent = ExAgent.new(model: "test", instructions: "Be concise.")
@@ -430,13 +430,30 @@ the environment).
 ## Documentation
 
 - [Full module reference on hexdocs][hexdocs]
-- [`DESIGN.md`](./DESIGN.md) — architecture, principles and rationale.
+- [`DESIGN.md`](./DESIGN.md) — vision, architecture, evolution/compatibility policy
+  and stabilization criteria (sections 2.1–2.3).
 - [`ROADMAP.md`](./ROADMAP.md) — development phases and progress.
 - [`CHANGELOG.md`](./CHANGELOG.md) — release history.
 
 ## Contributing
 
 Bug reports and pull requests are welcome on [GitHub][source].
+
+ExAgent aims to make reliable agents and tool use straightforward across a broad
+range of providers, from one-shot calls to layered stateful workflows. The current
+priority is a solid, maintainable foundation, not adding features at the expense
+of coherent contracts. This is a product direction, not a claim that every
+provider or capability is already supported.
+
+Preserve compatibility where practical. Breaking changes are acceptable when
+they solve a demonstrated design problem and their general benefit justifies
+the migration cost; cosmetic API churn is not. Document the rationale,
+alternatives, observable impact, migration and verification. Published stable
+contracts still follow SemVer, even while the author's own applications are
+pre-production. Once the foundation is validated, favor additive extensions and
+planned deprecations over repeated structural changes. See the policy in
+[`DESIGN.md`](./DESIGN.md) and the consolidation checklist in
+[`ROADMAP.md`](./ROADMAP.md).
 
 ```bash
 mix check                       # compile (warnings-as-errors) + format + test
@@ -453,4 +470,3 @@ a live provider are tagged `:integration` (opt in with `--only integration`);
 Copyright (c) 2025 kukapu
 
 Licensed under the MIT License — see [LICENSE](./LICENSE).
-

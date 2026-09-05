@@ -5,8 +5,17 @@
 
 ## 1. Visión
 
-ExAgent aspira a ser uno de los mejores frameworks Hex para construir agentes
-LLM, siendo a la vez:
+ExAgent aspira a ser una biblioteca/framework de agentes de propósito general
+para Elixir: conectar la mayoría de proveedores relevantes, crear agentes con
+poca configuración, invocar tools y componer flujos desde una llamada sencilla
+hasta sistemas con estado, streaming y coordinación multi-agente.
+
+El objetivo es una base de alta calidad que pueda mantenerse y ampliarse durante
+años sin rediseñar continuamente sus contratos. Ser completo no significa
+incluir todas las funciones en el núcleo ni prometer que todos los proveedores
+ofrecen las mismas capacidades. La complejidad adicional debe ser opt-in.
+
+Debe ser a la vez:
 
 - **Ergonómico como pydanticAI** — tools con schema derivado del tipo, output
   estructurado con changesets, dependencias tipadas, capabilities/hooks.
@@ -21,6 +30,10 @@ ExAgent es **agnóstico**: no asume ningún dominio. El caso motor (una partida
 de D&D en Phoenix con DM + bots + humanos en tiempo real) es el banco de
 pruebas, pero el diseño sirve para soporte multi-agente, pipelines de
 investigación, editores colaborativos, etc.
+
+Las aplicaciones del autor, incluida WhoamAI, son bancos de pruebas, no la
+especificación de la librería. Una solución específica se queda en la aplicación
+salvo que revele una necesidad general y encaje en las capas de ExAgent.
 
 ## 2. Principios
 
@@ -42,6 +55,99 @@ investigación, editores colaborativos, etc.
    (LiveView, CLI, channel) se suscribe. Convergencia de Pi + opencode + alloy.
 6. **Sin dependencias forzadas**. DB-free por defecto (como hoy). Phoenix,
    Oban, Postgres, Redis son adaptadores opt-in, nunca requeridos.
+
+### 2.1. Política de evolución y compatibilidad
+
+**Dirección acordada con el autor el 2026-09-05:** construir ahora una base muy
+sólida para poder ser más consistente después. La compatibilidad es una
+preferencia de diseño importante, no una prohibición absoluta de mejorar un
+contrato defectuoso.
+
+Las aplicaciones conocidas del autor todavía no están en producción, lo que
+permite afrontar ahora correcciones estructurales con menor coste de migración.
+Eso no permite asumir que ningún consumidor externo de Hex dependa del contrato
+publicado. Las versiones 1.x ya publicadas siguen sujetas a SemVer.
+
+- **Preservar por defecto.** Preferir cambios internos o aditivos que resuelvan
+  bien el problema sin alterar contratos válidos. No renombrar firmas, opciones
+  o resultados por gusto, ni reorganizar capas sin un beneficio concreto.
+- **Corregir la base cuando compense.** Aceptar cambios incompatibles si eliminan
+  inconsistencias, problemas de seguridad, costes operativos o limitaciones
+  generales que una solución compatible mantendría o agravaría. Una arquitectura
+  más simple y coherente puede justificar una migración puntual.
+- **No añadir deuda de compatibilidad sin necesidad.** Un alias, adaptador o modo
+  anterior puede facilitar una migración real; debe tener alcance y criterio de
+  retirada. No duplicar permanentemente dos semánticas solo por evitar reconocer
+  una ruptura, ni eliminar compatibilidad barata y útil por principio.
+- **Diseñar para extensiones previsibles, no hipotéticas.** Nuevos proveedores,
+  tools o stores deben encajar mediante contratos pequeños y explícitos.
+  No convertir cada diferencia de proveedor en una condición del loop central
+  ni introducir un framework dentro del framework para usos sin evidencia.
+- **Reconocer todos los contratos observables.** Compatibilidad incluye firmas,
+  defaults, resultados y errores, esquemas JSON, eventos y su orden, historial,
+  snapshots y semántica de cancelación, reintentos y uso. Mantener la aridad no
+  basta para considerar un cambio compatible.
+- **Comunicar y versionar.** Documentar impacto y migración antes de publicar;
+  usar deprecación gradual cuando sea práctica y una major cuando cambie un
+  contrato estable de forma incompatible. No publicar cambios estructurales
+  silenciosamente como patch ni usar la fase temprana como excepción a SemVer.
+
+### 2.2. Qué justifica un cambio de contrato
+
+Antes de implementar una ruptura, dejar una decisión breve en este documento
+con estos puntos; trasladar la migración y el impacto publicado al changelog:
+
+1. **Problema demostrado:** caso reproducible, inconsistencia o limitación
+   concreta. Separar lo observado de una hipótesis sobre rendimiento o uso.
+2. **Beneficio general:** qué mejora para ExAgent y sus consumidores, no solo
+   para la aplicación que motivó el cambio.
+3. **Alternativas:** por qué una corrección interna, extensión compatible o
+   adaptador no resuelve suficientemente el problema; coste de mantenerlo.
+4. **Impacto y migración:** qué contratos cambian, qué consumidores conocidos
+   los usan y qué deben hacer. Considerar datos persistidos y efectos externos.
+5. **Evidencia:** regresión del problema, tests de contrato y escenarios de
+   integración. Si cambia un adaptador, comprobar su backend real cuando sea
+   necesario y registrar lo que no se haya podido verificar.
+6. **Salida estable:** versión prevista, documentación y criterio para considerar
+   cerrado el cambio. Evitar encadenar rupturas pequeñas del mismo concepto
+   por no haber revisado antes sus relaciones con las demás capas.
+
+No hace falta una propuesta extensa para cada bugfix. La profundidad de la
+justificación y la verificación debe ser proporcional al impacto del cambio.
+
+### 2.3. Base sólida antes de estabilizar
+
+La fase actual prioriza consolidar lo existente antes de multiplicar funciones.
+Estos son criterios de cierre, no garantías que ya se hayan demostrado:
+
+- **Contratos coherentes entre capas:** mensajes, outputs, llamadas y resultados
+  de tools, errores, uso, eventos e historial tienen significado explícito y
+  no cambian accidentalmente al pasar del core al Server o a una Session.
+- **Integración de proveedores extensible y honesta:** contrato común pequeño,
+  capacidades y restricciones documentadas por backend. Distinguir soporte de
+  texto, tools, streaming y salida estructurada; rechazar o explicar una
+  capacidad no soportada, nunca degradarla en silencio. Compartir adaptadores
+  compatibles donde tenga sentido sin ocultar particularidades necesarias.
+- **Tools fiables:** argumentos y resultados validados, identidad de llamadas
+  coherente, errores y permisos explícitos, cancelación y reintentos definidos.
+  Un fallo no debe repetir silenciosamente un efecto externo; la app sigue
+  siendo responsable de la idempotencia y seguridad de sus propias tools.
+- **Operación acotada:** propiedad de tareas, cleanup, backpressure, límites de
+  contexto/uso y observabilidad comprobados. Medir memoria, concurrencia y
+  latencia en escenarios representativos antes de prometer eficiencia.
+- **Ergonomía validada:** ejemplos mínimos ejecutables para crear un agente,
+  cambiar de proveedor y llamar tools, además de escenarios con estado. Probar
+  consumidores de distintos dominios para no diseñar únicamente para un juego.
+- **Evolución verificable:** matriz de pruebas offline y de proveedores reales,
+  migración de aplicaciones conocidas revisada, cambios de snapshots/eventos
+  versionados cuando corresponda, documentación que distingue soporte probado,
+  limitaciones y objetivos futuros.
+
+Al cerrar esta consolidación, los contratos públicos revisados pasan a ser una
+base estable. Las mejoras posteriores deben preferir extensiones y adaptadores,
+con deprecaciones planificadas cuando hagan falta. Estabilizar no significa
+congelar el producto ni prometer que nunca habrá otra major: significa reducir
+las rupturas estructurales a decisiones excepcionales y bien justificadas.
 
 ## 3. De qué nos inspiramos (comparativa)
 
@@ -225,6 +331,42 @@ Topics recomendados: `"exagent:agent:<agent_id>"` y
   Esto evita bloquear el futuro Postgres/multi-nodo desde la Fase 2.
 - **Backpressure antes que magia.** `send_message/3` debe devolver `:busy` o
   `:queue_full` de forma explícita. Las colas infinitas son un bug de producto.
+- **El run pertenece al Server.** Un guardián por ejecución monitoriza al dueño
+  y al worker; al morir el Server cancela el run incluso ante `:kill`, y termina
+  al completar, abortar o fallar el worker. La cancelación es asíncrona y no
+  revierte efectos externos ni alcanza procesos desligados creados por la app.
+  Los permisos, aprobación y estimador de coste se conservan también en cola;
+  el Server sigue controlando los identificadores internos y el canal de eventos.
+- **Un único contrato de schema basado en Ecto.** Se prioriza la mantenibilidad
+  a largo plazo frente a conservar dos ramas para una discrepancia entre el
+  schema generado y su changeset. `OutputSchema.json_schema/1` conserva su firma
+  original; no se añaden modos, opciones ni campos al agente. Los requeridos
+  declarados se respetan incluso vacíos. Los opcionales admiten nulo sin debilitar
+  las restricciones reflejadas; `embeds_many` sigue siendo array, nunca nulo.
+  Los campos requeridos no admiten nulo, pero sus embeds pueden contener campos
+  opcionales: la misma regla se aplica recursivamente a todos los niveles.
+  Sin changeset se conserva el fallback que requiere todos los campos. La
+  reflexión carga el módulo antes de comprobar sus callbacks para no confundir
+  un módulo aún no cargado con uno sin changeset.
+- **Cambio observable exige major y migración explícita.** Conservar las firmas
+  y resultados no vuelve compatible el nuevo JSON Schema de `final_result`.
+  La próxima publicación que lo incluya requiere una major posterior a 1.x;
+  este trabajo no cambia versión ni publica. Los consumidores deben declarar
+  campos obligatorios mediante `validate_required/2` (embeds con
+  `cast_embed/3` y `required: true`), revisar supuestos de presencia/nulos y
+  snapshots, y probar el soporte de `anyOf` y las restricciones strict del
+  backend real. Los tests offline solo comprueban el payload emitido. La
+  reflexión sobre atributos vacíos no representa perfectamente validaciones
+  custom o condicionales: el changeset real sigue siendo la autoridad final,
+  con los mismos resultados de validación y mecanismo de reintentos.
+- **Correcciones de contratos existentes, no nuevos defaults.** El reenvío de
+  permisos, aprobación y estimador del Server corrige opciones ya soportadas por
+  el run; la cancelación del worker restaura su pertenencia al Server. OpenAIChat
+  reenvía el `extra` ya existente para opciones de proveedor (razonamiento o
+  selección de herramienta), pero reserva modelo, mensajes, herramientas y modo
+  de streaming; los ajustes tipados explícitos prevalecen. Omitir esas opciones
+  o dejar `extra` vacío conserva los defaults previos. Las opciones suministradas
+  dejan de ignorarse; los runs huérfanos dejan de continuar en segundo plano.
 - **Sin motor de graphs genérico al inicio.** La Session + TurnPolicy cubre el
   caso de uso sin la complejidad de un `pydantic-graph` completo. Se evaluará
   si un dominio lo justifica.

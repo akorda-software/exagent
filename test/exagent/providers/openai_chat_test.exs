@@ -8,6 +8,107 @@ defmodule ExAgent.Providers.OpenAIChatTest do
   alias ExAgent.Providers.OpenAIChat
   alias ExAgent.Tool
 
+  describe "ModelSettings.extra request body (offline adapter)" do
+    setup do
+      previous = Req.default_options()
+      parent = self()
+
+      Req.default_options(
+        adapter: fn request ->
+          send(parent, {:body, Jason.decode!(request.body)})
+          {request, Req.Response.new(status: 400, body: %{})}
+        end
+      )
+
+      on_exit(fn -> Req.default_options(previous) end)
+      :ok
+    end
+
+    for streaming? <- [false, true] do
+      test "extra reaches #{if streaming?, do: "streaming", else: "normal"} body with safe precedence" do
+        model = %OpenRouter{model: "openai/test", api_key: "offline"}
+        messages = [Msg.new_request([%Part.User{content: "hello"}])]
+        tool = Tool.new(name: "result")
+        params = %ModelRequestParameters{output_mode: :tool, output_tools: [tool]}
+
+        extra = %{
+          "reasoning" => %{"effort" => "low"},
+          "tool_choice" => "auto",
+          "model" => "bad",
+          "messages" => [],
+          "tools" => [],
+          "stream" => false,
+          :model => "also bad",
+          :messages => [],
+          :tools => [],
+          :stream => true,
+          :temperature => 0.9,
+          :top_p => 0.5
+        }
+
+        settings = ExAgent.ModelSettings.new(temperature: 0.2, extra: extra)
+
+        if unquote(streaming?) do
+          assert [{:error, _}] =
+                   Enum.to_list(OpenAIChat.request_stream(model, messages, settings, params))
+        else
+          assert {:error, _} = OpenAIChat.request(model, messages, settings, params)
+        end
+
+        assert_receive {:body, body}
+        assert body["model"] == model.model
+        assert body["messages"] == OpenAIChat.to_openai_messages(messages)
+
+        assert body["tools"] ==
+                 OpenAIChat.encode_tools([tool]) |> Jason.encode!() |> Jason.decode!()
+
+        assert body["stream"] == unquote(streaming?)
+        assert body["reasoning"] == %{"effort" => "low"}
+        assert body["tool_choice"] == "auto"
+        assert body["temperature"] == 0.2
+        assert body["top_p"] == 0.5
+      end
+    end
+
+    test "atom extras work, string keys win duplicates, and tools cannot be injected when absent" do
+      extra = %{
+        :reasoning => %{effort: "low"},
+        :tool_choice => "none",
+        "tool_choice" => "auto",
+        :tools => [%{}],
+        "tools" => [%{}]
+      }
+
+      assert {:error, _} =
+               OpenAIChat.request(
+                 %OpenAI{model: "test", api_key: "offline"},
+                 [],
+                 ExAgent.ModelSettings.new(extra: extra),
+                 %ModelRequestParameters{}
+               )
+
+      assert_receive {:body, body}
+      refute Map.has_key?(body, "tools")
+      assert body["reasoning"] == %{"effort" => "low"}
+      assert body["tool_choice"] == "auto"
+    end
+
+    test "default structured tool choice is still required without an override" do
+      assert {:error, _} =
+               OpenAIChat.request(
+                 %OpenAI{model: "test", api_key: "offline"},
+                 [],
+                 nil,
+                 %ModelRequestParameters{
+                   output_mode: :tool,
+                   output_tools: [Tool.new(name: "result")]
+                 }
+               )
+
+      assert_receive {:body, %{"tool_choice" => "required"}}
+    end
+  end
+
   describe "encode: messages -> openai" do
     test "system + user request" do
       msgs = [

@@ -230,7 +230,14 @@ defmodule ExAgent.Providers.OpenAIChat do
 
     Stream.transform(
       sse,
-      %{text: <<>>, usage: nil, model: model_name, error: false, tool_calls: %{}, finish_reason: nil},
+      %{
+        text: <<>>,
+        usage: nil,
+        model: model_name,
+        error: false,
+        tool_calls: %{},
+        finish_reason: nil
+      },
       reducer
     )
   end
@@ -242,6 +249,7 @@ defmodule ExAgent.Providers.OpenAIChat do
   defp maybe_put_name(entry, name), do: %{entry | name: name}
 
   defp append_arguments(entry, nil), do: entry
+
   defp append_arguments(entry, frag) when is_binary(frag),
     do: %{entry | arguments: entry.arguments <> frag}
 
@@ -324,13 +332,29 @@ defmodule ExAgent.Providers.OpenAIChat do
     tools = build_tools(params)
 
     %{}
+    |> maybe_put("tool_choice", tool_choice(params, tools))
+    |> put_extra(settings)
     |> Map.put("model", model)
     |> Map.put("messages", to_openai_messages(messages))
     |> maybe_put("stream", false)
     |> put_settings(settings)
     |> maybe_put("tools", tools)
-    |> maybe_put("tool_choice", tool_choice(params, tools))
   end
+
+  # Normalize top-level JSON keys before merging so atom keys cannot bypass the
+  # protected fields or produce duplicate JSON keys. Explicit strings win if
+  # both forms are present. Typed non-nil settings are applied afterwards.
+  defp put_extra(body, %ModelSettings{extra: extra}) do
+    normalized =
+      Map.new(extra, fn {key, value} ->
+        key = to_string(key)
+        {key, Map.get(extra, key, value)}
+      end)
+
+    Map.merge(body, Map.drop(normalized, ["model", "messages", "tools", "stream"]))
+  end
+
+  defp put_extra(body, nil), do: body
 
   defp build_headers(%Config{api_key: key, extra_headers: extra}) do
     auth = [{"authorization", "Bearer " <> key}]

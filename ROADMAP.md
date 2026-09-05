@@ -6,6 +6,35 @@
 > motor (partida de D&D en Phoenix) se construye sobre estas fases, pero ninguna
 > fase es específica de D&D. Fundamento de diseño: ver `DESIGN.md`.
 
+## Prioridad actual: consolidar antes de ampliar
+
+Dirección acordada el 2026-09-05: construir una base de propósito general muy
+sólida ahora, aprovechando que las aplicaciones conocidas del autor todavía
+no están en producción, y estabilizar después los contratos revisados. Esto
+no presupone el estado de los consumidores externos ni permite omitir SemVer.
+La finalización histórica de 1.0 no certifica que estos criterios estén cerrados.
+
+La política y criterios completos están en las secciones 2.1–2.3 de
+[`DESIGN.md`](./DESIGN.md). Este bloque tiene prioridad sobre ampliar funciones
+del apartado «Próximo»; no vuelve a abrir indiscriminadamente todo lo entregado.
+
+- [x] Documentar visión, compatibilidad por defecto, justificación de rupturas
+  y criterios de estabilización; enlazarlos desde README e instrucciones del repo.
+- [ ] Revisar conjuntamente los contratos públicos del core, Server, Session,
+  tools, proveedores, errores, eventos, historial y snapshots; registrar
+  inconsistencias demostradas y priorizar las que justifiquen cambios.
+- [ ] Mantener una matriz de capacidades verificadas por proveedor y backend:
+  texto, tools, streaming, outputs, uso y restricciones. Separar pruebas de
+  payload offline de aceptación por el proveedor real.
+- [ ] Consolidar regresiones de cancelación, cleanup, backpressure, límites,
+  fallos de tools y efectos externos; medir cargas representativas.
+- [ ] Validar ergonomía y migración en las aplicaciones conocidas y en ejemplos
+  de distintos dominios; no extrapolar compatibilidad a consumidores no probados.
+- [ ] Agrupar los cambios estructurales necesarios en una major coherente con
+  guía de migración, en lugar de publicar rupturas parciales sucesivas.
+- [ ] Cerrar la consolidación con contratos revisados, pruebas y documentación;
+  desde ese punto priorizar evolución aditiva y deprecaciones planificadas.
+
 Convención histórica: cada fase = módulos + tests + un ejemplo en `examples/` o
 `test/support/`. (Nota: el alias `mix check` corre tests en entorno dev; usar
 `MIX_ENV=test mix test`.)
@@ -18,7 +47,8 @@ Loop `model ⇄ tools`, providers (OpenAI/Anthropic/ZAI/OpenRouter/Test),
 `deftool`, output estructurado Ecto, streaming lazy, capabilities, `UsageLimits`,
 telemetría, serialización de message history.
 
-Sin cambios. Es la base sobre la que se apoya todo.
+Es la base implementada sobre la que se apoya todo. Su revisión se rige por la
+prioridad actual de consolidación, no por una prohibición de cambiar el núcleo.
 
 ---
 
@@ -223,6 +253,22 @@ tokens manteniendo coherencia (TestModel); cost guard detiene al superar budget.
   pubsub que crasheaba; checkpoint silenciosamente tragado. Véase `CHANGELOG.md`.
 
 **Próximo (post-1.0):**
+
+- [x] Unificar la generación de output estructurado con los requeridos/nulos
+  declarados por Ecto, recursivamente en embeds, sin nuevas opciones ni campos
+  de agente y conservando las firmas originales. Cubiertos el fallback sin
+  changeset, los módulos sin cargar y el payload de `final_result`. Se conservan
+  los fixes de opciones del Server, cancelación al morir su dueño y reenvío de
+  `extra`. Cambio observable y migración documentados en `CHANGELOG.md`.
+  Verificación offline: 310 tests pasan y 28 quedan excluidos; compilación
+  forzada con warnings como errores y formato de archivos tocados correctos.
+  Los 61 tests focales pasan también con warnings como errores. La suite completa
+  mantiene dos avisos preexistentes de aliases sin usar en el test de concurrencia
+  del Server, fuera de los archivos modificados.
+- [ ] Antes de publicar este contrato: preparar una nueva major posterior a 1.x
+  y verificar `anyOf` y restricciones strict contra los backends reales usados.
+  La verificación offline no sustituye esa aceptación; este trabajo no publica,
+  no sube versión ni contacta proveedores o Postgres.
 
 - Aprobación async real (`:approval_requested` que pausa/reanuda el run o la
   Session, no bloquea dentro de un tool) sobre la base de Permissions.

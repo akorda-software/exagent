@@ -2,6 +2,17 @@ defmodule ExAgent.ModelSettings do
   @moduledoc """
   Per-request knobs sent to the model. Provider-specific options that are not
   first-class fields can be carried in the immutable `:extra` map.
+
+  OpenAI Chat Completions (including OpenRouter) merges `extra` into the request
+  body. Top-level atom/string keys are normalized to strings; string keys win
+  duplicates. Non-nil first-class fields take precedence. `model`, `messages`,
+  `tools` and `stream` are reserved and cannot be replaced via `extra`.
+
+  For example, `extra: %{"reasoning" => %{"effort" => "low"},
+  "tool_choice" => "auto"}` allows OpenRouter reasoning controls and overrides
+  the default tool choice (`"required"` for structured output, `"auto"` for
+  function tools). Provider support and validation of extra values remain the
+  caller's responsibility. Other providers may interpret `extra` differently.
   """
   @enforce_keys []
   defstruct max_tokens: nil,

@@ -29,6 +29,11 @@ defmodule ExAgent.Server do
 
   Runs execute in a supervised task (`ExAgent.TaskSupervisor`), so the GenServer
   keeps answering `abort/1`, `health/1` and backpressure during long runs.
+  Each run has an owner monitor: stopping the Server (including `stop_agent/1`
+  or an untrappable `:kill`) asynchronously kills its active run. The monitor
+  exits with the run; idle Servers have no monitor process. Run crashes remain
+  isolated from the Server. Cancellation cannot undo external side effects or
+  stop detached processes started by user code.
 
     * `chat/3`        — synchronous: blocks the caller until the run finishes.
     * `send_message/3` — asynchronous: returns `{:ok, request_id}` immediately;
@@ -151,8 +156,12 @@ defmodule ExAgent.Server do
   flight, returning `{:error, :busy}`.
 
   The GenServer call uses `:infinity` timeout by default (LLM runs can be long);
-  pass `timeout: ms` in `opts` to override. Run options (`:deps`,
-  `:model_settings`, …) are forwarded to `ExAgent.run/3`.
+  pass `timeout: ms` in `opts` to override. The forwarded run options are
+  `:deps`, `:model_settings`, `:stream_text`, `:estimate_cost`, `:permissions`
+  and `:approve`. This also applies to queued `send_message/3` and `steer/3`.
+  `:message_history` explicitly replaces the accumulated history for this run
+  (`[]` starts fresh; `nil` uses the Server history). The Server owns `:run_id`,
+  `:on_event` and instruction-prepending; caller overrides of these are ignored.
   """
   @spec chat(GenServer.server(), String.t(), keyword()) ::
           {:ok, ExAgent.result()} | {:error, term()}
@@ -327,14 +336,10 @@ defmodule ExAgent.Server do
     parent = self()
     agent = %{state.agent | model: state.model}
 
-    # Forward run options (:deps, :model_settings) the same way chat/3 and
-    # send_message/3 do, so stream/3 callers can pass deps to tools too.
-    run_opts =
-      build_run_opts(state, run_id, opts)
-      |> Keyword.merge(Keyword.take(opts, [:deps, :model_settings]))
+    run_opts = build_run_opts(state, run_id, opts)
 
     task =
-      Task.Supervisor.async_nolink(ExAgent.TaskSupervisor, fn ->
+      start_owned_task(fn ->
         ExAgent.run_stream(agent, prompt, run_opts)
         |> Stream.each(fn
           {:delta, text} ->
@@ -574,16 +579,43 @@ defmodule ExAgent.Server do
 
     agent = %{state.agent | model: state.model}
 
-    run_opts =
-      build_run_opts(state, run_id, opts)
-      |> Keyword.merge(Keyword.take(opts, [:deps, :model_settings, :stream_text]))
+    run_opts = build_run_opts(state, run_id, opts)
 
     task =
-      Task.Supervisor.async_nolink(ExAgent.TaskSupervisor, fn ->
+      start_owned_task(fn ->
         ExAgent.run(agent, prompt, run_opts)
       end)
 
     {set_current(state, task, request_id, run_id, prompt, reply_to, false), request_id}
+  end
+
+  # async_nolink isolates run crashes, but does not cancel a task when its owner
+  # dies. A tiny guardian monitors both processes, even while the run is blocked
+  # in HTTP/tool code. Establish it before executing user code. It also handles
+  # :kill (which bypasses terminate/2) and exits when the task completes/aborts.
+  defp start_owned_task(fun) do
+    owner = self()
+
+    Task.Supervisor.async_nolink(ExAgent.TaskSupervisor, fn ->
+      worker = self()
+      ready = make_ref()
+      spawn_link(fn -> watch_run(owner, worker, ready) end)
+
+      receive do
+        {^ready, :ready} -> fun.()
+      end
+    end)
+  end
+
+  defp watch_run(owner, worker, ready) do
+    owner_ref = Process.monitor(owner)
+    worker_ref = Process.monitor(worker)
+    send(worker, {ready, :ready})
+
+    receive do
+      {:DOWN, ^owner_ref, :process, ^owner, _} -> Process.exit(worker, :kill)
+      {:DOWN, ^worker_ref, :process, ^worker, _} -> :ok
+    end
   end
 
   defp set_current(
@@ -624,12 +656,21 @@ defmodule ExAgent.Server do
         hist -> hist
       end
 
-    [
+    opts
+    |> Keyword.take([
+      :deps,
+      :model_settings,
+      :stream_text,
+      :estimate_cost,
+      :permissions,
+      :approve
+    ])
+    |> Keyword.merge(
       message_history: history,
       prepend_instructions: history == [],
       run_id: run_id,
       on_event: fn re -> send(parent, {:run_event, re}) end
-    ]
+    )
   end
 
   # Pull the next pending request off the queue (if any) and start it.
