@@ -6,7 +6,7 @@ defmodule ExAgent.Coordination do
 
     * **Delegation** (level 2) — an agent calls another agent *as a tool*. The
       delegate runs its own model⇄tools loop and its output is returned to the
-      parent; the delegate's token usage is merged into the parent run's usage.
+      parent; the shared execution scope accounts for the delegate's usage.
     * **Hand-off** (level 3) — application code (or a supervisor agent)
       transfers control between participants in a Session.
 
@@ -17,7 +17,6 @@ defmodule ExAgent.Coordination do
   a sub-agent inside a tool is genuinely the simplest design.
   """
 
-  alias ExAgent.Message.Usage
   alias ExAgent.Tool
 
   @doc """
@@ -25,9 +24,9 @@ defmodule ExAgent.Coordination do
 
   When the parent agent's model calls this tool, `delegate` is run with the
   tool's `prompt` argument (a one-shot `ExAgent.run/3`) and its output is
-  returned to the parent. The delegate's token `usage` is merged into the
-  parent run's accumulated usage — so limits and cost accounting cover the whole
-  delegation tree, not just the parent.
+  returned to the parent. Requests/tools are admitted against every ancestor's
+  limits before execution and usage is reconciled in the shared ledger, including
+  failed delegates. The returned tool value never adds that usage a second time.
 
   ## Arguments
 
@@ -35,7 +34,10 @@ defmodule ExAgent.Coordination do
       so the delegate can be constructed lazily with the parent's context (e.g.
       to forward `deps` or pick a model per call).
     * `opts` — `:name` (default `"delegate"`), `:description`,
-      `:max_retries` (default `1`), `:prompt_arg` (default `"prompt"`).
+      `:max_retries` (default `1`), `:prompt_arg` (default `"prompt"`). Optional
+      `:permissions`, `:approve`, `:deadline`, `:max_concurrent_requests` and
+      `:estimate_cost` configure child restrictions/pricing; none override an
+      ancestor's policy or limits. Builders only choose the child definition.
 
   ## Example
 
@@ -74,9 +76,20 @@ defmodule ExAgent.Coordination do
         prompt = prompt_string(args[prompt_arg] || args[to_string(prompt_arg)])
         agent = resolve_delegate(delegate, ctx, args)
 
-        case ExAgent.run(agent, prompt, deps: ctx.deps) do
-          {:ok, %{output: output, usage: usage}} ->
-            {:ok, output, usage || %Usage{input_tokens: 0, output_tokens: 0}}
+        child_opts =
+          Keyword.take(opts, [
+            :permissions,
+            :approve,
+            :estimate_cost,
+            :deadline,
+            :max_concurrent_requests
+          ])
+
+        case ExAgent.run_child(ctx, agent, prompt, child_opts) do
+          {:ok, %{output: output}} ->
+            # The shared ledger already owns all descendant usage, including
+            # failures. Returning contributed usage would count it twice.
+            {:ok, output}
 
           {:error, _} = e ->
             e
@@ -97,7 +110,7 @@ defmodule ExAgent.Coordination do
   """
   @spec handoff(GenServer.server(), term()) :: {:ok, term()} | {:error, term()}
   def handoff(session, to_id) do
-    GenServer.call(session, {:handoff, to_id})
+    ExAgent.Session.handoff(session, to_id)
   end
 
   # ---------------------------------------------------------------------------

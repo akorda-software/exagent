@@ -64,8 +64,14 @@ defmodule ExAgent.Model do
             ) :: {:ok, Message.Response.t(), model()} | {:error, term()}
 
   @doc """
-  Make a streaming request. Returns an enumerable of events. Implementations
-  may instead return `{:error, _}` if streaming is unsupported.
+  Make a lazy streaming request. Events are `{:text_delta, binary}`, optional
+  `{:thinking_delta, binary}` (separate from output text), optional
+  `{:usage, cumulative_request_usage}`, and exactly one terminal
+  `{:response, response, final_model}` or `{:error, reason}`. Usage snapshots
+  replace earlier snapshots for this request; they are not additive deltas.
+  Implementations must release resources when enumeration halts. A stream
+  ending without a terminal is a protocol error. Implementations may return
+  `{:error, _}` directly when streaming is unsupported.
   """
   @callback request_stream(
               model :: model(),
@@ -77,7 +83,12 @@ defmodule ExAgent.Model do
   @callback model_name(model()) :: String.t()
   @callback system(model()) :: String.t()
 
-  @doc "Declares this model's capabilities (optional; defaults are permissive)."
+  @doc """
+  Declares capabilities (optional; defaults are permissive). The core rejects
+  function tools and tool-based structured output when `supports_tools` is false.
+  Native JSON/thinking flags do not describe the current tool-output mode and
+  are not used to silently downgrade it. Streaming requires its own callback.
+  """
   @callback profile(model()) :: ExAgent.ModelProfile.t()
 
   @optional_callbacks [request_stream: 4, profile: 1]
@@ -92,15 +103,70 @@ defmodule ExAgent.Model do
   @spec request_stream(model(), messages, ModelSettings.t() | nil, ModelRequestParameters.t()) ::
           Enumerable.t()
   def request_stream(%mod{} = model, messages, settings, params) do
-    if function_exported?(mod, :request_stream, 4) do
-      case mod.request_stream(model, messages, settings, params) do
-        {:error, _} = e -> Stream.concat([[], [e]])
-        stream -> stream
-      end
-    else
-      Stream.concat([[], [{:error, {:unsupported, :streaming}}]])
-    end
+    Stream.resource(
+      fn ->
+        {:open,
+         fn ->
+           Code.ensure_loaded(mod)
+
+           if function_exported?(mod, :request_stream, 4) do
+             case mod.request_stream(model, messages, settings, params) do
+               {:error, _} = error -> [error]
+               stream -> stream
+             end
+           else
+             [{:error, {:unsupported, :streaming}}]
+           end
+         end}
+      end,
+      &stream_next/1,
+      &stream_close/1
+    )
   end
+
+  defp stream_next({:done, _} = state), do: {:halt, state}
+
+  defp stream_next(state) do
+    reduced =
+      case state do
+        {:open, open} -> Enumerable.reduce(open.(), {:cont, nil}, &suspend_event/2)
+        {:next, continuation} -> continuation.({:cont, nil})
+      end
+
+    case reduced do
+      {:suspended, event, continuation} ->
+        case event do
+          {:text_delta, text} when is_binary(text) -> {[event], {:next, continuation}}
+          {:thinking_delta, text} when is_binary(text) -> {[event], {:next, continuation}}
+          {:usage, %Message.Usage{}} -> {[event], {:next, continuation}}
+          {:response, %Message.Response{}, %_{}} -> {[event], {:done, continuation}}
+          {:error, _} -> {[event], {:done, continuation}}
+          other -> {[{:error, {:invalid_stream_event, other}}], {:done, continuation}}
+        end
+
+      {status, _} when status in [:done, :halted] ->
+        {[{:error, :incomplete_stream}], {:done, nil}}
+    end
+  rescue
+    # A resumed source owns cleanup when its reduction raises. Its previous
+    # continuation has been consumed and must never receive a second halt.
+    error -> {[{:error, error}], {:done, nil}}
+  catch
+    kind, reason -> {[{:error, {kind, reason}}], {:done, nil}}
+  end
+
+  defp suspend_event(event, _), do: {:suspend, event}
+
+  defp stream_close({_, continuation}) when is_function(continuation, 1) do
+    continuation.({:halt, nil})
+    :ok
+  rescue
+    _ -> :ok
+  catch
+    _, _ -> :ok
+  end
+
+  defp stream_close(_), do: :ok
 
   @spec model_name(model()) :: String.t()
   def model_name(%mod{} = model), do: mod.model_name(model)
@@ -110,6 +176,8 @@ defmodule ExAgent.Model do
 
   @spec profile(model()) :: ExAgent.ModelProfile.t()
   def profile(%mod{} = model) do
+    Code.ensure_loaded(mod)
+
     if function_exported?(mod, :profile, 1) do
       mod.profile(model)
     else
@@ -133,6 +201,9 @@ defmodule ExAgent.Model do
 
   def resolve("openrouter:" <> name),
     do: {:ok, ExAgent.Models.OpenRouter.new(model: name)}
+
+  def resolve("opencode:" <> name),
+    do: {:ok, ExAgent.Models.OpenCode.new(model: name)}
 
   def resolve("anthropic:" <> name),
     do: {:ok, ExAgent.Models.Anthropic.new(model: name)}

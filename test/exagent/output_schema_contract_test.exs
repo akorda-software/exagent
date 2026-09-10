@@ -5,9 +5,9 @@ defmodule ExAgent.OutputSchemaContractTest do
   alias ExAgent.OutputSchema
   alias ExAgent.Test.{NestedOptionalOutput, OptionalOutput, ReceiptItem}
 
-  test "original schema API and agent construction shape are preserved" do
+  test "original schema API is preserved without schema-specific agent modes" do
     assert OutputSchema.__info__(:functions) == [json_schema: 1, validate: 2]
-    assert %ExAgent{output_type: :text} = ExAgent.new(model: "test")
+    assert %ExAgent{output_type: :text, observability: nil} = ExAgent.new(model: "test")
 
     assert %ExAgent{output_type: OptionalOutput} =
              ExAgent.new(model: "test", output: OptionalOutput)
@@ -22,6 +22,7 @@ defmodule ExAgent.OutputSchemaContractTest do
                :max_steps,
                :model,
                :name,
+               :observability,
                :output_retries,
                :output_type,
                :settings,
@@ -105,8 +106,16 @@ defmodule ExAgent.OutputSchemaContractTest do
 
         assert result.output == expected
 
-        assert Enum.sort(Map.keys(result)) ==
-                 [:messages, :model, :new_messages, :output, :run_step, :usage]
+        assert Enum.all?(
+                 [:messages, :model, :new_messages, :output, :run_step, :usage],
+                 &Map.has_key?(result, &1)
+               )
+
+        assert result.status == :succeeded
+        assert is_binary(result.run_id)
+        assert result.root_run_id == result.run_id
+        assert result.parent_run_id == nil
+        assert result.request_count == 1
 
         assert result.model == model
         assert result.run_step == 1

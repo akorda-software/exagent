@@ -224,6 +224,41 @@ defmodule ExAgent.Providers.AnthropicTest do
   end
 
   describe "prompt caching (build_body)" do
+    test "extra preserves explicit tool choice and reasoning, with protected fields and typed precedence" do
+      model = %ExAgent.Models.Anthropic{model: "claude", api_key: "offline"}
+
+      settings =
+        ExAgent.ModelSettings.new(
+          max_tokens: 300,
+          temperature: 0.2,
+          extra: %{
+            "thinking" => %{"type" => "enabled", "budget_tokens" => 100},
+            "tool_choice" => %{"type" => "none"},
+            :model => "injected",
+            :tools => [],
+            :messages => [],
+            :system => "injected",
+            :stream => true,
+            :temperature => 0.9,
+            :max_tokens => 999
+          }
+        )
+
+      messages = [Msg.new_request([%Part.System{content: "system"}, %Part.User{content: "hi"}])]
+      params = %ModelRequestParameters{output_mode: :tool, output_tools: [tool("final_result")]}
+      body = Anthropic.build_body(model, messages, settings, params)
+      assert body["model"] == "claude"
+      assert body["max_tokens"] == 300
+      assert body["temperature"] == 0.2
+      assert body["tool_choice"] == %{"type" => "none"}
+      assert body["thinking"] == %{"type" => "enabled", "budget_tokens" => 100}
+      assert body["system"] == [%{type: "text", text: "system"}]
+      assert body["messages"] != []
+      assert length(body["tools"]) == 1
+      refute Map.has_key?(body, "stream")
+      assert Anthropic.build_body(model, messages, nil, params)["tool_choice"] == %{type: "any"}
+    end
+
     defp tool(name),
       do:
         Tool.new(

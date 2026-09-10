@@ -24,6 +24,7 @@ defmodule ExAgent.Schema do
   def from_type({:atom, _, _}), do: %{type: "string"}
   def from_type({:binary, _, _}), do: %{type: "string"}
   def from_type({:string, _, _}), do: %{type: "string"}
+  def from_type({:map, _, []}), do: %{type: "object"}
   def from_type({:any, _, _}), do: %{}
 
   # String.t() / Binary.t() → dot-call form on an alias
@@ -40,12 +41,18 @@ defmodule ExAgent.Schema do
   def from_type([inner]), do: %{type: "array", items: from_type(inner)}
   def from_type([]), do: %{type: "array"}
 
-  # literal unions (e.g. :a | :b) → string enum
+  # Literal unions retain enum ergonomics; type unions contain real schemas.
   def from_type({:|, _, [left, right]}) do
-    Enum.reduce(union_parts({:|, [], [left, right]}), [], &(&2 ++ [to_enum_value(&1)]))
-    |> case do
-      [] -> %{}
-      values -> %{type: "string", enum: values}
+    parts = union_parts({:|, [], [left, right]})
+
+    if Enum.all?(parts, &literal?/1) do
+      values = Enum.map(parts, &to_enum_value/1)
+
+      if Enum.all?(values, &is_binary/1),
+        do: %{type: "string", enum: values},
+        else: %{enum: values}
+    else
+      %{anyOf: Enum.map(parts, &union_schema/1)}
     end
   end
 
@@ -75,6 +82,13 @@ defmodule ExAgent.Schema do
   defp union_parts({:|, _, [left, right]}), do: union_parts(left) ++ union_parts(right)
   defp union_parts(other), do: [other]
 
+  defp literal?(value), do: is_atom(value) or is_binary(value) or is_number(value)
+
+  defp union_schema(value) do
+    if literal?(value), do: %{enum: [to_enum_value(value)]}, else: from_type(value)
+  end
+
+  defp to_enum_value(value) when is_boolean(value) or is_nil(value), do: value
   defp to_enum_value(atom) when is_atom(atom), do: Atom.to_string(atom)
   defp to_enum_value(other), do: other
 end

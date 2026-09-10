@@ -122,7 +122,10 @@ defmodule ExAgent.Scenarios.SupportAgentTest do
 
       agent = ExAgent.new(model: model, output: ExAgent.Test.Ticket, output_retries: 1)
 
-      assert {:error, {:unexpected_model_behavior, {:output_retries_exhausted, _}}} =
+      assert {:error,
+              %ExAgent.RunError{
+                reason: {:unexpected_model_behavior, {:output_retries_exhausted, _}}
+              }} =
                ExAgent.run(agent, "x")
     end
   end
@@ -187,7 +190,7 @@ defmodule ExAgent.Scenarios.SupportAgentTest do
           usage_limits: %UsageLimits{max_budget_cents: 5, request_limit: 50}
         )
 
-      assert {:error, {:usage_limit_exceeded, :budget_cents, cents}} =
+      assert {:error, %ExAgent.RunError{reason: {:usage_limit_exceeded, :budget_cents, cents}}} =
                ExAgent.run(agent, "loop", estimate_cost: pricing)
 
       assert cents > 5
@@ -218,7 +221,8 @@ defmodule ExAgent.Scenarios.SupportAgentTest do
           usage_limits: %UsageLimits{tool_calls_limit: 2}
         )
 
-      assert {:error, {:usage_limit_exceeded, :tool_calls, 3}} = ExAgent.run(agent, "x")
+      assert {:error, %ExAgent.RunError{reason: {:usage_limit_exceeded, :tool_calls, 3}}} =
+               ExAgent.run(agent, "x")
     end
   end
 

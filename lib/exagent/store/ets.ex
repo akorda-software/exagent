@@ -15,10 +15,12 @@ defmodule ExAgent.Store.ETS do
   on:
 
     1. the stored shape is portable (JSON, not opaque binaries), and
-    2. non-serializable values (pids, secrets, function captures) are refused
+    2. non-serializable values (pids, function captures) are refused
        at write time — `Jason.encode!` raises rather than persisting junk.
 
   Use it as `store: :ets` on `ExAgent.Server` / `ExAgent.AgentSupervisor`.
+  JSON does not redact secret strings. Data survives a conversation owner restart
+  while the ETS table owner lives, not table-owner or VM loss.
   """
 
   use GenServer

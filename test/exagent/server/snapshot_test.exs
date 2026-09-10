@@ -28,7 +28,7 @@ defmodule ExAgent.Server.SnapshotTest do
       # message_history is a JSON binary (the serialized conversation)
       assert is_binary(snap.message_history)
       assert String.contains?(snap.message_history, "be concise")
-      assert snap.usage == %{"input_tokens" => 3, "output_tokens" => 4}
+      assert snap.usage == %{"input_tokens" => 3, "output_tokens" => 4, "details" => %{}}
     end
   end
 
@@ -48,7 +48,7 @@ defmodule ExAgent.Server.SnapshotTest do
       assert {:ok, %Snapshot{} = restored} = Snapshot.deserialize(binary)
 
       assert restored.agent_id == "rt"
-      assert restored.usage == %{"input_tokens" => 5, "output_tokens" => 6}
+      assert restored.usage == %{"input_tokens" => 5, "output_tokens" => 6, "details" => %{}}
       assert restored.metadata == %{"k" => "v"}
     end
 
@@ -102,6 +102,85 @@ defmodule ExAgent.Server.SnapshotTest do
       refute :tools in fields
       refute :model in fields
       refute :api_key in fields
+    end
+  end
+
+  describe "versioned data validation" do
+    test "history roots and parts form a Request/Response protocol tree" do
+      user = %{"__type__" => "user", "content" => "hello"}
+      text = %{"__type__" => "text", "content" => "orphan"}
+      request = %{"__type__" => "request", "parts" => [user]}
+      response = %{"__type__" => "response", "parts" => [text]}
+
+      invalid = [
+        [nil],
+        [text],
+        [%{request | "parts" => [nil]}],
+        [%{response | "parts" => [nil]}],
+        [%{request | "parts" => [response]}],
+        [%{response | "parts" => [request]}],
+        [%{request | "parts" => [text]}],
+        [%{response | "parts" => [user]}],
+        [Map.put(response, "usage", request)]
+      ]
+
+      for version <- [1, 2], history <- invalid do
+        snapshot = %Snapshot{
+          agent_id: "bad-tree",
+          version: version,
+          message_history: Jason.encode!(history)
+        }
+
+        assert {:error, :invalid_history} = Snapshot.messages(snapshot)
+        assert {:error, :invalid_history} = Snapshot.deserialize(Snapshot.serialize(snapshot))
+        assert {:error, :invalid_history} = Snapshot.validate(snapshot, "bad-tree")
+      end
+    end
+
+    test "protocol-looking JSON inside User/ToolReturn remains opaque application data" do
+      data = %{"__type__" => "request", "parts" => [nil]}
+
+      history = [
+        ExAgent.Message.new_request([
+          %Part.User{content: [data]},
+          %Part.ToolReturn{tool_name: "fetch", tool_call_id: "call", content: data}
+        ])
+      ]
+
+      snapshot = Snapshot.new(agent_id: "opaque", history: history)
+      assert {:ok, restored} = Snapshot.deserialize(Snapshot.serialize(snapshot))
+      assert {:ok, [%Request{parts: [user, tool_return]}]} = Snapshot.messages(restored)
+      assert user.content == [data]
+      assert tool_return.content == data
+    end
+
+    test "valid v1 usage/history migrates to v2 without losing details" do
+      json =
+        Jason.encode!(%{
+          version: 1,
+          agent_id: "legacy",
+          message_history: "[]",
+          usage: %{input_tokens: 4, output_tokens: 2, details: %{cached_tokens: 3}}
+        })
+
+      assert {:ok, %Snapshot{version: 2, revision: 0} = snapshot} = Snapshot.deserialize(json)
+      assert Snapshot.usage_struct(snapshot).details == %{"cached_tokens" => 3}
+      assert {:error, :snapshot_id_mismatch} = Snapshot.validate(snapshot, "other")
+    end
+
+    test "future/corrupt payloads return errors, not exceptions or empty state" do
+      for payload <- [
+            "[]",
+            "null",
+            "{",
+            ~s({"version":999}),
+            ~s({"agent_id":"a","usage":{"input_tokens":-1}}),
+            ~s({"agent_id":"a","message_history":"{}"}),
+            ~s({"agent_id":"a","saved_at":"not-a-date"}),
+            ~s({"agent_id":"a","metadata":42})
+          ] do
+        assert {:error, _} = Snapshot.deserialize(payload)
+      end
     end
   end
 

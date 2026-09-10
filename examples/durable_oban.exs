@@ -1,8 +1,9 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # Recipe: wrap an agent run in an Oban job in YOUR app.
 #
-# This file is documentation, not a runnable example: it sketches a durable
-# Oban wrapper for agent execution. It requires `:oban` + Postgres in your app
+# This file is documentation, not a runnable worker: it sketches persistent
+# Oban dispatch for agent execution, not durable replay of the agent loop.
+# It requires `:oban` + Postgres in your app
 # (not in this library — the framework stays DB-free on purpose; durability is
 # an application concern you opt into).
 #
@@ -75,9 +76,12 @@
 #             |> MyApp.Repo.update!()
 #             :ok
 #
-#           {:error, reason} ->
-#             # re-raise so Oban retries with backoff; checkpoint kept as-is
-#             raise "agent failed: #{inspect(reason)}"
+#           {:error, %ExAgent.RunError{reason: cause, partial: partial}} ->
+#             # Application policy must persist/reconcile known progress and
+#             # uncertain effects before deciding whether another attempt is safe.
+#             # This placeholder must not blindly re-raise the whole run: that
+#             # repeats tools/model calls and can expose model credentials in logs.
+#             MyApp.Recovery.handle_agent_failure(run, cause, partial)
 #         end
 #       end
 #     end
@@ -91,9 +95,10 @@
 #
 # ── Human-in-the-loop workflows ──────────────────────────────────────────────
 #   ExAgent.run/3 runs to completion and capability callbacks do not suspend.
-#   Manage approvals as application state instead: persist the conversation with
-#   Message.to_json/1, record a pending approval in your own tables, and enqueue
-#   a new job with the restored `history` when the human responds.
+#   Manage pending approvals as authenticated application state. Restoring history
+#   and enqueueing the same prompt is not resuming an exact pending tool call;
+#   bind approval to its operation/arguments and reconcile prior effects. A general
+#   deferred continuation API is not implemented by this recipe.
 #
 # ── Why this lives in YOUR app, not in the library ───────────────────────────
 #   - Keeps the framework dependency-light (no forced Postgres).

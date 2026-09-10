@@ -24,14 +24,15 @@ defmodule ExAgent.Models.Anthropic do
   """
   @behaviour ExAgent.Model
 
-  defstruct [:model, :api_key, :auth_token, :base_url, cache: false]
+  defstruct [:model, :api_key, :auth_token, :base_url, cache: false, stream_options: []]
 
   @type t :: %__MODULE__{
           model: String.t(),
           api_key: String.t() | nil,
           auth_token: String.t() | nil,
           base_url: String.t() | nil,
-          cache: boolean()
+          cache: boolean(),
+          stream_options: keyword()
         }
 
   @doc """
@@ -41,6 +42,8 @@ defmodule ExAgent.Models.Anthropic do
   `:cache` (default `false`). When `:cache` is `true`, Anthropic prompt-caching
   breakpoints are added to the system prompt and the last tool definition
   (60–90% input-token savings on repeated long prefixes).
+  `:stream_options` configures local byte limits/demand timeout, as documented
+  in `ExAgent.Providers.StreamTransport`; it is never sent in the model payload.
   """
   @spec new(keyword()) :: t()
   def new(opts) when is_list(opts) do

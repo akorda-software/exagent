@@ -68,7 +68,8 @@ defmodule ExAgent.Scenarios.CoreLoopSafetyTest do
 
       agent = ExAgent.new(model: model, tools: [tool], capabilities: [BoomCap])
 
-      assert {:ok, %{output: "final"}} = ExAgent.run(agent, "go")
+      assert {:error, %ExAgent.RunError{partial: %{model: %{index: 1}}}} =
+               ExAgent.run(agent, "go")
     end
   end
 
@@ -101,7 +102,10 @@ defmodule ExAgent.Scenarios.CoreLoopSafetyTest do
 
       # Before the fix this raised KeyError. Now it's a retryable validation
       # error that exhausts retries and returns a clean error.
-      assert {:error, {:unexpected_model_behavior, {:output_retries_exhausted, _}}} =
+      assert {:error,
+              %ExAgent.RunError{
+                reason: {:unexpected_model_behavior, {:output_retries_exhausted, _}}
+              }} =
                ExAgent.run(agent, "go")
     end
   end
@@ -125,7 +129,8 @@ defmodule ExAgent.Scenarios.CoreLoopSafetyTest do
 
       agent = ExAgent.new(model: model, tools: [tool], max_steps: 3)
 
-      assert {:error, {:max_steps_exceeded, 3}} = ExAgent.run(agent, "go")
+      assert {:error, %ExAgent.RunError{reason: {:max_steps_exceeded, 3}}} =
+               ExAgent.run(agent, "go")
     end
   end
 end

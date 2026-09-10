@@ -69,7 +69,7 @@ defmodule ExAgent.Session.TurnPolicy.SupervisorPolicy do
          %{
            state
            | current: worker,
-             worker_index: state.worker_index + 1,
+             worker_index: idx + 1,
              emit_supervisor_next: true
          }}
 
@@ -87,15 +87,20 @@ defmodule ExAgent.Session.TurnPolicy.SupervisorPolicy do
 
   @impl true
   def participant_joined(%__MODULE__{workers: workers} = state, %{id: id} = participant) do
-    if participant.id == state.supervisor do
+    if participant.id == state.supervisor or id in workers do
       state
     else
-      %{state | workers: workers ++ [id]}
+      %{
+        state
+        | workers: workers ++ [id],
+          worker_index: ExAgent.Session.PolicyCodec.cursor(state.worker_index, length(workers))
+      }
     end
   end
 
   @impl true
   def participant_left(%__MODULE__{workers: workers, worker_index: wi} = state, id) do
+    wi = ExAgent.Session.PolicyCodec.cursor(wi, length(workers))
     # Realign `worker_index` so removing a worker before it doesn't skip the
     # next worker pick.
     leaver_at = Enum.find_index(workers, &(&1 == id))
@@ -121,4 +126,7 @@ defmodule ExAgent.Session.TurnPolicy.SupervisorPolicy do
         current: current
     }
   end
+
+  @impl true
+  def handoff(state, id, _ctx), do: {:ok, %{state | current: id}}
 end

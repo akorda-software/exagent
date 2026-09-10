@@ -1,11 +1,12 @@
 defmodule ExAgent.UsageLimits do
   @moduledoc """
-  Run-level safety net: caps on requests, token usage, tool calls and cost,
-  enforced at well-defined points in the agent loop.
+  Execution-tree safety net: each run's limits also constrain its framework
+  descendants. Admission is serialized by `ExAgent.ExecutionScope`; these
+  functions provide the pure checks. Token/cost thresholds are retrospective,
+  so already in-flight requests can exceed them.
 
   Any `nil` field is unchecked. When a limit is exceeded the run terminates with
-  `{:error, {:usage_limit_exceeded, which, value}}` instead of looping or burning
-  cost.
+    a `RunError` with reason `{:usage_limit_exceeded, which, value}`.
 
   * `request_limit` / `total_tokens_limit` / `input_tokens_limit` /
     `output_tokens_limit` — checked before each model request.
@@ -43,13 +44,46 @@ defmodule ExAgent.UsageLimits do
             max_budget_cents: nil
 
   @type t :: %__MODULE__{
-          request_limit: pos_integer() | nil,
-          total_tokens_limit: pos_integer() | nil,
-          input_tokens_limit: pos_integer() | nil,
-          output_tokens_limit: pos_integer() | nil,
-          tool_calls_limit: pos_integer() | nil,
+          request_limit: non_neg_integer() | nil,
+          total_tokens_limit: non_neg_integer() | nil,
+          input_tokens_limit: non_neg_integer() | nil,
+          output_tokens_limit: non_neg_integer() | nil,
+          tool_calls_limit: non_neg_integer() | nil,
           max_budget_cents: number() | nil
         }
+
+  @doc "Validate nonnegative integral counters and a nonnegative monetary threshold."
+  def validate(nil), do: :ok
+
+  def validate(%__MODULE__{} = limits) do
+    counters = [
+      :request_limit,
+      :total_tokens_limit,
+      :input_tokens_limit,
+      :output_tokens_limit,
+      :tool_calls_limit
+    ]
+
+    invalid =
+      Enum.find(counters, fn field ->
+        value = Map.fetch!(limits, field)
+        not (is_nil(value) or (is_integer(value) and value >= 0))
+      end)
+
+    cond do
+      invalid ->
+        {:error, {:invalid_usage_limit, invalid}}
+
+      not (is_nil(limits.max_budget_cents) or
+               (is_number(limits.max_budget_cents) and limits.max_budget_cents >= 0)) ->
+        {:error, {:invalid_usage_limit, :max_budget_cents}}
+
+      true ->
+        :ok
+    end
+  end
+
+  def validate(_), do: {:error, :invalid_usage_limits}
 
   @doc """
   Check the request/token/budget limits against accumulated `usage`, the
@@ -57,15 +91,18 @@ defmodule ExAgent.UsageLimits do
   `{:error, {:usage_limit_exceeded, which, value}}`.
 
   `request_count` is the number of model requests already issued (0 before the
-  first). `cost_cents` is the estimated cost so far (0 when no estimator is in
-  use).
+  first). `cost_cents` is the known estimate so far, or `nil` when unknown; an
+  enabled monetary budget rejects unknown cost.
   """
-  @spec check_before_request(t(), ExAgent.Message.Usage.t(), non_neg_integer(), number()) ::
-          :ok | {:error, {:usage_limit_exceeded, atom(), number()}}
-  def check_before_request(%__MODULE__{} = limits, usage, request_count, cost_cents \\ 0) do
+  @spec check_before_request(t(), ExAgent.Message.Usage.t(), non_neg_integer(), number() | nil) ::
+          :ok | {:error, term()}
+  def check_before_request(%__MODULE__{} = limits, usage, request_count, cost_cents \\ nil) do
     total = (usage.input_tokens || 0) + (usage.output_tokens || 0)
 
     cond do
+      limits.max_budget_cents != nil and not is_number(cost_cents) ->
+        {:error, :cost_unknown}
+
       exceeds?(limits.request_limit, request_count) ->
         {:error, {:usage_limit_exceeded, :request_limit, request_count}}
 
@@ -140,20 +177,55 @@ defmodule ExAgent.CostGuard do
         }
 
   @doc """
-  Build a cost estimator `(Usage.t() -> integer cents)` from a pricing map.
+  Build a cost estimator `(Usage.t() -> fractional cents)` from a pricing map.
 
-  Prices are per **1000 tokens**, in **cents** (so `250` = $2.50 / 1M input
-  tokens, matching how vendors quote).
+  Prices are per **1000 tokens**, in **cents** (`250` means $2.50 per 1K,
+  or $2500 per 1M tokens). Fractions are preserved rather than truncating every
+  small request to zero. Missing rates remain unknown when their token direction
+  is used; they do not imply a free provider.
   """
-  @spec estimator(pricing()) :: (Usage.t() -> non_neg_integer())
+  @spec estimator(pricing()) :: (Usage.t() -> non_neg_integer() | float() | :unknown)
   def estimator(pricing) when is_map(pricing) do
-    in_per_1k = Map.get(pricing, :input_per_1k_cents, 0)
-    out_per_1k = Map.get(pricing, :output_per_1k_cents, 0)
+    in_per_1k = Map.get(pricing, :input_per_1k_cents)
+    out_per_1k = Map.get(pricing, :output_per_1k_cents)
+
+    for rate <- [in_per_1k, out_per_1k] do
+      unless is_nil(rate) or (is_number(rate) and rate >= 0),
+        do: raise(ArgumentError, "token prices must be nonnegative numbers")
+    end
 
     fn %Usage{} = usage ->
-      input = usage.input_tokens || 0
-      output = usage.output_tokens || 0
-      trunc((input * in_per_1k + output * out_per_1k) / 1000)
+      input = usage.input_tokens
+      output = usage.output_tokens
+
+      cond do
+        not is_integer(input) or not is_integer(output) -> :unknown
+        input > 0 and in_per_1k == nil -> :unknown
+        output > 0 and out_per_1k == nil -> :unknown
+        true -> (input * (in_per_1k || 0) + output * (out_per_1k || 0)) / 1000
+      end
     end
+  end
+
+  @doc "Evaluate legacy homogeneous or model-aware pricing without losing unknown/error states."
+  def estimate(estimator, model, usage) do
+    value =
+      cond do
+        is_function(estimator, 2) -> estimator.(model, usage)
+        is_function(estimator, 1) -> estimator.(usage)
+        true -> :unknown
+      end
+
+    case value do
+      value when is_number(value) and value >= 0 -> {:ok, value}
+      :unknown -> :unknown
+      nil -> :unknown
+      {:error, reason} -> {:error, {:cost_estimation_failed, reason}}
+      _ -> {:error, :invalid_cost_estimate}
+    end
+  rescue
+    error -> {:error, {:cost_estimation_failed, error}}
+  catch
+    kind, reason -> {:error, {:cost_estimation_failed, {kind, reason}}}
   end
 end

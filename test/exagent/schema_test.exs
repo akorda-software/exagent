@@ -3,6 +3,14 @@ defmodule ExAgent.SchemaTest do
 
   alias ExAgent.Schema
 
+  defmodule MapTools do
+    use ExAgent.Tools
+
+    deftool configure(_ctx, opts :: map()) do
+      {:ok, opts}
+    end
+  end
+
   describe "from_type/1 (scalars)" do
     test "String.t() / binary() / string() -> string" do
       assert Schema.from_type(quote(do: String.t())) == %{type: "string"}
@@ -19,6 +27,14 @@ defmodule ExAgent.SchemaTest do
     test "float / number" do
       assert Schema.from_type(quote(do: float())) == %{type: "number"}
       assert Schema.from_type(quote(do: number())) == %{type: "number"}
+    end
+
+    test "map() reflects an object, including deftool parameters" do
+      assert Schema.from_type(quote(do: map())) == %{type: "object"}
+      tool = MapTools.tool(:configure)
+      assert tool.parameters_json_schema.properties["opts"] == %{type: "object"}
+      assert {:ok, _} = ExAgent.Tool.validate_args(tool, %{opts: %{enabled: true}})
+      assert {:error, _} = ExAgent.Tool.validate_args(tool, %{opts: "not an object"})
     end
 
     test "boolean / atom" do
@@ -40,6 +56,24 @@ defmodule ExAgent.SchemaTest do
     test "atom union -> string enum" do
       assert Schema.from_type(quote(do: :spam | :not_spam)) ==
                %{type: "string", enum: ["spam", "not_spam"]}
+    end
+
+    test "type unions and nullable branches are schemas, not enum AST values" do
+      assert Schema.from_type(quote(do: integer() | String.t())) ==
+               %{anyOf: [%{type: "integer"}, %{type: "string"}]}
+
+      schema = Schema.from_type(quote(do: integer() | nil))
+      assert schema == %{anyOf: [%{type: "integer"}, %{enum: [nil]}]}
+      tool = ExAgent.Tool.new(parameters_json_schema: %{properties: %{value: schema}})
+      assert {:ok, _} = ExAgent.Tool.validate_args(tool, %{value: 1})
+      assert {:ok, _} = ExAgent.Tool.validate_args(tool, %{value: nil})
+      assert {:error, _} = ExAgent.Tool.validate_args(tool, %{value: "1"})
+    end
+
+    test "literal unions preserve numeric, boolean, null and string JSON types" do
+      assert Schema.from_type(quote(do: 1 | 2)) == %{enum: [1, 2]}
+      assert Schema.from_type(quote(do: true | false | nil)) == %{enum: [true, false, nil]}
+      assert Schema.from_type(quote(do: :ok | 1 | nil)) == %{enum: ["ok", 1, nil]}
     end
 
     test "unknown / any -> unconstrained" do

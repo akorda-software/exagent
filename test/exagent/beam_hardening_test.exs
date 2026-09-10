@@ -61,7 +61,7 @@ defmodule ExAgent.BeamHardeningTest do
       assert returns == [{"add", 3}, {"dup", 10}]
     end
 
-    test "a tool that exceeds tool_timeout is killed and turned into a retry" do
+    test "a tool that exceeds tool_timeout terminates with an unknown outcome" do
       slow =
         Tool.new(
           name: "slow",
@@ -83,14 +83,18 @@ defmodule ExAgent.BeamHardeningTest do
 
       agent = ExAgent.new(model: model, tools: [slow], tool_timeout: 100, output_retries: 3)
 
-      assert {:ok, %{output: "recovered", messages: messages}} = ExAgent.run(agent, "x")
+      assert {:error, %ExAgent.RunError{partial: %{messages: messages, model: %{index: 1}}}} =
+               ExAgent.run(agent, "x")
 
-      # the timed-out tool produced a retry prompt (model was asked to try again)
+      # The model is not asked to replay an effect whose outcome is unknown.
       assert Enum.any?(
                messages,
                fn
                  %ExAgent.Message.Request{parts: parts} ->
-                   Enum.any?(parts, &match?(%Part.Retry{tool_name: "slow"}, &1))
+                   Enum.any?(
+                     parts,
+                     &match?(%Part.ToolReturn{tool_name: "slow", status: :unknown}, &1)
+                   )
 
                  _ ->
                    false

@@ -1,0 +1,106 @@
+defmodule PackageAcceptance.Tools do
+  use ExAgent.Tools
+
+  @doc "Record the sum of two typed integers."
+  deftool add(ctx, a :: integer(), b :: integer()) do
+    send(ctx.deps.owner, {:effect, a, b})
+    {:ok, a + b}
+  end
+end
+
+defmodule PackageAcceptance.Output do
+  use Ecto.Schema
+  import Ecto.Changeset
+  @primary_key false
+  embedded_schema do
+    field(:answer, :integer)
+  end
+
+  def changeset(value, attrs) do
+    value |> cast(attrs, [:answer]) |> validate_required([:answer])
+  end
+end
+
+defmodule PackageAcceptance.Scenario do
+  import ExUnit.Assertions
+  alias ExAgent.Message.Part
+  alias ExAgent.Models.Test, as: TestModel
+
+  def simple(tracing) do
+    agent = ExAgent.new(model: %TestModel{label: "package answer"}, observability: tracing)
+    assert {:ok, result} = ExAgent.run(agent, "synthetic input")
+    assert %{output: "package answer", status: :succeeded, request_count: 1} = result
+    result
+  end
+
+  def typed(tracing, stream?) do
+    caller = self()
+
+    call = %Part.ToolCall{
+      tool_name: "add",
+      tool_call_id: "typed-add",
+      args: %{"a" => 2, "b" => 3}
+    }
+
+    agent =
+      ExAgent.new(
+        model: %TestModel{script: [{:tool_calls, [call]}, "sum is five"]},
+        tools: PackageAcceptance.Tools.tools(),
+        observability: tracing
+      )
+
+    opts = [deps: %{owner: caller}]
+
+    result =
+      if stream? do
+        stream = ExAgent.run_stream(agent, "add two numbers", opts)
+        refute_received {:effect, _, _}
+        events = Enum.to_list(stream)
+        assert [{:result, result}] = Enum.filter(events, &match?({:result, _}, &1))
+
+        assert Enum.map_join(events, fn
+                 {:delta, text} -> text
+                 _ -> ""
+               end) == "sum is five"
+
+        result
+      else
+        assert {:ok, result} = ExAgent.run(agent, "add two numbers", opts)
+        result
+      end
+
+    assert %{output: "sum is five", request_count: 2, tool_calls: 1, status: :succeeded} = result
+    assert_receive {:effect, 2, 3}
+    refute_received {:effect, _, _}
+    result
+  end
+
+  def checkpoint(tracing) do
+    id = "package-checkpoint-#{System.unique_integer([:positive])}"
+    agent = ExAgent.new(model: %TestModel{label: "persisted answer"}, observability: tracing)
+    {:ok, server} = ExAgent.Server.start_link(agent: agent, agent_id: id, store: :ets)
+
+    try do
+      assert {:ok, %{output: "persisted answer"}} = ExAgent.Server.chat(server, "persist once")
+      assert %{persistence: %{status: :confirmed, revision: 1}} = ExAgent.Server.health(server)
+      assert :ok = ExAgent.Server.checkpoint(server)
+      assert {:ok, snapshot} = ExAgent.Store.ETS.load_agent_snapshot(ExAgent.Store.ETS, id)
+      assert snapshot.revision == 1
+      history = ExAgent.Server.history(server)
+      GenServer.stop(server)
+      {:ok, restored} = ExAgent.Server.start_link(agent: agent, agent_id: id, store: :ets)
+
+      try do
+        assert ExAgent.Server.history(restored) == history
+
+        assert %{persistence: %{status: :confirmed, revision: 1}} =
+                 ExAgent.Server.health(restored)
+      after
+        GenServer.stop(restored)
+      end
+    after
+      if Process.alive?(server), do: GenServer.stop(server)
+      ExAgent.Store.ETS.delete_agent_snapshot(ExAgent.Store.ETS, id)
+    end
+  end
+end

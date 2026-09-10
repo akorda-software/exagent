@@ -4,10 +4,12 @@ defmodule ExAgent.Store.Postgres do
   multiple nodes.
 
   Snapshots are stored as **JSON** (the same strict serialization `ExAgent.Store.ETS`
-  uses), never raw Erlang terms — so nothing non-serializable (pids, secrets,
+  uses), never raw Erlang terms — so nothing non-serializable (pids,
   closures) can land in the database. The store is **DB-free by default** in the
   rest of exAgent: this module needs `ecto_sql` + `postgrex`, declared as optional
   dependencies that a host app adds when it wants a durable store.
+  JSON does not redact secrets present in application data. This UPSERT store
+  assumes a single logical writer per key; it does not provide distributed locks.
 
   ## Wiring
 
@@ -125,6 +127,9 @@ defmodule ExAgent.Store.Postgres do
 
       {:ok, %{rows: []}} ->
         {:error, :not_found}
+
+      {:error, _} = error ->
+        error
     end
   end
 

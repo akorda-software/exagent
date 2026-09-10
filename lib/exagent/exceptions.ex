@@ -7,14 +7,15 @@ defmodule ExAgent.RequestError do
   `{:error, {:model_request_failed, %RequestError{}}}`) rather than raising.
   """
   @enforce_keys [:provider, :reason]
-  defstruct [:provider, :status, :reason, :body]
+  defstruct [:provider, :status, :reason, :body, :partial_response, :model]
 
   @type t :: %__MODULE__{
           provider: atom(),
           status: pos_integer() | nil,
-          reason:
-            :http_error | :provider_error | :request_failed | :timeout | :missing_credentials,
-          body: term() | nil
+          reason: atom() | tuple(),
+          body: term() | nil,
+          partial_response: ExAgent.Message.Response.t() | nil,
+          model: struct() | nil
         }
 end
 
@@ -23,12 +24,15 @@ defmodule ExAgent.UnexpectedModelBehavior do
   Raised/returned when the model behaves in a way the loop cannot recover from
   (retries exhausted, no progress, usage limits hit).
   """
-  defexception [:message]
+  defexception [:message, :error]
 
   @impl true
   def exception(message) when is_binary(message), do: %__MODULE__{message: message}
 
-  def exception(reason), do: %__MODULE__{message: inspect(reason)}
+  def exception(%ExAgent.RunError{} = error),
+    do: %__MODULE__{message: ExAgent.ErrorProjection.message(error.reason), error: error}
+
+  def exception(reason), do: %__MODULE__{message: ExAgent.ErrorProjection.message(reason)}
 end
 
 defmodule ExAgent.ModelRetry do

@@ -68,7 +68,8 @@ defmodule ExAgent.IterationCTest do
       agent =
         ExAgent.new(model: model, tools: [noop], usage_limits: %UsageLimits{request_limit: 2})
 
-      assert {:error, {:usage_limit_exceeded, :request_limit, 2}} = ExAgent.run(agent, "x")
+      assert {:error, %ExAgent.RunError{reason: {:usage_limit_exceeded, :request_limit, 2}}} =
+               ExAgent.run(agent, "x")
     end
   end
 

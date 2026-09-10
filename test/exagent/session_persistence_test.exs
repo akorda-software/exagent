@@ -40,10 +40,18 @@ defmodule ExAgent.SessionPersistenceTest do
       # Atom keys round-trip as strings (strict JSON); shared_state is a map.
       assert recovered.shared_state["scene"] == "crypt"
       assert recovered.current == "wizard"
-      assert recovered.policy_mod == ExAgent.Session.TurnPolicy.Initiative
-      # The policy struct round-tripped (Initiative keeps index/current).
-      assert is_struct(recovered.policy_state, ExAgent.Session.TurnPolicy.Initiative)
-      assert recovered.policy_state.current == "wizard"
+      assert recovered.policy_mod == "Elixir.ExAgent.Session.TurnPolicy.Initiative"
+      # Decoding produces data; only the host-selected policy reconstructs state.
+      refute is_struct(recovered.policy_state)
+      assert recovered.policy_state["current"] == "wizard"
+
+      assert {:ok, policy} =
+               Snapshot.restore(recovered, state.policy_mod, %{
+                 shared_state: recovered.shared_state,
+                 participants: Map.values(state.participants)
+               })
+
+      assert policy.current == "wizard"
     end
 
     test "a non-serializable shared_state is refused (strict JSON)" do

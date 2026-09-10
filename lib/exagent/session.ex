@@ -1,61 +1,26 @@
 defmodule ExAgent.Session do
   @moduledoc """
-  A coordinated, multi-participant interaction with shared state.
+  Single-writer coordination of application state and a participant roster.
 
-  `ExAgent.Session` is the **coordination layer** (Roadmap Phase 3): it owns a
-  piece of application-defined `shared_state` and a set of *participants*
-  (agents backed by `ExAgent.Server`, or humans driving via LiveView), and it
-  decides — through a pluggable `ExAgent.Session.TurnPolicy` — whose turn it is.
+  TurnPolicy uses struct state and controls scheduling/admission. Session enforces
+  membership and lifecycle. A turn computes one complete coordination transition,
+  then checkpoints it once. Change functions should calculate state, not perform
+  external effects expecting transactional rollback.
 
-  It is deliberately agnostic: the `shared_state` can be a D&D world, a support
-  ticket, a collaborative document, anything. ExAgent never assumes a shape.
-
-  ## The single-writer rule
-
-  The Session is the **only** process allowed to mutate `shared_state`.
-  Participants never touch it directly. Instead, a participant whose turn it is
-  passes a *change function* `(state) -> {:ok, new_state} | {:error, reason}`,
-  and the Session applies it atomically, emits `:shared_state_updated`, and
-  advances the turn. Tools running inside an agent reach the Session through an
-  `ExAgent.Session.SharedState` handle placed in `RunContext.deps`.
-
-  ## Lifecycle
-
-      {:ok, session} =
-        ExAgent.Session.start_link(
-          shared_state: %{log: []},
-          policy: :round_robin,
-          participants: [
-            ExAgent.Session.Participant.new(id: "dm", kind: :agent),
-            ExAgent.Session.Participant.new(id: "player", kind: :human)
-          ],
-          pubsub: :local
-        )
-
-      :ok = ExAgent.Session.start(session)
-      {:ok, state, next} = ExAgent.Session.take_turn(session, "dm", fn s -> {:ok, %{s | log: ["dm acted" | s.log]}} end)
-
-  Status flows `:created → :running → (:paused ⇄ :running) → :closed`. While not
-  `:running`, `take_turn/3` returns `{:error, :paused}` / `{:error, {:not_running, _}}`.
-
-  ## Events
-
-  Published on `ExAgent.Event.session_topic(session_id)` (`"exagent:session:<id>"`):
-  `:session_started · :participant_joined · :participant_left ·
-  :session_turn_changed · :shared_state_updated · :session_paused ·
-  :session_resumed · :session_closed`. Events carry ids/status, never the bulk
-  `shared_state` (read it with `read_state/1`).
+  With Store, successful mutation replies follow save confirmation. Checkpoint
+  errors preserve the new state in memory and block further mutations until
+  `checkpoint/1` saves it; the change function is never retried. Restore loads
+  validated conversation data, not processes or arbitrary executable continuations.
+  JSON changes atom keys to strings and does not redact secret content.
   """
-
   use GenServer
   require Logger
-
-  alias ExAgent.{Event, PubSub}
-  alias ExAgent.Session.{Participant, TurnPolicy}
+  alias ExAgent.{Event, PubSub, RuntimeCheckpoint, Store}
+  alias ExAgent.Session.{Participant, TurnPolicy, Snapshot}
+  alias ExAgent.Observability.OpenTelemetry, as: Observability
 
   defmodule State do
     @moduledoc false
-
     defstruct session_id: nil,
               shared_state: nil,
               participants: %{},
@@ -67,537 +32,453 @@ defmodule ExAgent.Session do
               store: nil,
               topic: nil,
               seq: 0,
-              metadata: %{}
+              metadata: %{},
+              emitter_id: nil,
+              revision: 0,
+              checkpoint_error: nil,
+              observability: nil
 
-    @type status :: :created | :running | :paused | :closed | :done
-    @type t :: %__MODULE__{
-            session_id: String.t() | nil,
-            shared_state: term(),
-            participants: %{term() => Participant.t()},
-            policy_mod: module(),
-            policy_state: term(),
-            current: term() | nil,
-            status: status(),
-            pubsub: {module(), term()},
-            store: {module(), term()} | nil,
-            topic: String.t() | nil,
-            seq: non_neg_integer(),
-            metadata: map()
-          }
+    @type t :: %__MODULE__{}
   end
 
-  # ---------------------------------------------------------------------------
-  # Public API
-  # ---------------------------------------------------------------------------
-
   @doc """
-  Start a supervised session.
-
-  ## Options
-
-    * `:shared_state` — the initial application-defined state (required-ish;
-      defaults to `nil`).
-    * `:policy`       — `:round_robin` / `:initiative` / `{:initiative, order: [...]}` /
-      `{module, opts}` / `module` (default `:round_robin`).
-    * `:participants` — initial list of `ExAgent.Session.Participant.t()`.
-    * `:session_id`   — stable id for events; auto-generated if absent.
-    * `:pubsub`       — `nil`/`:none`/`:local`/`{module, config}` (default `nil`).
-    * `:store`        — `nil`/`:ets`/`{module, config}` (default `nil`, no
-                       persistence). When set, `shared_state` + turn position
-                       are checkpointed after every change and rehydrated on
-                       restart. The live participant `ref`s come from
-                       `:participants` on restart; only the serializable
-                       coordination state is restored.
-    * `:name`         — registered name for the GenServer.
-    * `:metadata`     — free-form map attached to every emitted event.
+  Start a Session with shared_state, policy, participants, session_id, pubsub,
+  metadata and optional Store. Live participant refs are supplied by the app.
+  Store errors/incompatible snapshots fail startup rather than starting empty.
+  Additional participants after restore must be added explicitly with join/2.
   """
-  @spec start_link(keyword()) :: GenServer.on_start()
-  def start_link(opts) when is_list(opts) do
+  def start_link(opts) do
     {name, opts} = Keyword.pop(opts, :name)
     GenServer.start_link(__MODULE__, opts, name: name)
   end
 
-  @doc "Add a participant (allowed before or during a running session)."
-  @spec join(GenServer.server(), Participant.t() | keyword()) :: :ok
-  def join(session, %Participant{} = p), do: GenServer.call(session, {:join, p})
-  def join(session, opts) when is_list(opts), do: join(session, Participant.new(opts))
-
-  @doc "Remove a participant by id. Returns `:ok` or `{:error, :not_found}`."
-  @spec leave(GenServer.server(), term()) :: :ok | {:error, :not_found}
-  def leave(session, id), do: GenServer.call(session, {:leave, id})
-
-  @doc "Begin turns. Picks the first participant via the policy. `:created → :running`."
-  @spec start(GenServer.server()) :: {:ok, term()} | {:error, term()}
-  def start(session), do: GenServer.call(session, :start)
-
-  @doc "The participant id whose turn it currently is (or `nil`)."
-  @spec current(GenServer.server()) :: term() | nil
+  def join(session, %Participant{} = p), do: call(session, {:join, p})
+  def join(session, opts), do: join(session, Participant.new(opts))
+  def leave(session, id), do: call(session, {:leave, id})
+  def start(session), do: call(session, :start)
   def current(session), do: GenServer.call(session, :current)
-
-  @doc "All registered participants."
-  @spec participants(GenServer.server()) :: [Participant.t()]
   def participants(session), do: GenServer.call(session, :participants)
-
-  @doc "Current session status (`:created | :running | :paused | :closed | :done`)."
-  @spec status(GenServer.server()) :: :created | :running | :paused | :closed | :done
   def status(session), do: GenServer.call(session, :status)
-
-  @doc "Read the shared state (read-only snapshot; anyone may call this)."
-  @spec read_state(GenServer.server()) :: term()
   def read_state(session), do: GenServer.call(session, :read_state)
+  def take_turn(session, id, change), do: call(session, {:take_turn, id, change})
+  def update_state(session, id, change), do: call(session, {:update_state, id, change})
+  def end_turn(session, id), do: call(session, {:end_turn, id})
+  @doc "Override the actor while preserving the policy scheduling cursor."
+  def handoff(session, id), do: call(session, {:handoff, id})
+  def pause(session), do: call(session, :pause)
+  def resume(session), do: call(session, :resume)
+  def close(session), do: call(session, :close)
+  @doc "Retry only the unconfirmed save, without invoking a change function."
+  def checkpoint(session), do: call(session, :checkpoint, :infinity)
+  def health(session), do: GenServer.call(session, :health)
 
-  @doc """
-  Take a turn: apply `change_fn` to the shared state atomically, then advance to
-  the next participant. `change_fn` is `(state) -> {:ok, new_state} | {:error,
-  reason}` (a bare value is treated as the new state).
-
-  Returns `{:ok, new_state, next_participant_id}` or `{:error, reason}` —
-  `:not_your_turn`, `:paused`, or `{:not_running, status}`.
-  """
-  @spec take_turn(GenServer.server(), term(), (term() ->
-                                                 {:ok, term()} | {:error, term()} | term())) ::
-          {:ok, term(), term()} | {:error, term()}
-  def take_turn(session, participant_id, change_fn),
-    do: GenServer.call(session, {:take_turn, participant_id, change_fn})
-
-  @doc """
-  Mutate the shared state **without** advancing the turn — for mid-turn changes
-  (e.g. a tool inside an agent run proposes a change). Only the current
-  participant may call this.
-  """
-  @spec update_state(GenServer.server(), term(), (term() ->
-                                                    {:ok, term()} | {:error, term()} | term())) ::
-          {:ok, term()} | {:error, term()}
-  def update_state(session, participant_id, change_fn),
-    do: GenServer.call(session, {:update_state, participant_id, change_fn})
-
-  @doc "End the current participant's turn without changing state, advancing next."
-  @spec end_turn(GenServer.server(), term()) :: {:ok, term()} | {:error, term()}
-  def end_turn(session, participant_id), do: GenServer.call(session, {:end_turn, participant_id})
-
-  @doc """
-  Hand the turn directly to `to_id`, bypassing the turn policy.
-
-  Useful when a host app restarts/rehydrates a session and must restore the
-  exact participant whose turn it was — the policy's `next_participant` would
-  otherwise jump to its computed "first". The session must be `:running`.
-  """
-  @spec handoff(GenServer.server(), term()) :: {:ok, term()} | {:error, term()}
-  def handoff(session, to_id), do: GenServer.call(session, {:handoff, to_id})
-
-  @doc "Pause a running session (`take_turn/3` then returns `{:error, :paused}`)."
-  @spec pause(GenServer.server()) :: :ok | {:error, term()}
-  def pause(session), do: GenServer.call(session, :pause)
-
-  @doc "Resume a paused session."
-  @spec resume(GenServer.server()) :: :ok | {:error, term()}
-  def resume(session), do: GenServer.call(session, :resume)
-
-  @doc "Close the session. Further turns return `{:error, {:not_running, :closed}}`."
-  @spec close(GenServer.server()) :: :ok
-  def close(session), do: GenServer.call(session, :close)
-
-  # ---------------------------------------------------------------------------
-  # GenServer callbacks
-  # ---------------------------------------------------------------------------
+  defp call(session, command, timeout \\ 5000),
+    do: GenServer.call(session, {:observed, command, Observability.capture_context()}, timeout)
 
   @impl true
   def init(opts) do
-    {pmod, popts} = normalize_policy(Keyword.get(opts, :policy, :round_robin))
-
+    {mod, policy_opts} = normalize_policy(Keyword.get(opts, :policy, :round_robin))
     participants = Keyword.get(opts, :participants, [])
-    participant_map = Map.new(participants, &{&1.id, &1})
-
-    session_id = Keyword.get(opts, :session_id) || generate_id("session_")
-    store = ExAgent.Store.normalize(Keyword.get(opts, :store))
-
-    # Rehydrate coordination state from the store (if any). The live participant
-    # refs come from `opts`; only shared_state, turn position, status and the
-    # roster ids/kinds are restored — never pids/secrets/closures.
-    {shared_state, policy_state, current, status, seq, rehydrated_participants} =
-      load_session_state(store, session_id, %{
-        shared_state: Keyword.get(opts, :shared_state),
-        participants: participant_map,
-        policy_mod: pmod,
-        policy_opts: Keyword.put(popts, :participants, participants),
-        current: nil,
-        status: :created,
-        seq: 0
-      })
-
-    # Merge rehydrated kinds for participants the app didn't re-supply.
-    participant_map = merge_participants(participant_map, rehydrated_participants)
+    id = Keyword.get(opts, :session_id) || generate_id("session_")
+    store = Store.normalize(Keyword.get(opts, :store))
 
     state = %State{
-      session_id: session_id,
-      shared_state: shared_state,
-      participants: participant_map,
-      policy_mod: pmod,
-      policy_state: policy_state,
-      current: current,
-      status: status,
-      pubsub: PubSub.normalize(Keyword.get(opts, :pubsub)),
+      session_id: id,
+      shared_state: Keyword.get(opts, :shared_state),
+      policy_mod: mod,
       store: store,
-      topic: Event.session_topic(session_id),
-      seq: seq,
-      metadata: Keyword.get(opts, :metadata, %{})
+      observability: Keyword.get(opts, :observability),
+      topic: Event.session_topic(id),
+      pubsub: PubSub.normalize(Keyword.get(opts, :pubsub)),
+      metadata: Keyword.get(opts, :metadata, %{}),
+      emitter_id: generate_id("emitter_")
     }
 
-    {:ok, state}
-  end
-
-  # ----- join / leave -------------------------------------------------------
-  @impl true
-  def handle_call({:join, %Participant{} = p}, _from, %State{} = state) do
-    state = %{state | participants: Map.put(state.participants, p.id, p)}
-    state = update_policy(state, &TurnPolicy.participant_joined(&1, p))
-
-    state =
-      broadcast(state, :participant_joined, payload: %{participant_id: p.id, kind: p.kind})
-
-    {:reply, :ok, checkpoint(state)}
-  end
-
-  @impl true
-  def handle_call({:leave, id}, _from, %State{} = state) do
-    case Map.pop(state.participants, id) do
-      {nil, _} ->
-        {:reply, {:error, :not_found}, state}
-
-      {_p, participants} ->
-        state = %{state | participants: participants}
-        state = update_policy(state, &TurnPolicy.participant_left(&1, id))
-        state = broadcast(state, :participant_left, payload: %{participant_id: id})
-
-        # The current participant leaving mid-turn would otherwise deadlock the
-        # session (the policy niled its `current`; no one can satisfy can_act?).
-        # Forfeit their turn and advance to the next, or end the session if the
-        # roster is now empty.
-        state =
-          if state.current == id and state.status == :running do
-            advance_after_leave(state)
-          else
-            state
-          end
-
-        {:reply, :ok, checkpoint(state)}
-    end
-  end
-
-  # ----- start --------------------------------------------------------------
-  @impl true
-  def handle_call(:start, _from, %State{status: :created} = state) do
-    case advance(state) do
-      {:ok, first, state} ->
-        state = broadcast(state, :session_started, payload: %{first: first})
-        state = broadcast(state, :session_turn_changed, payload: %{participant_id: first})
-        {:reply, {:ok, first}, checkpoint(%{state | status: :running})}
-
-      {:done, state} ->
-        {:reply, {:error, :no_participants}, checkpoint(%{state | status: :done})}
-    end
-  end
-
-  def handle_call(:start, _from, %State{status: status} = state),
-    do: {:reply, {:error, {:already_started, status}}, state}
-
-  # ----- take_turn ----------------------------------------------------------
-  @impl true
-  def handle_call({:take_turn, _id, _fn}, _from, %State{status: :paused} = state),
-    do: {:reply, {:error, :paused}, state}
-
-  def handle_call({:take_turn, _id, _fn}, _from, %State{status: status} = state)
-      when status in [:created, :closed, :done],
-      do: {:reply, {:error, {:not_running, status}}, state}
-
-  def handle_call({:take_turn, id, change_fn}, _from, %State{status: :running} = state) do
-    with true <- TurnPolicy.can_act?(state.policy_state, id, context(state)),
-         {:ok, state} <- apply_change(state, change_fn),
-         {:ok, next, state} <- advance(state) do
-      state = broadcast(state, :session_turn_changed, payload: %{participant_id: next})
-      {:reply, {:ok, state.shared_state, next}, checkpoint(state)}
+    with true <- is_binary(id),
+         :ok <- validate_roster(participants),
+         {:ok, state} <-
+           restore(
+             %{state | participants: Map.new(participants, &{&1.id, &1})},
+             Keyword.put(policy_opts, :participants, participants)
+           ),
+         :ok <- validate_actor(state) do
+      {:ok, state}
     else
-      false ->
-        {:reply, {:error, :not_your_turn}, state}
-
-      {:error, _} = e ->
-        {:reply, e, state}
-
-      {:done, state} ->
-        {:reply, {:ok, state.shared_state, :done}, checkpoint(%{state | status: :done})}
+      false -> {:stop, :invalid_session_id}
+      {:error, reason} -> {:stop, {:restore_failed, reason}}
     end
   end
 
-  # ----- update_state (mid-turn, no advance) --------------------------------
   @impl true
-  def handle_call({:update_state, _id, _fn}, _from, %State{status: :paused} = state),
-    do: {:reply, {:error, :paused}, state}
+  def handle_call({:observed, command, context}, from, state),
+    do: Observability.with_context(context, fn -> handle_call(command, from, state) end)
 
-  def handle_call({:update_state, _id, _fn}, _from, %State{status: status} = state)
-      when status in [:created, :closed, :done],
-      do: {:reply, {:error, {:not_running, status}}, state}
-
-  def handle_call({:update_state, id, change_fn}, _from, %State{status: :running} = state) do
-    with true <- TurnPolicy.can_act?(state.policy_state, id, context(state)),
-         {:ok, state} <- apply_change(state, change_fn) do
-      {:reply, {:ok, state.shared_state}, state}
-    else
-      false -> {:reply, {:error, :not_your_turn}, state}
-      {:error, _} = e -> {:reply, e, state}
-    end
-  end
-
-  # ----- end_turn -----------------------------------------------------------
-  @impl true
-  def handle_call({:end_turn, _id}, _from, %State{status: :paused} = state),
-    do: {:reply, {:error, :paused}, state}
-
-  def handle_call({:end_turn, _id}, _from, %State{status: status} = state)
-      when status in [:created, :closed, :done],
-      do: {:reply, {:error, {:not_running, status}}, state}
-
-  def handle_call({:end_turn, id}, _from, %State{status: :running} = state) do
-    with true <- TurnPolicy.can_act?(state.policy_state, id, context(state)),
-         {:ok, next, state} <- advance(state) do
-      state = broadcast(state, :session_turn_changed, payload: %{participant_id: next})
-      {:reply, {:ok, next}, checkpoint(state)}
-    else
-      false -> {:reply, {:error, :not_your_turn}, state}
-      {:done, state} -> {:reply, {:ok, :done}, checkpoint(%{state | status: :done})}
-    end
-  end
-
-  # ----- handoff (direct control transfer, bypassing the policy) -----------
-  @impl true
-  def handle_call({:handoff, _to_id}, _from, %State{status: status} = state)
-      when status in [:created, :paused, :closed, :done],
-      do: {:reply, {:error, {:not_running, status}}, state}
-
-  def handle_call({:handoff, to_id}, _from, %State{status: :running} = state) do
-    if Map.has_key?(state.participants, to_id) do
-      state = update_policy(state, &set_policy_current(&1, to_id))
-      state = %{state | current: to_id}
-
-      state =
-        broadcast(state, :session_turn_changed, payload: %{participant_id: to_id, via: :handoff})
-
-      {:reply, {:ok, to_id}, checkpoint(state)}
-    else
-      {:reply, {:error, :not_a_participant}, state}
-    end
-  end
-
-  # ----- pause / resume / close --------------------------------------------
-  @impl true
-  def handle_call(:pause, _from, %State{status: :running} = state) do
-    state = broadcast(%{state | status: :paused}, :session_paused, payload: %{})
-    {:reply, :ok, checkpoint(state)}
-  end
-
-  def handle_call(:pause, _from, state),
-    do: {:reply, {:error, {:not_running, state.status}}, state}
-
-  @impl true
-  def handle_call(:resume, _from, %State{status: :paused} = state) do
-    state = broadcast(%{state | status: :running}, :session_resumed, payload: %{})
-    {:reply, :ok, checkpoint(state)}
-  end
-
-  def handle_call(:resume, _from, state),
-    do: {:reply, {:error, {:not_paused, state.status}}, state}
-
-  @impl true
-  def handle_call(:close, _from, %State{status: status} = state) when status != :closed do
-    state = broadcast(%{state | status: :closed}, :session_closed, payload: %{})
-    {:reply, :ok, checkpoint(state)}
-  end
-
-  def handle_call(:close, _from, state), do: {:reply, :ok, state}
-
-  # ----- introspection ------------------------------------------------------
-  @impl true
   def handle_call(:read_state, _from, state), do: {:reply, state.shared_state, state}
-  @impl true
   def handle_call(:current, _from, state), do: {:reply, state.current, state}
 
-  @impl true
   def handle_call(:participants, _from, state),
-    do: {:reply, state.participants |> Map.values(), state}
+    do: {:reply, Map.values(state.participants), state}
 
-  @impl true
   def handle_call(:status, _from, state), do: {:reply, state.status, state}
 
-  # ---------------------------------------------------------------------------
-  # Internal
-  # ---------------------------------------------------------------------------
+  def handle_call(:health, _from, state),
+    do:
+      {:reply,
+       %{
+         status: state.status,
+         persistence: RuntimeCheckpoint.health(state),
+         emitter_id: state.emitter_id
+       }, state}
 
-  defp context(%State{} = state) do
-    %{shared_state: state.shared_state, participants: Map.values(state.participants)}
+  def handle_call(:checkpoint, _from, state) do
+    {reply, state} = RuntimeCheckpoint.retry(state, &Snapshot.new/1)
+    {:reply, reply, state}
   end
 
-  defp update_policy(%State{} = state, fun),
-    do: %{state | policy_state: fun.(state.policy_state)}
+  def handle_call(_, _from, %{checkpoint_error: error} = state) when not is_nil(error),
+    do: {:reply, RuntimeCheckpoint.blocked(state), state}
 
-  # A handoff sets the current actor directly. The built-in policies track a
-  # `current` field; custom policies without one are left untouched (their
-  # `can_act?/3` decides admission as usual).
-  defp set_policy_current(policy_state, id) do
-    if is_map(policy_state) and Map.has_key?(policy_state, :current) do
-      Map.put(policy_state, :current, id)
-    else
-      policy_state
+  def handle_call(command, _from, state) do
+    case transition(state, command) do
+      {:ok, result, ^state, []} ->
+        {:reply, result, state}
+
+      {:ok, result, candidate, events} ->
+        case validate_actor(candidate) do
+          :ok ->
+            {reply, candidate} =
+              RuntimeCheckpoint.commit(candidate, :session, result, &Snapshot.new/1)
+
+            candidate =
+              Enum.reduce(events, candidate, fn {type, payload}, acc ->
+                broadcast(
+                  acc,
+                  type,
+                  Map.put(payload, :persistence, RuntimeCheckpoint.health(acc))
+                )
+              end)
+
+            {:reply, reply, candidate}
+
+          {:error, _} = error ->
+            {:reply, error, state}
+        end
+
+      {:error, _} = error ->
+        {:reply, error, state}
     end
   end
 
-  defp advance(%State{} = state) do
-    case TurnPolicy.next_participant(state.policy_state, context(state)) do
-      {:ok, id, policy_state} ->
-        {:ok, id, %{state | policy_state: policy_state, current: id}}
+  defp transition(state, {:join, p}) do
+    with :ok <- roster_open(state), :ok <- validate_roster([p]) do
+      case Map.get(state.participants, p.id) do
+        %Participant{kind: kind} when kind != p.kind ->
+          {:error, :participant_kind_mismatch}
 
-      {:done, policy_state} ->
-        {:done, %{state | policy_state: policy_state, current: nil}}
+        %Participant{} ->
+          {:ok, :ok, %{state | participants: Map.put(state.participants, p.id, p)}, []}
+
+        nil ->
+          with {:ok, policy} <-
+                 policy_call(state, fn -> TurnPolicy.participant_joined(state.policy_state, p) end),
+               :ok <- valid_policy(state, policy) do
+            candidate = %{
+              state
+              | participants: Map.put(state.participants, p.id, p),
+                policy_state: policy
+            }
+
+            {:ok, :ok, candidate, [{:participant_joined, %{participant_id: p.id, kind: p.kind}}]}
+          end
+      end
     end
   end
 
-  # The current participant left mid-turn: forfeit their turn and pick the next,
-  # so the session does not deadlock. An empty roster ends the session.
-  defp advance_after_leave(%State{} = state) do
-    case advance(state) do
-      {:ok, next, state} ->
-        broadcast(state, :session_turn_changed, payload: %{participant_id: next, via: :leave})
+  defp transition(state, {:leave, id}) do
+    with :ok <- roster_open(state),
+         true <- Map.has_key?(state.participants, id),
+         {:ok, policy} <-
+           policy_call(state, fn -> TurnPolicy.participant_left(state.policy_state, id) end),
+         :ok <- valid_policy(state, policy) do
+      candidate = %{
+        state
+        | participants: Map.delete(state.participants, id),
+          policy_state: policy
+      }
 
-      {:done, state} ->
-        %{state | status: :done}
-    end
-  end
+      events = [{:participant_left, %{participant_id: id}}]
 
-  # Apply a participant's change function to the shared state (single writer).
-  defp apply_change(%State{} = state, change_fn) do
-    case change_fn.(state.shared_state) do
-      {:ok, new_state} -> commit_change(state, new_state)
-      {:error, _} = e -> e
-      # A bare value is treated as the new state (convenience).
-      new_state -> commit_change(state, new_state)
-    end
-  end
-
-  defp commit_change(%State{} = state, new_state) do
-    state = %{state | shared_state: new_state}
-
-    state =
-      broadcast(state, :shared_state_updated, payload: %{participant_id: state.current})
-
-    {:ok, checkpoint(state)}
-  end
-
-  # -------------------------------------------------------------------------
-  # Persistence
-  # -------------------------------------------------------------------------
-
-  # Persist a snapshot of the coordination state, keyed by session_id. No-op
-  # when no store is configured. Persistence failures are logged (not raised),
-  # like Server.checkpoint does — a store problem must never break a turn.
-  defp checkpoint(%State{store: nil} = state), do: state
-
-  defp checkpoint(%State{store: {mod, config}} = state) do
-    snapshot = ExAgent.Session.Snapshot.new(state)
-    mod.save_session_snapshot(config, snapshot)
-    state
-  rescue
-    e ->
-      Logger.warning(
-        "exagent session checkpoint failed for #{inspect(state.session_id)}: #{Exception.message(e)}"
-      )
-
-      state
-  end
-
-  # Rehydrate coordination state from the store at init. The app always supplies
-  # the live participant refs via `:participants`; only the serializable parts
-  # (shared_state, turn position, status, roster ids/kinds) are restored.
-  defp load_session_state(nil, _id, defaults) do
-    {defaults.shared_state, TurnPolicy.init(defaults.policy_mod, defaults.policy_opts),
-     defaults.current, defaults.status, defaults.seq, %{}}
-  end
-
-  defp load_session_state({mod, config}, session_id, defaults) do
-    case ExAgent.Store.load_session_snapshot({mod, config}, session_id) do
-      {:ok, snap} ->
-        # Restore turn position from the snapshot's policy_state (the policy
-        # struct round-tripped with its index/current); fall back to a fresh
-        # init if the module/struct changed incompatibly between runs.
-        policy_state =
-          case reconstruct_policy_state(snap) do
-            nil -> TurnPolicy.init(defaults.policy_mod, defaults.policy_opts)
-            other -> other
+      cond do
+        state.current == id and state.status == :running ->
+          with {:ok, next, turn_events} <- advance(%{candidate | current: nil}) do
+            {:ok, :ok, next, events ++ turn_events}
           end
 
-        {snap.shared_state, policy_state, snap.current, snap.status, snap.seq,
-         Map.new(snap.participants || [], &{&1.id, &1})}
+        state.current == id ->
+          {:ok, :ok, %{candidate | current: nil}, events}
 
-      {:error, :not_found} ->
-        {defaults.shared_state, TurnPolicy.init(defaults.policy_mod, defaults.policy_opts),
-         defaults.current, defaults.status, defaults.seq, %{}}
+        true ->
+          {:ok, :ok, candidate, events}
+      end
+    else
+      false -> {:error, :not_found}
+      {:error, _} = error -> error
+    end
+  end
+
+  defp transition(%{status: :created} = state, :start) do
+    with {:ok, state, events} <- advance(%{state | status: :running}) do
+      result =
+        if state.status == :done, do: {:error, :no_participants}, else: {:ok, state.current}
+
+      {:ok, result, state, [{:session_started, %{first: state.current}} | events]}
+    end
+  end
+
+  defp transition(state, :start), do: {:error, {:already_started, state.status}}
+
+  defp transition(state, {kind, id, change}) when kind in [:take_turn, :update_state] do
+    with :ok <- can_act(state, id),
+         {:ok, shared_state} <- apply_change(state.shared_state, change) do
+      candidate = %{state | shared_state: shared_state}
+      events = [{:shared_state_updated, %{participant_id: id}}]
+
+      if kind == :update_state do
+        {:ok, {:ok, shared_state}, candidate, events}
+      else
+        with {:ok, candidate, turn_events} <- advance(candidate) do
+          next = if candidate.status == :done, do: :done, else: candidate.current
+          {:ok, {:ok, shared_state, next}, candidate, events ++ turn_events}
+        end
+      end
+    end
+  end
+
+  defp transition(state, {:end_turn, id}) do
+    with :ok <- can_act(state, id), {:ok, candidate, events} <- advance(state) do
+      next = if candidate.status == :done, do: :done, else: candidate.current
+      {:ok, {:ok, next}, candidate, events}
+    end
+  end
+
+  defp transition(%{status: status}, {:handoff, _}) when status != :running,
+    do: {:error, {:not_running, status}}
+
+  defp transition(state, {:handoff, id}) do
+    with :ok <- running(state),
+         true <- Map.has_key?(state.participants, id),
+         {:ok, outcome} <-
+           policy_call(state, fn -> TurnPolicy.handoff(state.policy_state, id, context(state)) end),
+         {:ok, policy} <- outcome,
+         :ok <- valid_policy(state, policy),
+         :ok <- validate_actor(%{state | current: id, policy_state: policy}) do
+      {:ok, {:ok, id}, %{state | current: id, policy_state: policy},
+       [{:session_turn_changed, %{participant_id: id, via: :handoff}}]}
+    else
+      false -> {:error, :not_a_participant}
+      {:error, _} = error -> error
+      _ -> {:error, :invalid_policy_return}
+    end
+  end
+
+  defp transition(%{status: :running} = state, :pause),
+    do: {:ok, :ok, %{state | status: :paused}, [{:session_paused, %{}}]}
+
+  defp transition(state, :pause), do: {:error, {:not_running, state.status}}
+
+  defp transition(%{status: :paused, current: nil} = state, :resume) do
+    with {:ok, candidate, events} <- advance(%{state | status: :running}) do
+      {:ok, :ok, candidate, [{:session_resumed, %{}} | events]}
+    end
+  end
+
+  defp transition(%{status: :paused} = state, :resume) do
+    with :ok <- validate_actor(state) do
+      {:ok, :ok, %{state | status: :running}, [{:session_resumed, %{}}]}
+    end
+  end
+
+  defp transition(state, :resume), do: {:error, {:not_paused, state.status}}
+  defp transition(%{status: :closed} = state, :close), do: {:ok, :ok, state, []}
+
+  defp transition(state, :close),
+    do: {:ok, :ok, %{state | status: :closed}, [{:session_closed, %{}}]}
+
+  defp transition(_, _), do: {:error, :invalid_command}
+
+  defp advance(state) do
+    with {:ok, outcome} <-
+           policy_call(state, fn ->
+             TurnPolicy.next_participant(state.policy_state, context(state))
+           end) do
+      case outcome do
+        {:ok, id, policy} ->
+          candidate = %{state | current: id, policy_state: policy}
+
+          with :ok <- valid_policy(state, policy), :ok <- validate_actor(candidate) do
+            {:ok, candidate, [{:session_turn_changed, %{participant_id: id}}]}
+          end
+
+        {:done, policy} ->
+          with :ok <- valid_policy(state, policy) do
+            {:ok, %{state | current: nil, status: :done, policy_state: policy}, []}
+          end
+
+        _ ->
+          {:error, :invalid_policy_return}
+      end
+    end
+  end
+
+  defp can_act(state, id) do
+    with :ok <- running(state),
+         true <- Map.has_key?(state.participants, id),
+         {:ok, true} <-
+           policy_call(state, fn ->
+             TurnPolicy.can_act?(state.policy_state, id, context(state))
+           end) do
+      :ok
+    else
+      false -> {:error, :not_your_turn}
+      {:ok, false} -> {:error, :not_your_turn}
+      {:error, _} = error -> error
+      _ -> {:error, :invalid_policy_return}
+    end
+  end
+
+  defp running(%{status: :running}), do: :ok
+  defp running(%{status: :paused}), do: {:error, :paused}
+  defp running(state), do: {:error, {:not_running, state.status}}
+  defp roster_open(%{status: status}) when status in [:created, :running, :paused], do: :ok
+  defp roster_open(state), do: {:error, {:not_running, state.status}}
+
+  defp context(state),
+    do: %{shared_state: state.shared_state, participants: Map.values(state.participants)}
+
+  defp valid_policy(%{policy_mod: mod}, %mod{}), do: :ok
+  defp valid_policy(_, _), do: {:error, :invalid_policy_state}
+
+  defp policy_call(_state, fun) do
+    {:ok, fun.()}
+  rescue
+    exception -> {:error, {:policy_exception, exception.__struct__}}
+  catch
+    kind, _ -> {:error, {:policy_failure, kind}}
+  end
+
+  defp validate_actor(state) do
+    with :ok <- valid_policy(state, state.policy_state) do
+      cond do
+        is_nil(state.current) and state.status == :running ->
+          {:error, :invalid_current}
+
+        is_nil(state.current) ->
+          :ok
+
+        not Map.has_key?(state.participants, state.current) ->
+          {:error, :invalid_current}
+
+        true ->
+          case policy_call(state, fn ->
+                 TurnPolicy.can_act?(state.policy_state, state.current, context(state))
+               end) do
+            {:ok, true} -> :ok
+            _ -> {:error, :invalid_current}
+          end
+      end
+    end
+  end
+
+  defp apply_change(shared_state, change) do
+    case change.(shared_state) do
+      {:ok, state} -> {:ok, state}
+      {:error, _} = error -> error
+      state -> {:ok, state}
     end
   rescue
-    e ->
-      Logger.warning(
-        "exagent session rehydrate failed for #{inspect(session_id)} (starting fresh): #{Exception.message(e)}"
-      )
-
-      {defaults.shared_state, TurnPolicy.init(defaults.policy_mod, defaults.policy_opts),
-       defaults.current, defaults.status, defaults.seq, %{}}
+    exception -> {:error, {:change_exception, exception.__struct__}}
+  catch
+    kind, _ -> {:error, {:change_failure, kind}}
   end
 
-  # The policy_state round-trips tagged with __struct__; reconstruct it, but only
-  # if the module matches the one the app is starting with (avoids restoring an
-  # incompatible policy from an older snapshot).
-  defp reconstruct_policy_state(%ExAgent.Session.Snapshot{policy_state: nil}), do: nil
+  defp validate_roster(participants) when is_list(participants) do
+    if Enum.all?(participants, fn
+         %Participant{id: id, kind: kind, metadata: metadata} ->
+           not is_nil(id) and kind in [:agent, :human] and is_map(metadata)
 
-  defp reconstruct_policy_state(%ExAgent.Session.Snapshot{policy_mod: mod, policy_state: ps})
-       when is_struct(ps) and is_atom(mod) do
-    if ps.__struct__ == mod, do: ps, else: nil
+         _ ->
+           false
+       end) and length(participants) == MapSet.size(MapSet.new(participants, & &1.id)),
+       do: :ok,
+       else: {:error, :invalid_participants}
   end
 
-  defp reconstruct_policy_state(_), do: nil
+  defp validate_roster(_), do: {:error, :invalid_participants}
 
-  # Keep the app's live participants (with refs), filling kinds for any the app
-  # didn't re-supply but were in the persisted roster.
-  defp merge_participants(live, rehydrated) when rehydrated == %{}, do: live
+  defp restore(%{store: nil} = state, opts), do: initialize_policy(state, opts)
 
-  defp merge_participants(live, rehydrated) do
-    Enum.reduce(rehydrated, live, fn {id, rehydrated_p}, acc ->
-      case Map.get(acc, id) do
-        nil ->
-          # App didn't re-supply this one; keep the persisted id/kind without a ref.
-          Map.put(acc, id, Participant.new(id: id, kind: rehydrated_p.kind))
+  defp restore(state, opts) do
+    case Store.load_session_snapshot(state.store, state.session_id) do
+      {:error, :not_found} ->
+        initialize_policy(state, opts)
 
-        _live_p ->
-          # App re-supplied the live ref; keep it.
-          acc
-      end
-    end)
+      {:error, _} = error ->
+        error
+
+      {:ok, raw} ->
+        with {:ok, snapshot} <- Snapshot.validate(raw, state.session_id),
+             {:ok, participants} <- attach_participants(state.participants, snapshot.participants) do
+          candidate = %{
+            state
+            | shared_state: snapshot.shared_state,
+              participants: participants,
+              current: snapshot.current,
+              status: snapshot.status,
+              revision: snapshot.revision
+          }
+
+          with {:ok, policy} <- Snapshot.restore(snapshot, state.policy_mod, context(candidate)),
+               do: {:ok, %{candidate | policy_state: policy}}
+        end
+    end
   end
 
-  defp broadcast(%State{} = state, type, opts) do
+  defp initialize_policy(state, opts) do
+    with {:ok, policy} <- policy_call(state, fn -> TurnPolicy.init(state.policy_mod, opts) end),
+         :ok <- valid_policy(state, policy),
+         do: {:ok, %{state | policy_state: policy}}
+  end
+
+  defp attach_participants(live, saved) do
+    saved_map = Map.new(saved, &{&1.id, &1})
+
+    if Enum.all?(live, fn {id, p} -> match?(%{kind: kind} when kind == p.kind, saved_map[id]) end) do
+      {:ok,
+       Map.new(saved, fn p ->
+         {p.id, Map.get(live, p.id, Participant.new(id: p.id, kind: p.kind))}
+       end)}
+    else
+      {:error, :snapshot_roster_mismatch}
+    end
+  end
+
+  defp broadcast(state, type, payload) do
     seq = state.seq + 1
 
     event =
       Event.new(
         type: type,
         seq: seq,
+        emitter_id: state.emitter_id,
         source: :session,
         session_id: state.session_id,
-        payload: Keyword.get(opts, :payload, %{}),
-        metadata: Map.merge(state.metadata, Keyword.get(opts, :metadata, %{}))
+        payload: payload,
+        metadata: state.metadata
       )
 
     case PubSub.broadcast(state.pubsub, state.topic, event) do
-      :ok ->
-        :ok
-
-      {:error, reason} ->
-        Logger.warning("exagent session pubsub broadcast failed: #{inspect(reason)}")
+      :ok -> :ok
+      {:error, _} -> Logger.warning("exagent session pubsub broadcast failed")
     end
 
     %{state | seq: seq}
@@ -605,10 +486,7 @@ defmodule ExAgent.Session do
 
   defp normalize_policy(:round_robin), do: {ExAgent.Session.TurnPolicy.RoundRobin, []}
   defp normalize_policy(:initiative), do: {ExAgent.Session.TurnPolicy.Initiative, []}
-
-  defp normalize_policy({:initiative, opts}),
-    do: {ExAgent.Session.TurnPolicy.Initiative, opts}
-
+  defp normalize_policy({:initiative, opts}), do: {ExAgent.Session.TurnPolicy.Initiative, opts}
   defp normalize_policy(:supervisor), do: {ExAgent.Session.TurnPolicy.SupervisorPolicy, []}
 
   defp normalize_policy({:supervisor, opts}),

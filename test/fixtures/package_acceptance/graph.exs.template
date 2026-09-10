@@ -1,0 +1,54 @@
+mode = System.fetch_env!("PACKAGE_ACCEPTANCE_MODE")
+deps = Mix.Dep.load_and_cache()
+apps = Enum.map(deps, & &1.app)
+
+forbidden = [
+  :ecto_sql,
+  :postgrex,
+  :db_connection,
+  :ex_doc,
+  :earmark_parser,
+  :makeup,
+  :makeup_elixir,
+  :makeup_erlang
+]
+
+true = Enum.all?(forbidden, &(&1 not in apps))
+true = :opentelemetry_api in apps == (mode != "none")
+true = :opentelemetry in apps == mode in ["sdk", "exporter"]
+true = :opentelemetry_exporter in apps == (mode == "exporter")
+true = Version.match?(Application.spec(:mint, :vsn) |> to_string(), ">= 1.10.0")
+true = Version.match?(Application.spec(:hpax, :vsn) |> to_string(), ">= 1.0.4")
+
+graph =
+  Enum.map(deps, fn dep ->
+    %{
+      app: dep.app,
+      requirement: dep.requirement,
+      version: Application.spec(dep.app, :vsn),
+      path: dep.opts[:dest],
+      children: Enum.map(dep.deps, & &1.app),
+      runtime: Keyword.get(dep.opts, :runtime, true)
+    }
+  end)
+
+agent = Enum.find(deps, &(&1.app == :exagent))
+sdk = Enum.find(agent.deps, &(&1.app == :opentelemetry))
+if mode in ["sdk", "exporter"], do: true = sdk.opts[:runtime] == false
+package = Path.expand("vendor/exagent") <> "/"
+build = Path.expand("_build") <> "/"
+
+provenance =
+  for module <- Application.spec(:exagent, :modules) do
+    {:module, ^module} = Code.ensure_loaded(module)
+    source = module.module_info(:compile) |> Keyword.fetch!(:source) |> to_string()
+    beam = :code.which(module) |> to_string()
+    true = String.starts_with?(source, package)
+    true = String.starts_with?(beam, build)
+    %{module: module, source: source, beam: beam}
+  end
+
+File.write!("graph.term", inspect(graph, pretty: true, limit: :infinity) <> "\n")
+File.write!("provenance.term", inspect(provenance, pretty: true, limit: :infinity) <> "\n")
+IO.inspect(graph, label: "resolved runtime graph", limit: :infinity)
+IO.puts("Package-only provenance confirmed for #{length(provenance)} modules")

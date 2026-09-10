@@ -31,7 +31,7 @@ defmodule ExAgent.Store.SessionPostgresTest do
     assert loaded.session_id == id
     assert loaded.shared_state["scene"] == "crypt"
     assert loaded.current == "b"
-    assert loaded.policy_mod == ExAgent.Session.TurnPolicy.RoundRobin
+    assert loaded.policy_mod == "Elixir.ExAgent.Session.TurnPolicy.RoundRobin"
 
     assert :ok = Store.delete_session_snapshot(@store, id)
     assert {:error, :not_found} = Store.load_session_snapshot(@store, id)

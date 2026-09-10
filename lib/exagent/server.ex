@@ -1,71 +1,30 @@
 defmodule ExAgent.Server do
   @moduledoc """
-  A supervised, stateful wrapper around `ExAgent.run/3`.
+  Supervised owner of conversational history, model state and accumulated usage.
 
-  `ExAgent.Server` keeps an agent alive across many runs: it preserves the
-  conversation history, accumulates token usage, threads stateful models (like
-  `ExAgent.Models.Test`) from one run to the next, and emits `ExAgent.Event`s
-  over `ExAgent.PubSub` so UIs (LiveView, CLI, channels) can observe every run
-  in real time.
+  Runs execute in owned supervised tasks. Stopping or killing the Server kills
+  its active worker; external effects and detached user processes cannot be undone.
+  `chat/3` waits for completion; `send_message/3`, `steer/3` and `stream/3` return
+  an admission id for volatile work, not a durable execution acknowledgement.
 
-  It does **not** coordinate multiple participants or own shared state — that is
-  `ExAgent.Session`'s job (Roadmap Phase 3). It is purely a *conversation with
-  state*: model + history + usage + events.
+  With an opt-in Store, terminal success follows a confirmed checkpoint. A failed
+  save returns `ExAgent.CheckpointError`, preserving the execution outcome and
+  new state in memory. Mutations and queue draining then wait for `checkpoint/1`,
+  which retries only saving. Adapter IO is synchronous and must be bounded by the
+  adapter. Recovery restores conversation data, never replays tools or queued work.
 
-  ## Starting
-
-      agent = ExAgent.new(model: "openai:gpt-4o", instructions: "Be a DM.")
-      {:ok, pid} = ExAgent.AgentSupervisor.start_agent(agent: agent, name: :dm)
-
-  or standalone:
-
-      {:ok, pid} = ExAgent.Server.start_link(agent: agent, name: :dm)
-
-  Options: `:agent` (required), `:agent_id`, `:name`, `:pubsub`
-  (`nil`/`:none`/`:local`/`{module, config}`), `:max_pending` (default `8`),
-  `:metadata`.
-
-  ## Concurrency model
-
-  Runs execute in a supervised task (`ExAgent.TaskSupervisor`), so the GenServer
-  keeps answering `abort/1`, `health/1` and backpressure during long runs.
-  Each run has an owner monitor: stopping the Server (including `stop_agent/1`
-  or an untrappable `:kill`) asynchronously kills its active run. The monitor
-  exits with the run; idle Servers have no monitor process. Run crashes remain
-  isolated from the Server. Cancellation cannot undo external side effects or
-  stop detached processes started by user code.
-
-    * `chat/3`        — synchronous: blocks the caller until the run finishes.
-    * `send_message/3` — asynchronous: returns `{:ok, request_id}` immediately;
-      the result arrives as a `:run_finished`/`:run_failed` event.
-    * `stream/3`      — asynchronous text streaming: deltas arrive as
-      `:text_delta` events on the agent topic.
-    * `steer/2`       — enqueue a high-priority follow-up for the *next* run.
-      It does **not** mutate an HTTP request already in flight.
-    * `abort/1`       — cancel the in-flight run and emit `:server_request_cancelled`.
-
-  Backpressure: while a run is in flight, `chat/3` returns `{:error, :busy}`;
-  `send_message/3`/`steer/2` enqueue up to `max_pending` requests and otherwise
-  return `{:error, :queue_full}`.
-
-  ## Events
-
-  Published on `ExAgent.Event.agent_topic(agent_id)`
-  (`"exagent:agent:<agent_id>"`). Subscribers receive
-  `{:exagent_event, %ExAgent.Event{}}`. The `seq` field is monotonic per agent.
+  Events use the agent topic and a sequence local to `emitter_id`. A living owner
+  attempts one terminal emission per run; PubSub is not a durable event log.
   """
-
   use GenServer
   require Logger
-
-  alias ExAgent.{Event, PubSub, RunEvent}
+  alias ExAgent.{Event, PubSub, RunEvent, RunError, RuntimeCheckpoint, Store}
   alias ExAgent.Message.Usage
-
-  @default_max_pending 8
+  alias ExAgent.Server.Snapshot
+  alias ExAgent.Observability.OpenTelemetry, as: Observability
 
   defmodule State do
     @moduledoc false
-
     defstruct agent: nil,
               model: nil,
               history: [],
@@ -79,520 +38,498 @@ defmodule ExAgent.Server do
               topic: nil,
               agent_id: nil,
               seq: 0,
-              metadata: %{}
-
-    @type status :: :idle | :running
-    @type reply_to :: {:call, GenServer.from()} | {:event, String.t()} | nil
-    @type current :: %{
-            ref: reference(),
-            pid: pid(),
-            reply_to: reply_to(),
-            request_id: String.t(),
-            run_id: String.t(),
-            prompt: String.t(),
-            streaming?: boolean(),
-            aborting: boolean()
-          }
-    @type pending_entry :: {String.t(), keyword(), reply_to(), String.t()}
-
-    @type t :: %__MODULE__{
-            agent: ExAgent.t(),
-            model: ExAgent.Model.model(),
-            history: [ExAgent.Message.t()],
-            usage: Usage.t(),
-            status: status(),
-            current: current() | nil,
-            pending: :queue.queue(),
-            max_pending: pos_integer(),
-            pubsub: {module(), term()},
-            store: {module(), term()} | nil,
-            topic: String.t() | nil,
-            agent_id: String.t() | nil,
-            seq: non_neg_integer(),
-            metadata: map()
-          }
+              metadata: %{},
+              emitter_id: nil,
+              revision: 0,
+              checkpoint_error: nil,
+              observability: nil
   end
 
-  # ---------------------------------------------------------------------------
-  # Public API
-  # ---------------------------------------------------------------------------
-
   @doc """
-  Start a supervised, stateful agent.
-
-  ## Options
-
-    * `:agent`       — (required) an `ExAgent.t()` built with `ExAgent.new/1`.
-    * `:agent_id`    — stable id for correlation/events; auto-generated if absent.
-    * `:name`        — registered name for the GenServer.
-    * `:pubsub`      — `nil`/`:none`/`:local`/`{module, config}` (default `nil`).
-    * `:store`       — `nil`/`:ets`/`{module, config}` (default `nil`, no
-                      persistence). When set, history/usage are checkpointed
-                      after every run and rehydrated on restart.
-    * `:max_pending` — max queued async requests before `:queue_full` (default 8).
-    * `:metadata`    — free-form map attached to every emitted event.
+  Start with `:agent` and optional `:agent_id`, `:name`, `:store`, `:pubsub`,
+  `:metadata`, `:max_pending` (8). Only Store not_found starts a new conversation;
+  invalid/incompatible snapshots or load failures return a controlled error.
   """
-  @spec start_link(keyword()) :: GenServer.on_start()
-  def start_link(opts) when is_list(opts) do
+  def start_link(opts) do
     {name, opts} = Keyword.pop(opts, :name)
     GenServer.start_link(__MODULE__, opts, name: name)
   end
 
-  @doc false
   def child_spec(opts) do
-    agent_id = Keyword.get(opts, :agent_id)
-    name = Keyword.get(opts, :name)
-
     %{
-      id: {:exagent_server, agent_id || name || make_ref()},
+      id: {:exagent_server, opts[:agent_id] || opts[:name] || make_ref()},
       start: {__MODULE__, :start_link, [opts]},
       restart: :transient
     }
   end
 
   @doc """
-  Run one prompt synchronously and return `{:ok, result}` (the `ExAgent.run/3`
-  result map) or `{:error, reason}`. Refuses to start if a run is already in
-  flight, returning `{:error, :busy}`.
-
-  The GenServer call uses `:infinity` timeout by default (LLM runs can be long);
-  pass `timeout: ms` in `opts` to override. The forwarded run options are
-  `:deps`, `:model_settings`, `:stream_text`, `:estimate_cost`, `:permissions`
-  and `:approve`. This also applies to queued `send_message/3` and `steer/3`.
-  `:message_history` explicitly replaces the accumulated history for this run
-  (`[]` starts fresh; `nil` uses the Server history). The Server owns `:run_id`,
-  `:on_event` and instruction-prepending; caller overrides of these are ignored.
+  Execute a run. Options include deps, model_settings, stream_text, estimate_cost,
+  permissions and approve. Explicit message_history overrides accumulated context;
+  run_id, on_event, on_progress and instruction management belong to the Server.
+  A call timeout does not cancel work already owned by the Server.
   """
-  @spec chat(GenServer.server(), String.t(), keyword()) ::
-          {:ok, ExAgent.result()} | {:error, term()}
-  def chat(server, prompt, opts \\ []) do
-    timeout = Keyword.get(opts, :timeout, :infinity)
-    GenServer.call(server, {:chat, prompt, opts}, timeout)
-  end
+  def chat(server, prompt, opts \\ []),
+    do:
+      GenServer.call(
+        server,
+        {:chat, prompt, Observability.options(opts)},
+        Keyword.get(opts, :timeout, :infinity)
+      )
 
-  @doc """
-  Run one prompt asynchronously. Returns `{:ok, request_id}` immediately; the
-  result is delivered as a `:run_finished`/`:run_failed` event on the agent
-  topic. Returns `{:error, :queue_full}` if the pending queue is full.
+  def send_message(server, prompt, opts \\ []),
+    do: GenServer.call(server, {:send_message, prompt, Observability.options(opts)})
 
-  Run options are forwarded to `ExAgent.run/3`.
-  """
-  @spec send_message(GenServer.server(), String.t(), keyword()) ::
-          {:ok, String.t()} | {:error, :queue_full}
-  def send_message(server, prompt, opts \\ []) do
-    GenServer.call(server, {:send_message, prompt, opts})
-  end
+  def steer(server, prompt, opts \\ []),
+    do: GenServer.call(server, {:steer, prompt, Observability.options(opts)})
 
-  @doc """
-  Stream a prompt's text deltas. Returns `{:ok, request_id}` immediately; deltas
-  arrive as `:text_delta` events and the final result as a `:run_finished` event
-  on the agent topic. Returns `{:error, :busy}` if a run is in flight.
+  @doc "Run the same agentic loop with provisional text deltas and one complete terminal."
+  def stream(server, prompt, opts \\ []),
+    do: GenServer.call(server, {:stream, prompt, Observability.options(opts)})
 
-  Phase 1 scope: this surfaces text deltas via the existing streaming core. It
-  does not run a full agentic tool loop (use `chat/3`/`send_message/3` for that).
-  """
-  @spec stream(GenServer.server(), String.t(), keyword()) ::
-          {:ok, String.t()} | {:error, :busy}
-  def stream(server, prompt, opts \\ []) do
-    GenServer.call(server, {:stream, prompt, opts})
-  end
+  @doc "Request cancellation; idempotent. Does not undo external effects."
+  def abort(server), do: GenServer.call(server, :abort)
+  def set_model(server, model), do: GenServer.call(server, {:set_model, model})
+  def history(server), do: GenServer.call(server, :history)
+  def usage(server), do: GenServer.call(server, :usage)
+  def health(server), do: GenServer.call(server, :health)
 
-  @doc """
-  Enqueue a high-priority follow-up for the *next* run. It is placed at the front
-  of the pending queue (or started immediately if idle). It does **not** modify
-  an HTTP request already in flight. Returns `{:ok, request_id}`.
-  """
-  @spec steer(GenServer.server(), String.t(), keyword()) ::
-          {:ok, String.t()} | {:error, :queue_full}
-  def steer(server, prompt, opts \\ []) do
-    GenServer.call(server, {:steer, prompt, opts})
-  end
+  def reset(server),
+    do: GenServer.call(server, {:observed, :reset, Observability.capture_context()})
 
-  @doc "Cancel the in-flight run, if any. Returns `:ok`. Idempotent."
-  @spec abort(GenServer.server()) :: :ok
-  def abort(server) do
-    GenServer.call(server, :abort)
-  end
-
-  @doc "Replace the model of an idle agent. Returns `:ok` or `{:error, :busy | reason}`."
-  @spec set_model(GenServer.server(), ExAgent.Model.model() | String.t()) ::
-          :ok | {:error, :busy | term()}
-  def set_model(server, model_spec) do
-    GenServer.call(server, {:set_model, model_spec})
-  end
-
-  @doc "The current conversation history (messages threaded across runs)."
-  @spec history(GenServer.server()) :: [ExAgent.Message.t()]
-  def history(server) do
-    GenServer.call(server, :history)
-  end
-
-  @doc """
-  Clear the conversation history and accumulated usage — start a fresh
-  conversation on the same supervised agent. Only allowed when idle; returns
-  `{:error, :busy}` if a run is in flight. When a store is configured, the
-  cleared (empty) state is checkpointed.
-  """
-  @spec reset(GenServer.server()) :: :ok | {:error, :busy}
-  def reset(server) do
-    GenServer.call(server, :reset)
-  end
-
-  @doc "Accumulated token usage across all runs so far."
-  @spec usage(GenServer.server()) :: Usage.t()
-  def usage(server) do
-    GenServer.call(server, :usage)
-  end
-
-  @doc "Runtime health: `status` and pending queue depth."
-  @spec health(GenServer.server()) :: %{status: atom(), pending: non_neg_integer()}
-  def health(server) do
-    GenServer.call(server, :health)
-  end
-
-  # ---------------------------------------------------------------------------
-  # GenServer callbacks — init & calls
-  # ---------------------------------------------------------------------------
+  @doc "Retry an unconfirmed snapshot only, without repeating execution."
+  def checkpoint(server),
+    do:
+      GenServer.call(server, {:observed, :checkpoint, Observability.capture_context()}, :infinity)
 
   @impl true
   def init(opts) do
     agent = Keyword.fetch!(opts, :agent)
+    id = Keyword.get(opts, :agent_id) || generate_id("agent_")
+    store = Store.normalize(Keyword.get(opts, :store))
+    max_pending = Keyword.get(opts, :max_pending, 8)
 
-    agent_id = Keyword.get(opts, :agent_id) || generate_id("agent_")
-    store = ExAgent.Store.normalize(Keyword.get(opts, :store))
-
-    # Rehydrate conversational state from the store (if any). The live agent
-    # template (model, tools, instructions) comes from `opts`; only history and
-    # usage are restored — never pids, secrets or closures.
-    {history, usage} = load_state(store, agent_id)
-
-    state = %State{
-      agent: agent,
-      model: agent.model,
-      history: history,
-      usage: usage,
-      agent_id: agent_id,
-      topic: Event.agent_topic(agent_id),
-      pubsub: PubSub.normalize(Keyword.get(opts, :pubsub)),
-      store: store,
-      max_pending: Keyword.get(opts, :max_pending, @default_max_pending),
-      metadata: Keyword.get(opts, :metadata, %{})
-    }
-
-    {:ok, state}
-  end
-
-  # ----- chat (synchronous) -------------------------------------------------
-  @impl true
-  def handle_call({:chat, _prompt, _opts}, _from, %State{status: :running} = state) do
-    {:reply, {:error, :busy}, state}
-  end
-
-  def handle_call({:chat, prompt, opts}, from, %State{status: :idle} = state) do
-    {state, _request_id} = start_run(state, prompt, opts, {:call, from})
-    {:noreply, state}
-  end
-
-  # ----- send_message (asynchronous) ----------------------------------------
-  @impl true
-  def handle_call({:send_message, prompt, opts}, _from, %State{status: :idle} = state) do
-    request_id = request_id(opts)
-
-    {state, ^request_id} =
-      start_run(state, prompt, put_request_id(opts, request_id), {:event, request_id})
-
-    {:reply, {:ok, request_id}, state}
-  end
-
-  def handle_call({:send_message, prompt, opts}, _from, %State{status: :running} = state) do
-    enqueue_or_full(state, prompt, opts, :rear)
-  end
-
-  # ----- steer (high-priority follow-up) ------------------------------------
-  @impl true
-  def handle_call({:steer, prompt, opts}, _from, %State{status: :idle} = state) do
-    request_id = request_id(opts)
-
-    {state, ^request_id} =
-      start_run(state, prompt, put_request_id(opts, request_id), {:event, request_id})
-
-    {:reply, {:ok, request_id}, state}
-  end
-
-  def handle_call({:steer, prompt, opts}, _from, %State{status: :running} = state) do
-    enqueue_or_full(state, prompt, opts, :front)
-  end
-
-  # ----- stream (asynchronous text deltas) ----------------------------------
-  @impl true
-  def handle_call({:stream, _prompt, _opts}, _from, %State{status: :running} = state) do
-    {:reply, {:error, :busy}, state}
-  end
-
-  def handle_call({:stream, prompt, opts}, _from, %State{status: :idle} = state) do
-    request_id = request_id(opts)
-    run_id = generate_id("run_")
-
-    parent = self()
-    agent = %{state.agent | model: state.model}
-
-    run_opts = build_run_opts(state, run_id, opts)
-
-    task =
-      start_owned_task(fn ->
-        ExAgent.run_stream(agent, prompt, run_opts)
-        |> Stream.each(fn
-          {:delta, text} ->
-            send(parent, {:stream_delta, run_id, request_id, text})
-
-          {:result, %{output: output, usage: usage, messages: messages}} ->
-            send(
-              parent,
-              {:stream_done, run_id, request_id,
-               %{output: output, usage: usage, messages: messages}}
-            )
-
-          {:error, reason} ->
-            send(parent, {:stream_failed, run_id, request_id, reason})
-        end)
-        |> Stream.run()
-      end)
-
-    state = set_current(state, task, request_id, run_id, prompt, {:event, request_id}, true)
-    {:reply, {:ok, request_id}, state}
-  end
-
-  # ----- control / introspection --------------------------------------------
-  @impl true
-  def handle_call(:abort, _from, %State{current: nil} = state) do
-    {:reply, :ok, state}
-  end
-
-  def handle_call(:abort, _from, %State{current: cur} = state) do
-    # terminate_child returns {:error, :not_found} if the task already exited
-    # (natural completion racing with abort). That's a fine outcome — the run is
-    # already over — so don't crash the GenServer on a hard `:ok =` match.
-    _ = Task.Supervisor.terminate_child(ExAgent.TaskSupervisor, cur.pid)
-    {:reply, :ok, %{state | current: %{cur | aborting: true}}}
-  end
-
-  @impl true
-  def handle_call({:set_model, _}, _from, %State{status: :running} = state) do
-    {:reply, {:error, :busy}, state}
-  end
-
-  def handle_call({:set_model, spec}, _from, %State{status: :idle} = state) do
-    case resolve_model(spec) do
-      {:ok, model} ->
-        {:reply, :ok, %{state | model: model, agent: %{state.agent | model: model}}}
-
-      {:error, _} = e ->
-        {:reply, e, state}
+    with true <- is_binary(id) and is_integer(max_pending) and max_pending >= 0,
+         {:ok, restored} <- load_state(store, id) do
+      {:ok,
+       %State{
+         agent: agent,
+         model: agent.model,
+         agent_id: id,
+         history: restored.history,
+         usage: restored.usage,
+         revision: restored.revision,
+         topic: Event.agent_topic(id),
+         pubsub: PubSub.normalize(Keyword.get(opts, :pubsub)),
+         store: store,
+         observability: Keyword.get(opts, :observability, agent.observability),
+         max_pending: max_pending,
+         metadata: Keyword.get(opts, :metadata, %{}),
+         emitter_id: generate_id("emitter_")
+       }}
+    else
+      false -> {:stop, :invalid_max_pending}
+      {:error, reason} -> {:stop, {:restore_failed, reason}}
     end
   end
 
   @impl true
-  def handle_call(:history, _from, state), do: {:reply, state.history, state}
-
-  @impl true
-  def handle_call(:reset, _from, %State{status: :running} = state),
-    do: {:reply, {:error, :busy}, state}
-
-  def handle_call(:reset, _from, %State{} = state) do
-    state = %{state | history: [], usage: %Usage{input_tokens: 0, output_tokens: 0}}
-    {:reply, :ok, checkpoint(state)}
+  def handle_call({:observed, command, context}, from, state) do
+    Observability.with_context(context, fn -> handle_call(command, from, state) end)
   end
 
-  @impl true
+  def handle_call(:history, _from, state), do: {:reply, state.history, state}
   def handle_call(:usage, _from, state), do: {:reply, state.usage, state}
 
-  @impl true
   def handle_call(:health, _from, state) do
-    {:reply, %{status: state.status, pending: :queue.len(state.pending)}, state}
+    {:reply,
+     %{
+       status: state.status,
+       pending: :queue.len(state.pending),
+       persistence: RuntimeCheckpoint.health(state),
+       emitter_id: state.emitter_id
+     }, state}
   end
 
-  # ---------------------------------------------------------------------------
-  # GenServer callbacks — info (task lifecycle & events)
-  # ---------------------------------------------------------------------------
+  def handle_call(:checkpoint, _from, %{current: current} = state) when not is_nil(current),
+    do: {:reply, {:error, :busy}, state}
 
-  # Non-streaming run completed normally.
-  @impl true
-  def handle_info({ref, result}, %State{current: %{ref: ref, streaming?: false} = cur} = state) do
-    Process.demonitor(ref, [:flush])
-    state = %{state | current: nil}
-
-    state =
-      case result do
-        {:ok, res} ->
-          reply(cur.reply_to, {:ok, res})
-          state |> integrate_result(res) |> checkpoint()
-
-        {:error, reason} ->
-          reply(cur.reply_to, {:error, reason})
-          state
-      end
-
-    {:noreply, drain(state)}
+  def handle_call(:checkpoint, _from, state) do
+    {result, state} = RuntimeCheckpoint.retry(state, &snapshot/1)
+    {:reply, result, drain(state)}
   end
 
-  # Streaming task finished consuming its stream (returns :ok).
-  @impl true
-  def handle_info({ref, :ok}, %State{current: %{ref: ref, streaming?: true}} = state) do
-    Process.demonitor(ref, [:flush])
-    {:noreply, drain(%{state | current: nil})}
+  def handle_call(:abort, _from, %{current: nil} = state), do: {:reply, :ok, state}
+
+  def handle_call(:abort, _from, state) do
+    cur = state.current
+    _ = Task.Supervisor.terminate_child(ExAgent.TaskSupervisor, cur.pid)
+    result = failure(cur, :aborted, :cancelled)
+    {:reply, :ok, finish(state, result, :server_request_cancelled, :last_progress)}
   end
 
-  # Streaming text deltas. Guard on the current run: a stale delta from an
-  # aborted/finished stream must not bleed into the next run's history.
-  @impl true
-  def handle_info({:stream_delta, run_id, _request_id, _text}, %State{current: current} = state)
-      when current == nil or current.run_id != run_id do
-    {:noreply, state}
+  # Read/control remain available while the last complete revision is unconfirmed.
+  def handle_call(_mutation, _from, %{checkpoint_error: error} = state) when not is_nil(error),
+    do: {:reply, RuntimeCheckpoint.blocked(state), state}
+
+  def handle_call({:chat, _, _}, _from, %{status: :running} = state),
+    do: {:reply, {:error, :busy}, state}
+
+  def handle_call({:chat, prompt, opts}, from, state),
+    do: {:noreply, start_run(state, prompt, opts, {:call, from}, false)}
+
+  def handle_call({kind, prompt, opts}, _from, %{status: :idle} = state)
+      when kind in [:send_message, :steer, :stream] do
+    state = start_run(state, prompt, opts, :event, kind == :stream)
+    {:reply, {:ok, state.current.request_id}, state}
   end
 
-  def handle_info({:stream_delta, run_id, request_id, text}, %State{} = state) do
-    state =
-      broadcast(state, :text_delta,
-        source: :run,
-        run_id: run_id,
-        request_id: request_id,
-        payload: %{text: text}
-      )
+  def handle_call({:stream, _, _}, _from, state), do: {:reply, {:error, :busy}, state}
 
-    {:noreply, state}
-  end
-
-  @impl true
-  def handle_info(
-        {:stream_done, run_id, _request_id, _result},
-        %State{current: current} = state
-      )
-      when current == nil or current.run_id != run_id do
-    {:noreply, state}
-  end
-
-  def handle_info(
-        {:stream_done, run_id, request_id, %{output: output, usage: usage, messages: messages}},
-        %State{} = state
-      ) do
-    # current is still this run (cleared by the trailing {ref, :ok}); integrate
-    # the streamed turn and publish :run_finished. The trailing {ref, :ok}
-    # handler performs the drain.
-    state = state |> integrate(messages, usage) |> checkpoint()
-
-    state =
-      emit_terminal(state, :run_finished, run_id, request_id, %{
-        output_text: text_preview(output),
-        usage: usage_map(usage)
-      })
-
-    {:noreply, state}
-  end
-
-  @impl true
-  def handle_info(
-        {:stream_failed, run_id, _request_id, _reason},
-        %State{current: current} = state
-      )
-      when current == nil or current.run_id != run_id do
-    {:noreply, state}
-  end
-
-  def handle_info({:stream_failed, run_id, request_id, reason}, %State{} = state) do
-    state = emit_terminal(state, :run_failed, run_id, request_id, %{reason: inspect(reason)})
-    {:noreply, state}
-  end
-
-  # Task died (crash or aborted) — no {ref, result} will arrive.
-  @impl true
-  def handle_info(
-        {:DOWN, ref, :process, _pid, reason},
-        %State{current: %{ref: ref} = cur} = state
-      ) do
-    Process.demonitor(ref, [:flush])
-    state = %{state | current: nil}
-
-    state =
-      cond do
-        cur.aborting ->
-          state =
-            broadcast(state, :server_request_cancelled,
-              source: :server,
-              run_id: cur.run_id,
-              request_id: cur.request_id,
-              payload: %{}
-            )
-
-          reply(cur.reply_to, {:error, :aborted})
-          state
-
-        reason == :normal ->
-          # Already handled via {ref, result}.
-          state
-
-        true ->
-          state =
-            emit_terminal(state, :run_failed, cur.run_id, cur.request_id, %{
-              reason: inspect({:crashed, reason})
-            })
-
-          reply(cur.reply_to, {:error, {:crashed, reason}})
-          state
-      end
-
-    {:noreply, drain(state)}
-  end
-
-  # Loop events → envelope → pubsub.
-  @impl true
-  def handle_info({:run_event, %RunEvent{} = re}, %State{current: cur} = state)
-      when is_map(cur) do
-    # Drop events from a run that is no longer current (e.g. after an abort) to
-    # avoid post-cancellation noise.
-    if re.run_id && cur.run_id && re.run_id != cur.run_id do
-      {:noreply, state}
+  def handle_call({kind, prompt, opts}, _from, state) when kind in [:send_message, :steer] do
+    if :queue.len(state.pending) >= state.max_pending do
+      {:reply, {:error, :queue_full}, state}
     else
-      state =
-        broadcast(state, re.type,
-          source: :run,
-          run_id: cur.run_id,
-          request_id: cur.request_id,
-          payload: build_payload(re)
-        )
+      id = request_id(opts)
+      entry = {prompt, Keyword.put(opts, :request_id, id)}
 
-      {:noreply, state}
+      pending =
+        if kind == :steer,
+          do: :queue.in_r(entry, state.pending),
+          else: :queue.in(entry, state.pending)
+
+      {:reply, {:ok, id}, %{state | pending: pending}}
     end
   end
 
-  def handle_info({:run_event, _}, state), do: {:noreply, state}
+  def handle_call({:set_model, _}, _from, %{status: :running} = state),
+    do: {:reply, {:error, :busy}, state}
+
+  def handle_call({:set_model, spec}, _from, state) do
+    case resolve_model(spec) do
+      {:ok, model} -> {:reply, :ok, %{state | model: model, agent: %{state.agent | model: model}}}
+      {:error, _} = error -> {:reply, error, state}
+    end
+  end
+
+  def handle_call(:reset, _from, %{status: :running} = state),
+    do: {:reply, {:error, :busy}, state}
+
+  def handle_call(:reset, _from, state) do
+    state = %{state | history: [], usage: %Usage{input_tokens: 0, output_tokens: 0}}
+    {result, state} = RuntimeCheckpoint.commit(state, :agent, :ok, &snapshot/1)
+    {:reply, result, state}
+  end
 
   @impl true
-  def handle_info(_msg, state), do: {:noreply, state}
+  def handle_info({ref, result}, %{current: %{ref: ref}} = state),
+    do: {:noreply, finish(state, result)}
 
-  # ---------------------------------------------------------------------------
-  # Internal: starting / draining runs
-  # ---------------------------------------------------------------------------
+  def handle_info({:DOWN, ref, :process, _, reason}, %{current: %{ref: ref} = cur} = state),
+    do: {:noreply, finish(state, failure(cur, {:crashed, reason}, :failed), nil, :last_progress)}
 
-  defp start_run(state, prompt, opts, reply_to) do
-    request_id = request_id(opts)
+  def handle_info({:run_progress, run_id, progress}, %{current: %{run_id: run_id} = cur} = state)
+      when is_map(progress) do
+    # This is a run subtotal, not an increment. Only terminal integration adds it.
+    {:noreply, %{state | current: %{cur | progress: progress}}}
+  end
+
+  def handle_info({:stream_delta, run_id, text}, %{current: %{run_id: run_id} = cur} = state),
+    do: {:noreply, broadcast(state, :text_delta, cur, %{text: text})}
+
+  def handle_info(
+        {:run_event, %RunEvent{run_id: run_id} = event},
+        %{current: %{run_id: run_id} = cur} = state
+      ) do
+    cond do
+      event.type in [:run_finished, :run_failed] -> {:noreply, state}
+      cur.streaming? and event.type == :text_delta -> {:noreply, state}
+      true -> {:noreply, broadcast(state, event.type, cur, build_payload(event))}
+    end
+  end
+
+  def handle_info(_, state), do: {:noreply, state}
+
+  defp start_run(state, prompt, opts, reply_to, streaming?) do
+    id = request_id(opts)
     run_id = generate_id("run_")
-
+    parent = self()
     agent = %{state.agent | model: state.model}
+    config = Observability.configuration(state.observability, opts)
 
-    run_opts = build_run_opts(state, run_id, opts)
+    operation =
+      Observability.start(
+        config,
+        :run,
+        Observability.ids(%{
+          run_id: run_id,
+          root_run_id: run_id,
+          agent_id: state.agent_id,
+          request_id: id
+        }),
+        opts[:trace_context]
+      )
+
+    run_opts =
+      build_run_opts(state, run_id, opts)
+      |> Keyword.put(:observability, config)
+      |> Keyword.put(:observability_operation, operation)
+      |> Keyword.put(:trace_context, Observability.context(operation))
 
     task =
       start_owned_task(fn ->
-        ExAgent.run(agent, prompt, run_opts)
+        if streaming? do
+          ExAgent.run_stream(agent, prompt, run_opts)
+          |> Enum.reduce(nil, fn
+            {:delta, text}, acc ->
+              send(parent, {:stream_delta, run_id, text})
+              acc
+
+            {:result, result}, _ ->
+              {:ok, result}
+
+            {:error, reason}, _ ->
+              {:error, reason}
+          end)
+        else
+          ExAgent.run(agent, prompt, run_opts)
+        end
       end)
 
-    {set_current(state, task, request_id, run_id, prompt, reply_to, false), request_id}
+    partial = %{
+      output: nil,
+      messages: run_opts[:message_history],
+      new_messages: [],
+      usage: %Usage{input_tokens: 0, output_tokens: 0},
+      model: state.model,
+      run_step: 0,
+      run_id: run_id,
+      status: :running,
+      usage_status: :unknown
+    }
+
+    %{
+      state
+      | status: :running,
+        current: %{
+          ref: task.ref,
+          pid: task.pid,
+          reply_to: reply_to,
+          request_id: id,
+          run_id: run_id,
+          progress: partial,
+          streaming?: streaming?,
+          observation: operation,
+          observability: config
+        }
+    }
   end
 
-  # async_nolink isolates run crashes, but does not cancel a task when its owner
-  # dies. A tiny guardian monitors both processes, even while the run is blocked
-  # in HTTP/tool code. Establish it before executing user code. It also handles
-  # :kill (which bypasses terminate/2) and exits when the task completes/aborts.
+  defp build_run_opts(state, run_id, opts) do
+    parent = self()
+    history = Keyword.get(opts, :message_history) || state.history
+
+    opts
+    |> Keyword.take([
+      :deps,
+      :model_settings,
+      :stream_text,
+      :estimate_cost,
+      :deadline,
+      :max_concurrent_requests,
+      :permissions,
+      :approve
+    ])
+    |> Keyword.merge(
+      message_history: history,
+      prepend_instructions: history == [],
+      run_id: run_id,
+      on_event: fn event -> send(parent, {:run_event, event}) end,
+      on_progress: fn progress -> send(parent, {:run_progress, run_id, progress}) end
+    )
+  end
+
+  defp failure(cur, reason, status) do
+    # The last progress message may predate admission of in-flight work. Keep
+    # its observed subtotals, but never claim they are a complete bill or usage.
+    partial =
+      Map.merge(cur.progress, %{status: status, usage_status: :partial, cost_status: :unknown})
+
+    {:error, %RunError{reason: reason, partial: partial}}
+  end
+
+  defp finish(state, outcome, terminal_type \\ nil, observation_source \\ :confirmed) do
+    Observability.within(state.current.observation, fn ->
+      finish_observed(state, outcome, terminal_type, observation_source)
+    end)
+  end
+
+  defp finish_observed(state, outcome, terminal_type, observation_source) do
+    cur = state.current
+    Process.demonitor(cur.ref, [:flush])
+
+    {outcome, observation_source} =
+      case outcome do
+        {:ok, result} when is_map(result) -> {{:ok, result}, observation_source}
+        {:error, _} = error -> {error, observation_source}
+        _ -> {failure(cur, :missing_terminal_result, :failed), :last_progress}
+      end
+
+    progress =
+      case outcome do
+        {:ok, result} -> result
+        {:error, %RunError{partial: partial}} -> partial
+        _ -> cur.progress
+      end
+
+    state = integrate(state, progress)
+
+    {outcome, state} =
+      RuntimeCheckpoint.commit(state, :agent, outcome, &snapshot/1,
+        observability: cur.observability,
+        trace_context: Observability.context(cur.observation)
+      )
+
+    Observability.run_result(cur.observation, outcome, observation_source)
+    Observability.finish(cur.observation, outcome)
+
+    {type, payload} =
+      case outcome do
+        {:ok, result} -> {:run_finished, Event.result_payload(result)}
+        {:error, reason} -> {terminal_type || :run_failed, Event.error_payload(reason)}
+      end
+
+    state =
+      broadcast(state, type, cur, Map.put(payload, :persistence, RuntimeCheckpoint.health(state)))
+
+    if match?({:call, _}, cur.reply_to) do
+      {:call, from} = cur.reply_to
+      GenServer.reply(from, outcome)
+    end
+
+    drain(%{state | current: nil, status: :idle})
+  end
+
+  defp integrate(state, progress) do
+    %{
+      state
+      | history: Map.get(progress, :messages, state.history),
+        model: Map.get(progress, :model, state.model),
+        usage: merge_usage(state.usage, Map.get(progress, :usage))
+    }
+  end
+
+  defp merge_usage(acc, nil), do: acc
+
+  defp merge_usage(acc, usage) do
+    %Usage{
+      input_tokens: (acc.input_tokens || 0) + (usage.input_tokens || 0),
+      output_tokens: (acc.output_tokens || 0) + (usage.output_tokens || 0),
+      details:
+        merge_details(
+          ExAgent.SnapshotData.json(acc.details || %{}),
+          ExAgent.SnapshotData.json(usage.details || %{})
+        )
+    }
+  end
+
+  defp merge_details(left, right) do
+    Map.merge(left, right, fn
+      _, a, b when is_number(a) and is_number(b) -> a + b
+      _, a, b when is_map(a) and is_map(b) -> merge_details(a, b)
+      _, _, b -> b
+    end)
+  end
+
+  defp drain(%{checkpoint_error: error} = state) when not is_nil(error), do: state
+  defp drain(%{current: current} = state) when not is_nil(current), do: state
+
+  defp drain(state) do
+    case :queue.out(state.pending) do
+      {:empty, _} ->
+        %{state | status: :idle}
+
+      {{:value, {prompt, opts}}, rest} ->
+        start_run(%{state | pending: rest}, prompt, opts, :event, false)
+    end
+  end
+
+  defp snapshot(state) do
+    Snapshot.new(
+      agent_id: state.agent_id,
+      history: state.history,
+      usage: state.usage,
+      metadata: state.metadata,
+      revision: state.revision
+    )
+  end
+
+  defp load_state(nil, _),
+    do: {:ok, %{history: [], usage: %Usage{input_tokens: 0, output_tokens: 0}, revision: 0}}
+
+  defp load_state(store, id) do
+    case Store.load_agent_snapshot(store, id) do
+      {:ok, raw} ->
+        with {:ok, snapshot} <- Snapshot.validate(raw, id),
+             {:ok, history} <- Snapshot.messages(snapshot) do
+          {:ok,
+           %{
+             history: history,
+             usage: Snapshot.usage_struct(snapshot),
+             revision: snapshot.revision
+           }}
+        end
+
+      {:error, :not_found} ->
+        load_state(nil, id)
+
+      {:error, _} = error ->
+        error
+    end
+  end
+
+  defp broadcast(state, type, cur, payload) do
+    seq = state.seq + 1
+
+    event =
+      Event.new(
+        type: type,
+        seq: seq,
+        emitter_id: state.emitter_id,
+        source: if(type == :server_request_cancelled, do: :server, else: :run),
+        agent_id: state.agent_id,
+        run_id: cur.run_id,
+        request_id: cur.request_id,
+        payload: payload,
+        metadata: state.metadata
+      )
+
+    case PubSub.broadcast(state.pubsub, state.topic, event) do
+      :ok -> :ok
+      {:error, _} -> Logger.warning("exagent pubsub broadcast failed")
+    end
+
+    %{state | seq: seq}
+  end
+
+  defp build_payload(%RunEvent{type: :run_started, data: data}),
+    do: %{prompt: Map.get(data, :prompt)}
+
+  defp build_payload(%RunEvent{type: type, step: step})
+       when type in [:run_step_started, :run_step_finished], do: %{step: step}
+
+  defp build_payload(%RunEvent{type: type, data: data})
+       when type in [:text_delta, :thinking_delta], do: Map.take(data, [:text])
+
+  defp build_payload(%RunEvent{type: type, step: step, data: data})
+       when type in [:tool_call_started, :tool_call_finished] do
+    Map.take(data, [:tool_name, :tool_call_id, :args, :success, :duration_ms])
+    |> Map.put(:step, step)
+  end
+
+  defp build_payload(_), do: %{}
+
+  # Guardian is established before executing user code; handles even owner :kill.
   defp start_owned_task(fun) do
     owner = self()
 
@@ -618,262 +555,10 @@ defmodule ExAgent.Server do
     end
   end
 
-  defp set_current(
-         state,
-         %Task{ref: ref, pid: pid},
-         request_id,
-         run_id,
-         prompt,
-         reply_to,
-         streaming?
-       ) do
-    current = %{
-      ref: ref,
-      pid: pid,
-      reply_to: reply_to,
-      request_id: request_id,
-      run_id: run_id,
-      prompt: prompt,
-      streaming?: streaming?,
-      aborting: false
-    }
-
-    %{state | status: :running, current: current}
-  end
-
-  # Build the keyword options handed to ExAgent.run/3 / run_stream from state.
-  # `opts` are the caller's per-chat opts; when it carries `:message_history`
-  # (host app reconstructing a shared history each turn, e.g. Dragones' common
-  # partida timeline) we use that instead of the Server's accumulated
-  # `state.history` — letting every agent see the SAME cross-agent context
-  # instead of only its own turns.
-  defp build_run_opts(state, run_id, opts) do
-    parent = self()
-
-    history =
-      case Keyword.get(opts, :message_history) do
-        nil -> state.history
-        hist -> hist
-      end
-
-    opts
-    |> Keyword.take([
-      :deps,
-      :model_settings,
-      :stream_text,
-      :estimate_cost,
-      :permissions,
-      :approve
-    ])
-    |> Keyword.merge(
-      message_history: history,
-      prepend_instructions: history == [],
-      run_id: run_id,
-      on_event: fn re -> send(parent, {:run_event, re}) end
-    )
-  end
-
-  # Pull the next pending request off the queue (if any) and start it.
-  defp drain(%State{pending: pending} = state) do
-    case :queue.out(pending) do
-      {:empty, _} ->
-        %{state | status: :idle, current: nil}
-
-      {{:value, {prompt, opts, reply_to, _req_id}}, rest} ->
-        {state, _} = start_run(%{state | pending: rest}, prompt, opts, reply_to)
-        state
-    end
-  end
-
-  defp enqueue_or_full(state, prompt, opts, position) do
-    request_id = request_id(opts)
-
-    if :queue.len(state.pending) >= state.max_pending do
-      {:reply, {:error, :queue_full}, state}
-    else
-      entry = {prompt, put_request_id(opts, request_id), {:event, request_id}, request_id}
-
-      pending =
-        case position do
-          :front -> :queue.in_r(entry, state.pending)
-          :rear -> :queue.in(entry, state.pending)
-        end
-
-      {:reply, {:ok, request_id}, %{state | pending: pending}}
-    end
-  end
-
-  # ---------------------------------------------------------------------------
-  # Internal: events
-  # ---------------------------------------------------------------------------
-
-  # Map a loop RunEvent to a JSON-safe envelope payload.
-  defp build_payload(%RunEvent{type: :run_started, data: d}),
-    do: %{prompt: Map.get(d, :prompt)}
-
-  defp build_payload(%RunEvent{type: :run_finished, data: d}) do
-    %{
-      output_kind: Map.get(d, :output_kind, :text),
-      output_text: text_preview(Map.get(d, :output)),
-      usage: usage_map(Map.get(d, :usage)),
-      steps: Map.get(d, :steps)
-    }
-  end
-
-  defp build_payload(%RunEvent{type: :run_failed, data: d}),
-    do: %{reason: inspect(Map.get(d, :reason))}
-
-  defp build_payload(%RunEvent{type: :run_step_started, step: s}),
-    do: %{step: s}
-
-  defp build_payload(%RunEvent{type: :tool_call_started, step: s, data: d}) do
-    %{step: s, tool_name: d.tool_name, tool_call_id: d.tool_call_id, args: jsonable(d.args)}
-  end
-
-  defp build_payload(%RunEvent{type: :tool_call_finished, step: s, data: d}) do
-    %{
-      step: s,
-      tool_name: d.tool_name,
-      tool_call_id: d.tool_call_id,
-      success: Map.get(d, :success, true),
-      duration_ms: Map.get(d, :duration_ms)
-    }
-  end
-
-  defp build_payload(_), do: %{}
-
-  defp emit_terminal(state, type, run_id, request_id, payload) do
-    broadcast(state, type, source: :run, run_id: run_id, request_id: request_id, payload: payload)
-  end
-
-  defp broadcast(%State{} = state, type, opts) do
-    seq = state.seq + 1
-
-    event =
-      Event.new(
-        type: type,
-        seq: seq,
-        source: Keyword.get(opts, :source),
-        agent_id: state.agent_id,
-        run_id: Keyword.get(opts, :run_id),
-        request_id: Keyword.get(opts, :request_id),
-        payload: Keyword.get(opts, :payload, %{}),
-        metadata: Map.merge(state.metadata, Keyword.get(opts, :metadata, %{}))
-      )
-
-    # A pubsub backend returning {:error, _} (e.g. Phoenix.PubSub not loaded,
-    # or a transient registry outage) must not crash the stateful owner. The
-    # PubSub behaviour explicitly allows {:error, term()}; log and continue so a
-    # misconfigured side-channel never takes down every agent/session.
-    case PubSub.broadcast(state.pubsub, state.topic, event) do
-      :ok -> :ok
-      {:error, reason} -> Logger.warning("exagent pubsub broadcast failed: #{inspect(reason)}")
-    end
-
-    %{state | seq: seq}
-  end
-
-  # ---------------------------------------------------------------------------
-  # Internal: state integration & helpers
-  # ---------------------------------------------------------------------------
-
-  defp integrate_result(%State{} = state, %{messages: messages, usage: usage, model: model}) do
-    %{integrate(state, messages, usage) | model: model}
-  end
-
-  defp integrate(%State{} = state, messages, usage) do
-    %{state | history: messages, usage: merge_usage(state.usage, usage)}
-  end
-
-  # Persist a snapshot of the current conversational state (history + usage),
-  # keyed by agent_id. No-op when no store is configured. Persistence failures
-  # are swallowed (a store problem must never break a run) but logged, so a
-  # misconfigured store / non-encodable metadata doesn't silently disable ALL
-  # checkpointing with no signal until a restart loses the conversation.
-  defp checkpoint(%State{store: nil} = state), do: state
-
-  defp checkpoint(%State{store: {mod, config}, agent_id: agent_id} = state) do
-    snapshot =
-      ExAgent.Server.Snapshot.new(
-        agent_id: agent_id,
-        history: state.history,
-        usage: state.usage,
-        metadata: state.metadata
-      )
-
-    mod.save_agent_snapshot(config, snapshot)
-    state
-  rescue
-    e ->
-      Logger.warning(
-        "exagent checkpoint failed for #{inspect(agent_id)} (persistence disabled until fixed): #{Exception.message(e)}"
-      )
-
-      state
-  end
-
-  # Rehydrate history + usage from the store at init. The live agent template
-  # (model/tools/instructions) always comes from `opts`; only conversational
-  # state is restored.
-  defp load_state(nil, _agent_id) do
-    {[], %Usage{input_tokens: 0, output_tokens: 0}}
-  end
-
-  defp load_state({mod, config}, agent_id) do
-    case ExAgent.Store.load_agent_snapshot({mod, config}, agent_id) do
-      {:ok, snap} ->
-        history =
-          case ExAgent.Server.Snapshot.messages(snap) do
-            {:ok, messages} when is_list(messages) -> messages
-            _ -> []
-          end
-
-        {history, ExAgent.Server.Snapshot.usage_struct(snap)}
-
-      {:error, :not_found} ->
-        {[], %Usage{input_tokens: 0, output_tokens: 0}}
-    end
-  rescue
-    e ->
-      Logger.warning(
-        "exagent rehydrate failed for #{inspect(agent_id)} (starting empty): #{Exception.message(e)}"
-      )
-
-      {[], %Usage{input_tokens: 0, output_tokens: 0}}
-  end
-
-  defp merge_usage(%Usage{} = acc, nil), do: acc
-
-  defp merge_usage(%Usage{} = acc, %Usage{} = run) do
-    %Usage{
-      input_tokens: acc.input_tokens + (run.input_tokens || 0),
-      output_tokens: acc.output_tokens + (run.output_tokens || 0)
-    }
-  end
-
-  defp reply({:call, from}, result), do: GenServer.reply(from, result)
-  defp reply({:event, _request_id}, _result), do: :ok
-  defp reply(nil, _result), do: :ok
-
-  defp text_preview(output) when is_binary(output), do: output
-  defp text_preview(_), do: nil
-
-  defp usage_map(%Usage{input_tokens: i, output_tokens: o}),
-    do: %{input_tokens: i, output_tokens: o}
-
-  defp usage_map(_), do: nil
-
-  defp jsonable(args) when is_map(args) or is_binary(args), do: args
-  defp jsonable(nil), do: nil
-  defp jsonable(other), do: inspect(other)
-
   defp request_id(opts), do: Keyword.get(opts, :request_id) || generate_id("req_")
-  defp put_request_id(opts, id), do: Keyword.put(opts, :request_id, id)
-
-  defp resolve_model(%_{} = m), do: {:ok, m}
+  defp resolve_model(%_{} = model), do: {:ok, model}
   defp resolve_model(spec), do: ExAgent.Model.resolve(spec)
 
-  defp generate_id(prefix) do
-    prefix <> Base.encode16(:crypto.strong_rand_bytes(8), case: :lower)
-  end
+  defp generate_id(prefix),
+    do: prefix <> Base.encode16(:crypto.strong_rand_bytes(8), case: :lower)
 end

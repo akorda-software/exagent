@@ -1,0 +1,7 @@
+unless System.get_env("EXAGENT_OFFLINE") == "1", do: raise("offline smoke only")
+ExUnit.start()
+Code.require_file("../package_smoke.exs", __DIR__)
+
+if System.fetch_env!("PACKAGE_ACCEPTANCE_MODE") in ["sdk", "exporter"] do
+  Code.require_file("../package_tracing.exs", __DIR__)
+end

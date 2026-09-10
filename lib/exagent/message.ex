@@ -70,13 +70,17 @@ defmodule ExAgent.Message do
       """
       @derive [Jason.Encoder]
       @enforce_keys [:tool_name, :content, :tool_call_id]
-      defstruct [:tool_name, :content, :tool_call_id, :usage]
+      defstruct [:tool_name, :content, :tool_call_id, :usage, status: :succeeded]
+
+      @type status ::
+              :succeeded | :validation_error | :denied | :failed | :unknown | :not_executed
 
       @type t :: %__MODULE__{
               tool_name: String.t(),
               content: term(),
               tool_call_id: String.t(),
-              usage: Usage.t() | nil
+              usage: Usage.t() | nil,
+              status: status()
             }
     end
 
@@ -278,6 +282,8 @@ defmodule ExAgent.Message do
       {:ok, other} -> {:error, {:not_a_list, other}}
       {:error, _} = e -> e
     end
+  rescue
+    error -> {:error, {:invalid_message, Exception.message(error)}}
   end
 
   defp to_encodable(%Request{parts: parts} = r) do
@@ -315,12 +321,13 @@ defmodule ExAgent.Message do
   defp to_encodable(%Part.User{content: c, timestamp: ts}),
     do: %{"__type__" => "user", "content" => c} |> maybe_put_ts(ts)
 
-  defp to_encodable(%Part.ToolReturn{tool_name: n, content: c, tool_call_id: id}),
+  defp to_encodable(%Part.ToolReturn{tool_name: n, content: c, tool_call_id: id, status: status}),
     do: %{
       "__type__" => "tool_return",
       "tool_name" => n,
       "content" => encode_content(c),
-      "tool_call_id" => id
+      "tool_call_id" => id,
+      "status" => Atom.to_string(status)
     }
 
   defp to_encodable(%Part.Retry{content: c, tool_name: n, tool_call_id: id}),
@@ -381,7 +388,8 @@ defmodule ExAgent.Message do
     do: %Part.ToolReturn{
       tool_name: p["tool_name"],
       content: p["content"],
-      tool_call_id: p["tool_call_id"]
+      tool_call_id: p["tool_call_id"],
+      status: tool_return_status(Map.get(p, "status", "succeeded"))
     }
 
   defp from_encodable(%{"__type__" => "retry"} = p),
@@ -416,6 +424,16 @@ defmodule ExAgent.Message do
       _ -> nil
     end
   end
+
+  defp tool_return_status("succeeded"), do: :succeeded
+  defp tool_return_status("validation_error"), do: :validation_error
+  defp tool_return_status("denied"), do: :denied
+  defp tool_return_status("failed"), do: :failed
+  defp tool_return_status("unknown"), do: :unknown
+  defp tool_return_status("not_executed"), do: :not_executed
+
+  defp tool_return_status(other),
+    do: raise(ArgumentError, "invalid tool return status: #{inspect(other)}")
 
   defp parse_atom(nil), do: nil
 

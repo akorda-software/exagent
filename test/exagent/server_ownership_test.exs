@@ -40,8 +40,11 @@ defmodule ExAgent.ServerOwnershipTest do
       assert {:ok, request_id} = Server.send_message(server, "go")
       assert_receive {:working, worker}
       {:monitored_by, monitors} = Process.info(worker, :monitored_by)
-      assert [guardian] = List.delete(monitors, server)
-      guardian_ref = Process.monitor(guardian)
+      # The runtime guardian and the execution-scope owner both monitor the run.
+      # Check cleanup of every run-owned monitor rather than a fixed process count.
+      guardians = List.delete(monitors, server)
+      assert guardians != []
+      guardian_refs = Enum.map(guardians, &{&1, Process.monitor(&1)})
       worker_ref = Process.monitor(worker)
       on_exit(fn -> Process.exit(worker, :kill) end)
 
@@ -53,7 +56,10 @@ defmodule ExAgent.ServerOwnershipTest do
       end
 
       assert_receive {:DOWN, ^worker_ref, :process, ^worker, _}, 1000
-      assert_receive {:DOWN, ^guardian_ref, :process, ^guardian, _}, 1000
+
+      for {guardian, guardian_ref} <- guardian_refs do
+        assert_receive {:DOWN, ^guardian_ref, :process, ^guardian, _}, 1000
+      end
 
       if unquote(outcome == :complete) do
         assert_receive {:exagent_event, %Event{type: :run_finished, request_id: ^request_id}}
@@ -95,7 +101,9 @@ defmodule ExAgent.ServerOwnershipTest do
         end
 
       assert {:ok, _} = apply(Server, unquote(mode), [server, "go"])
-      assert_receive {:working, worker}
+      # Wait for the provider's readiness barrier before testing cancellation;
+      # scheduling this async worker is not a 100 ms startup-latency contract.
+      assert_receive {:working, worker}, 1000
       ref = Process.monitor(worker)
       on_exit(fn -> Process.exit(worker, :kill) end)
 
@@ -179,7 +187,7 @@ defmodule ExAgent.ServerOwnershipTest do
     assert {:error, :busy} = Server.stream(server, "busy")
     assert :ok = Server.abort(server)
     assert_receive {:DOWN, ^ref, :process, ^worker, _}, 1000
-    assert_receive {:chat_result, {:error, :aborted}}
+    assert_receive {:chat_result, {:error, %ExAgent.RunError{reason: :aborted}}}
     assert_receive {:exagent_event, %Event{type: :server_request_cancelled}}
     assert %{status: :idle} = Server.health(server)
     assert :ok = Server.abort(server)

@@ -1,0 +1,81 @@
+defmodule PackageAcceptanceTest do
+  use ExUnit.Case, async: false
+  alias ExAgent.Message.Part
+  alias ExAgent.Models.Test, as: TestModel
+  alias PackageAcceptance.Scenario
+
+  test "consumer runtime contains only requested optional applications" do
+    mode = System.fetch_env!("PACKAGE_ACCEPTANCE_MODE")
+    apps = Application.started_applications() |> Enum.map(&elem(&1, 0))
+    for app <- [:ecto_sql, :postgrex, :db_connection, :ex_doc], do: refute(app in apps)
+    assert :opentelemetry_api in apps == (mode != "none")
+    assert :opentelemetry in apps == mode in ["sdk", "exporter"]
+    if mode != "exporter", do: refute(Code.ensure_loaded?(:opentelemetry_exporter))
+  end
+
+  test "one-shot, typed tool, lazy stream and ETS checkpoint restore from package" do
+    mode = System.fetch_env!("PACKAGE_ACCEPTANCE_MODE")
+    # API-only runs exercise the native no-op tracer without installing an SDK.
+    tracing = if mode == "api", do: ExAgent.Observability.OpenTelemetry.new()
+    Scenario.simple(tracing)
+    Scenario.typed(tracing, false)
+    Scenario.typed(tracing, true)
+    Scenario.checkpoint(tracing)
+  end
+
+  test "typed invalid input has zero effects and is not coerced" do
+    call = %Part.ToolCall{
+      tool_name: "add",
+      tool_call_id: "invalid",
+      args: %{"a" => "2", "b" => 3}
+    }
+
+    agent =
+      ExAgent.new(
+        model: %TestModel{script: [{:tool_calls, [call]}, "rejected"]},
+        tools: PackageAcceptance.Tools.tools()
+      )
+
+    assert {:ok, result} = ExAgent.run(agent, "invalid argument", deps: %{owner: self()})
+    assert result.output == "rejected"
+    refute_received {:effect, _, _}
+    returns = for %{parts: parts} <- result.messages, %Part.ToolReturn{} = part <- parts, do: part
+    assert [%Part.ToolReturn{status: :validation_error}] = returns
+  end
+
+  test "Ecto remains the final structured-output authority" do
+    call = %Part.ToolCall{
+      tool_name: "final_result",
+      tool_call_id: "output",
+      args: %{"answer" => 5}
+    }
+
+    agent =
+      ExAgent.new(
+        model: %TestModel{script: [{:tool_calls, [call]}]},
+        output_type: PackageAcceptance.Output
+      )
+
+    assert {:ok, %{output: %PackageAcceptance.Output{answer: 5}}} =
+             ExAgent.run(agent, "structured answer")
+  end
+
+  test "model failure is one rich partial error in sync and stream" do
+    model = %TestModel{script: [fn -> raise "synthetic failure" end]}
+    agent = ExAgent.new(model: model)
+    assert {:error, %ExAgent.RunError{partial: %{status: :failed}}} = ExAgent.run(agent, "fail")
+
+    assert [{:error, %ExAgent.RunError{partial: %{status: :failed}}}] =
+             Enum.to_list(ExAgent.run_stream(agent, "fail"))
+  end
+
+  if System.fetch_env!("PACKAGE_ACCEPTANCE_MODE") in ["sdk", "exporter"] do
+    test "app-owned native SDK exports package scenarios through its configured route" do
+      PackageAcceptance.Tracing.run(System.fetch_env!("PACKAGE_ACCEPTANCE_MODE"))
+    end
+  else
+    test "processor explicitly reports absent SDK" do
+      assert {:error, :sdk_unavailable} = ExAgent.Observability.BoundedProcessor.start_link(%{})
+    end
+  end
+end

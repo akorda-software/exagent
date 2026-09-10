@@ -12,13 +12,14 @@ defmodule ExAgent.Models.OpenRouter do
   """
   @behaviour ExAgent.Model
 
-  defstruct [:model, :api_key, :base_url, extra_headers: []]
+  defstruct [:model, :api_key, :base_url, extra_headers: [], stream_options: []]
 
   @type t :: %__MODULE__{
           model: String.t(),
           api_key: String.t() | nil,
           base_url: String.t() | nil,
-          extra_headers: [{String.t(), String.t()}]
+          extra_headers: [{String.t(), String.t()}],
+          stream_options: keyword()
         }
 
   @doc """
@@ -29,6 +30,8 @@ defmodule ExAgent.Models.OpenRouter do
     * `:api_key`      — falls back to `OPENROUTER_API_KEY`.
     * `:base_url`     — defaults to `https://openrouter.ai/api/v1`.
     * `:app_url`/`:app_title` — for attribution; default to env vars.
+    * `:stream_options` — local byte limits/demand timeout; see
+      `ExAgent.Providers.StreamTransport` (not sent to OpenRouter).
   """
   @spec new(keyword()) :: t()
   def new(opts) when is_list(opts) do
@@ -45,7 +48,7 @@ defmodule ExAgent.Models.OpenRouter do
       |> Enum.reject(fn {_k, v} -> is_nil(v) end)
 
     opts = Keyword.drop(opts, [:app_url, :app_title])
-    struct!(__MODULE__, Keyword.merge(opts, extra_headers: extra))
+    struct!(__MODULE__, Keyword.update(opts, :extra_headers, extra, &(&1 ++ extra)))
   end
 
   @impl true

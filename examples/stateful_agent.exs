@@ -34,15 +34,22 @@ model = %Test{
 :ok = PubSub.subscribe({ExAgent.PubSub.Local, []}, Event.agent_topic("dm"))
 
 # A small collector process that prints each event as it arrives.
+parent = self()
+
 collector =
   spawn(fn ->
+    :ok = PubSub.subscribe({ExAgent.PubSub.Local, []}, Event.agent_topic("dm"))
+    send(parent, {:collector_ready, self()})
+
     Enum.each(Stream.repeatedly(fn -> receive(do: ({:exagent_event, e} -> e)) end), fn e ->
       IO.puts("[event seq=#{e.seq}] #{e.type}")
     end)
   end)
 
-# Bind the collector to the topic by also subscribing it.
-PubSub.subscribe({ExAgent.PubSub.Local, []}, Event.agent_topic("dm"))
+# Subscribe in the collector process itself before producing any events.
+receive do
+  {:collector_ready, ^collector} -> :ok
+end
 
 IO.puts("=== chat 1 ===")
 {:ok, %{output: out1}} = Server.chat(pid, "I enter the tavern.")

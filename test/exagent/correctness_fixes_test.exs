@@ -28,7 +28,7 @@ defmodule ExAgent.CorrectnessFixesTest do
           description: "always fails",
           parameters_json_schema: %{type: "object"},
           takes_ctx: false,
-          call: fn _args -> {:error, "kaboom"} end
+          call: fn _args -> raise ExAgent.ModelRetry, "kaboom" end
         )
 
       # model keeps re-calling the failing tool
@@ -45,7 +45,10 @@ defmodule ExAgent.CorrectnessFixesTest do
       agent = ExAgent.new(model: model, tools: [always_fail])
 
       # max_retries defaults to 1 → 1 failure tolerated, 2nd consecutive failure errors.
-      assert {:error, {:unexpected_model_behavior, {:tool_retries_exhausted, "boom", _}}} =
+      assert {:error,
+              %ExAgent.RunError{
+                reason: {:unexpected_model_behavior, {:tool_retries_exhausted, "boom", _}}
+              }} =
                ExAgent.run(agent, "x")
     end
 
@@ -170,7 +173,8 @@ defmodule ExAgent.CorrectnessFixesTest do
       model = %ExAgent.Models.Test{script: [truncated, truncated]}
       agent = ExAgent.new(model: model, output_retries: 3)
 
-      assert {:error, {:max_tokens_exceeded, "m"}} = ExAgent.run(agent, "x")
+      assert {:error, %ExAgent.RunError{reason: {:max_tokens_exceeded, "m"}}} =
+               ExAgent.run(agent, "x")
     end
 
     test ":content_filter -> error" do
@@ -179,7 +183,7 @@ defmodule ExAgent.CorrectnessFixesTest do
       model = %ExAgent.Models.Test{script: [filtered]}
       agent = ExAgent.new(model: model)
 
-      assert {:error, {:content_filter, "m"}} = ExAgent.run(agent, "x")
+      assert {:error, %ExAgent.RunError{reason: {:content_filter, "m"}}} = ExAgent.run(agent, "x")
     end
   end
 

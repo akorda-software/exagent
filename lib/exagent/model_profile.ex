@@ -1,6 +1,6 @@
 defmodule ExAgent.ModelProfile do
   @moduledoc """
-  **Advisory** declaration of what a given model/provider supports, so callers
+  Declaration of what a given model/provider supports, so callers
   and future capabilities can negotiate gracefully per model — e.g. whether the
   provider can do native JSON-schema output, forced tool calls, or extended
   thinking.
@@ -8,11 +8,12 @@ defmodule ExAgent.ModelProfile do
   Every model returns one via the optional `c:ExAgent.Model.profile/1`
   callback; providers that don't implement it get a permissive default.
 
-  > **Status:** declarative for now. The core loop currently always uses the
-  > `:tool` output mode and doesn't yet downgrade based on these flags. The
-  > profile is exposed so external code can branch on it today, and so upcoming
-  > work (native/prompted output, `Thinking` capability) can consult it without
-  > a new API.
+  The core enforces `supports_tools` for function tools and tool-based structured
+  output. It rejects unsupported requirements instead of silently downgrading.
+  Native JSON and thinking flags remain advisory for features not selected by
+  the current tool-output mode; `supports_json_schema_output: false` therefore
+  does not disable Ecto output through a tool. Streaming requires the optional
+  model callback and is not required for a synchronous custom model.
   """
 
   @type output_mode :: :text | :tool | :native | :prompted | :auto

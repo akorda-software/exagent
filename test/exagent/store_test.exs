@@ -41,7 +41,7 @@ defmodule ExAgent.StoreTest do
       assert :ok = Store.save_agent_snapshot(@store, snap)
       assert {:ok, loaded} = Store.load_agent_snapshot(@store, id)
       assert loaded.agent_id == id
-      assert loaded.usage == %{"input_tokens" => 2, "output_tokens" => 3}
+      assert loaded.usage == %{"input_tokens" => 2, "output_tokens" => 3, "details" => %{}}
       assert loaded.metadata == %{"scene" => "tavern"}
 
       # The stored history round-trips back into Message structs.
@@ -71,7 +71,7 @@ defmodule ExAgent.StoreTest do
       )
 
       assert {:ok, loaded} = Store.load_agent_snapshot(@store, id)
-      assert loaded.usage == %{"input_tokens" => 9, "output_tokens" => 0}
+      assert loaded.usage == %{"input_tokens" => 9, "output_tokens" => 0, "details" => %{}}
       {:ok, messages} = Snapshot.messages(loaded)
       assert length(messages) == length(history())
 
@@ -107,7 +107,7 @@ defmodule ExAgent.StoreTest do
         Snapshot.new(agent_id: id, history: [], metadata: %{capture: fn -> :secret end})
 
       # The strict JSON path must refuse to persist non-serializable state.
-      assert raises?(fn -> Store.save_agent_snapshot(@store, bad) end)
+      assert {:error, {:exception, _}} = Store.save_agent_snapshot(@store, bad)
 
       # And nothing was persisted.
       assert {:error, :not_found} = Store.load_agent_snapshot(@store, id)
@@ -117,7 +117,7 @@ defmodule ExAgent.StoreTest do
       id = unique_id("pid")
 
       bad = Snapshot.new(agent_id: id, history: [], metadata: %{owner: self()})
-      assert raises?(fn -> Store.save_agent_snapshot(@store, bad) end)
+      assert {:error, {:exception, _}} = Store.save_agent_snapshot(@store, bad)
       assert {:error, :not_found} = Store.load_agent_snapshot(@store, id)
     end
   end
@@ -131,13 +131,4 @@ defmodule ExAgent.StoreTest do
   end
 
   defp unique_id(prefix), do: "#{prefix}_#{:erlang.unique_integer([:positive])}"
-
-  defp raises?(fun) do
-    try do
-      fun.()
-      false
-    rescue
-      _ -> true
-    end
-  end
 end

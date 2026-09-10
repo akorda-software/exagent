@@ -7,11 +7,24 @@ defmodule ExAgent.RunContext do
   accumulated token `usage`, per-tool retry counters and the current
   step/position info. The `:deps` value is application-defined; document its
   expected shape with `@spec` in your tools.
+
+  `execution_scope` is an opaque, ephemeral handle for `ExAgent.run_child/4`.
+  Run/parent/root identities and `model_request_id` correlate work without
+  treating model request counts as local loop steps. Never serialize the handle.
+  `observability` and `trace_context` are likewise ephemeral; framework delegation
+  explicitly carries them across task boundaries and restores prior context.
   """
 
   alias ExAgent.{Message, Model}
 
   defstruct deps: nil,
+            run_id: nil,
+            execution_scope: nil,
+            root_run_id: nil,
+            parent_run_id: nil,
+            observability: nil,
+            trace_context: nil,
+            model_request_id: nil,
             model: nil,
             prompt: nil,
             messages: [],
@@ -27,6 +40,13 @@ defmodule ExAgent.RunContext do
 
   @type t :: %__MODULE__{
           deps: term(),
+          run_id: String.t() | nil,
+          execution_scope: ExAgent.ExecutionScope.t() | nil,
+          root_run_id: String.t() | nil,
+          parent_run_id: String.t() | nil,
+          observability: ExAgent.Observability.OpenTelemetry.t() | nil,
+          trace_context: term(),
+          model_request_id: String.t() | nil,
           model: Model.model(),
           prompt: String.t() | nil,
           messages: [Message.t()],

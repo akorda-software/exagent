@@ -28,7 +28,7 @@ defmodule ExAgent.Session.TurnPolicy.Initiative do
     known = MapSet.new(participants, & &1.id)
     # Keep only ids that actually correspond to a participant, then append any
     # participants the caller forgot to order (stable, deduped).
-    ordered = Enum.filter(order, &MapSet.member?(known, &1))
+    ordered = order |> Enum.filter(&MapSet.member?(known, &1)) |> Enum.uniq()
     rest = Enum.reject(participants, &(&1.id in ordered))
     ids = ordered ++ Enum.map(rest, & &1.id)
 
@@ -41,7 +41,7 @@ defmodule ExAgent.Session.TurnPolicy.Initiative do
 
   def next_participant(%__MODULE__{ids: ids, index: i} = state, _ctx) do
     current = Enum.at(ids, rem(i, length(ids)))
-    {:ok, current, %{state | index: i + 1, current: current}}
+    {:ok, current, %{state | index: rem(i, length(ids)) + 1, current: current}}
   end
 
   @impl true
@@ -49,11 +49,18 @@ defmodule ExAgent.Session.TurnPolicy.Initiative do
 
   @impl true
   def participant_joined(%__MODULE__{ids: ids} = state, participant) do
-    %{state | ids: ids ++ [participant.id]}
+    if participant.id in ids,
+      do: state,
+      else: %{
+        state
+        | ids: ids ++ [participant.id],
+          index: ExAgent.Session.PolicyCodec.cursor(state.index, length(ids))
+      }
   end
 
   @impl true
   def participant_left(%__MODULE__{ids: ids, index: i} = state, id) do
+    i = ExAgent.Session.PolicyCodec.cursor(i, length(ids))
     # Realign `index` so removing a participant before it doesn't shift the
     # next pick forward (skipping someone).
     leaver_at = Enum.find_index(ids, &(&1 == id))
@@ -69,4 +76,7 @@ defmodule ExAgent.Session.TurnPolicy.Initiative do
     current = if state.current == id, do: nil, else: state.current
     %{state | ids: new_ids, index: new_index, current: current}
   end
+
+  @impl true
+  def handoff(state, id, _ctx), do: {:ok, %{state | current: id}}
 end

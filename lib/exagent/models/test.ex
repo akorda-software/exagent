@@ -58,16 +58,18 @@ defmodule ExAgent.Models.Test do
     # reach the loop as the final Response. Tool-call responses emit no deltas
     # and resolve immediately; text responses chunk into word-sized deltas so
     # streaming consumers see tokens arrive.
-    {response, _next} = pick(model, messages, params)
-    text = Response.text(response)
+    Stream.flat_map([:start], fn :start ->
+      {response, next} = pick(model, messages, params)
+      chunks = word_chunks(Response.text(response))
 
-    chunks = word_chunks(text)
-
-    Stream.concat([
-      Stream.map(chunks, fn c -> {:text_delta, c} end),
-      [{:response, response}]
-    ])
+      Stream.concat([
+        Stream.map(chunks, fn c -> {:text_delta, c} end),
+        [{:response, response, next}]
+      ])
+    end)
   end
+
+  defp word_chunks(""), do: []
 
   defp word_chunks(text) do
     String.split(text, ~r/(?<=\s)/, include_captures: true)

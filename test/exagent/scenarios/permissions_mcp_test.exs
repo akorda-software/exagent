@@ -224,13 +224,15 @@ defmodule ExAgent.Scenarios.PermissionsMcpTest do
     end
   end
 
-  describe "an MCP tool error surfaces to the model (retry budget)" do
-    test "a tool that returns {:error, _} is retried then fails the run" do
+  describe "an MCP execution error preserves its outcome without replay" do
+    test "a tool that returns {:error, _} fails without repeating the remote call" do
+      parent = self()
       ref = make_ref()
       # A server whose tool always errors.
       mock =
         start_mock_server(ref, [{"flaky", "flaky", %{type: "object", properties: %{}}}], fn _,
                                                                                             _ ->
+          send(parent, :flaky_called)
           {:error, "boom"}
         end)
 
@@ -251,9 +253,18 @@ defmodule ExAgent.Scenarios.PermissionsMcpTest do
 
       agent = ExAgent.new(model: model, tools: [flaky])
 
-      # The tool never succeeds → retries exhausted → run fails.
-      assert {:error, {:unexpected_model_behavior, {:tool_retries_exhausted, "flaky", _}}} =
+      # Remote execution failure is not an explicit ModelRetry authorization.
+      assert {:error,
+              %ExAgent.RunError{
+                reason: {:tool_execution_failed, "flaky", "boom"},
+                partial: partial
+              }} =
                ExAgent.run(agent, "go")
+
+      assert partial.request_count == 1
+      assert find_return(partial.messages, "flaky") == "boom"
+      assert_received :flaky_called
+      refute_received :flaky_called
 
       Client.close(client)
     end

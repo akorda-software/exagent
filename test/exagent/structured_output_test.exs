@@ -56,7 +56,10 @@ defmodule ExAgent.StructuredOutputTest do
 
       agent = ExAgent.new(model: model, output: WeatherReport, output_retries: 1)
 
-      assert {:error, {:unexpected_model_behavior, {:output_retries_exhausted, _}}} =
+      assert {:error,
+              %ExAgent.RunError{
+                reason: {:unexpected_model_behavior, {:output_retries_exhausted, _}}
+              }} =
                ExAgent.run(agent, "weather?")
     end
 

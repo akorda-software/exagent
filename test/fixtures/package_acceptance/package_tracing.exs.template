@@ -1,0 +1,205 @@
+defmodule PackageAcceptance.Receiver do
+  # One bounded HTTP/1 request on a dynamic loopback port, used only by the
+  # real native exporter smoke. This is not a collector or delivery emulator.
+  def start do
+    {:ok, listener} =
+      :gen_tcp.listen(0, [
+        :binary,
+        active: false,
+        ip: {127, 0, 0, 1},
+        reuseaddr: true,
+        packet: :http_bin
+      ])
+
+    {:ok, {_, port}} = :inet.sockname(listener)
+    caller = self()
+    task = Task.async(fn -> serve(listener, caller) end)
+    %{listener: listener, task: task, endpoint: "http://127.0.0.1:#{port}/package/v1/traces"}
+  end
+
+  def stop(receiver) do
+    :gen_tcp.close(receiver.listener)
+    Task.shutdown(receiver.task, :brutal_kill)
+  end
+
+  defp serve(listener, caller) do
+    {:ok, socket} = :gen_tcp.accept(listener, 10_000)
+
+    try do
+      {:ok, {:http_request, :POST, {:abs_path, path}, _}} = :gen_tcp.recv(socket, 0, 5000)
+      headers = headers(socket, %{}, 32)
+      length = headers |> Map.fetch!("content-length") |> String.to_integer()
+      true = length in 1..1_048_576
+      :ok = :inet.setopts(socket, packet: :raw)
+      {:ok, body} = :gen_tcp.recv(socket, length, 5000)
+      send(caller, {:package_otlp, path, headers, body})
+
+      :ok =
+        :gen_tcp.send(
+          socket,
+          "HTTP/1.1 200 OK\r\nContent-Type: application/x-protobuf\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+        )
+    after
+      :gen_tcp.close(socket)
+    end
+  end
+
+  defp headers(socket, acc, left) when left > 0 do
+    case :gen_tcp.recv(socket, 0, 5000) do
+      {:ok, {:http_header, _, name, _, value}} ->
+        headers(socket, Map.put(acc, name |> to_string() |> String.downcase(), value), left - 1)
+
+      {:ok, :http_eoh} ->
+        acc
+    end
+  end
+end
+
+defmodule PackageAcceptance.Tracing do
+  # The SDK-only graph deliberately lacks the OTLP protobuf dependency.
+  @compile {:no_warn_undefined, :opentelemetry_exporter_trace_service_pb}
+  import ExUnit.Assertions
+  require Record
+  Record.defrecordp(:span, Record.extract(:span, from_lib: "opentelemetry/include/otel_span.hrl"))
+  alias ExAgent.Observability.{BoundedProcessor, OpenTelemetry}
+
+  defmodule LocalExporter do
+    def init(owner), do: {:ok, owner}
+
+    def export(table, _resource, owner) do
+      send(owner, {:package_spans, :ets.tab2list(table)})
+      :ok
+    end
+
+    def shutdown(_), do: :ok
+  end
+
+  def run(mode) do
+    receiver = if mode == "exporter", do: PackageAcceptance.Receiver.start()
+
+    if receiver do
+      Application.put_env(:opentelemetry_exporter, :otlp_protocol, :http_protobuf)
+      Application.put_env(:opentelemetry_exporter, :otlp_traces_endpoint, receiver.endpoint)
+
+      Application.put_env(:opentelemetry_exporter, :otlp_traces_headers, [
+        {"x-package-token", "synthetic-transport-only"}
+      ])
+
+      {:ok, _} = Application.ensure_all_started(:opentelemetry_exporter)
+    end
+
+    exporter = if receiver, do: {:opentelemetry_exporter, %{}}, else: {LocalExporter, self()}
+    resource = :otel_resource.create(%{"service.name" => "package-acceptance"})
+
+    config = %{
+      sampler: :always_on,
+      id_generator: :otel_id_generator,
+      deny_list: [],
+      processors: [
+        {BoundedProcessor,
+         %{
+           name: :package_acceptance_export,
+           resource: resource,
+           exporter: exporter,
+           max_queue_size: 128,
+           max_export_batch_size: 128,
+           scheduled_delay_ms: 60_000,
+           exporting_timeout_ms: 5000
+         }}
+      ]
+    }
+
+    {:ok, provider} =
+      :otel_tracer_provider_sup.start(:package_acceptance_provider, resource, config)
+
+    try do
+      await(fn -> BoundedProcessor.stats(:package_acceptance_export).status == :ready end)
+
+      tracer =
+        :otel_tracer_provider.get_tracer(:package_acceptance_provider, :exagent, "1", :undefined)
+
+      tracing = OpenTelemetry.new(tracer: tracer)
+      PackageAcceptance.Scenario.simple(tracing)
+      PackageAcceptance.Scenario.typed(tracing, false)
+      PackageAcceptance.Scenario.typed(tracing, true)
+      PackageAcceptance.Scenario.checkpoint(tracing)
+      accepted = BoundedProcessor.stats(:package_acceptance_export).accepted
+      assert accepted >= 13
+      assert :ok = BoundedProcessor.force_flush(:package_acceptance_export)
+
+      exported =
+        if receiver do
+          assert_receive {:package_otlp, "/package/v1/traces", headers, body}, 6000
+          assert headers["content-type"] == "application/x-protobuf"
+          assert headers["x-package-token"] == "synthetic-transport-only"
+          refute body =~ "synthetic-transport-only"
+          refute body =~ "synthetic input"
+
+          decoded =
+            :opentelemetry_exporter_trace_service_pb.decode_msg(
+              body,
+              :export_trace_service_request
+            )
+
+          File.write!(
+            "otlp-decoded.term",
+            inspect(decoded, pretty: true, limit: :infinity) <> "\n"
+          )
+
+          [%{resource: %{attributes: resource_attrs}, scope_spans: scopes}] =
+            decoded.resource_spans
+
+          assert Enum.any?(
+                   resource_attrs,
+                   &match?(
+                     %{
+                       key: "service.name",
+                       value: %{value: {:string_value, "package-acceptance"}}
+                     },
+                     &1
+                   )
+                 )
+
+          spans = Enum.flat_map(scopes, & &1.spans)
+          assert Enum.all?(scopes, &(&1.scope.name == "exagent"))
+          assert Enum.all?(spans, &(byte_size(&1.trace_id) == 16 and byte_size(&1.span_id) == 8))
+          assert Enum.any?(spans, &(byte_size(Map.get(&1, :parent_span_id, "")) == 8))
+          length(spans)
+        else
+          assert_receive {:package_spans, spans}, 6000
+          assert Enum.all?(spans, &(span(&1, :trace_id) > 0 and span(&1, :span_id) > 0))
+
+          assert Enum.any?(spans, fn record ->
+                   parent = span(record, :parent_span_id)
+                   is_integer(parent) and parent > 0
+                 end)
+
+          File.write!("sdk-spans.term", inspect(spans, pretty: true, limit: :infinity) <> "\n")
+          length(spans)
+        end
+
+      assert exported == accepted
+      await(fn -> BoundedProcessor.stats(:package_acceptance_export).exported == accepted end)
+      stats = BoundedProcessor.stats(:package_acceptance_export)
+      assert stats.export_failed == 0 and stats.export_timed_out == 0
+      assert stats.queue_depth == 0 and stats.in_flight == 0
+      File.write!("tracing-stats.term", inspect(stats, pretty: true, limit: :infinity) <> "\n")
+    after
+      :supervisor.terminate_child(:otel_tracer_provider_sup, provider)
+      if receiver, do: PackageAcceptance.Receiver.stop(receiver)
+    end
+  end
+
+  defp await(fun, left \\ 500)
+  defp await(_fun, 0), do: flunk("package tracing readiness/export barrier timed out")
+
+  defp await(fun, left) do
+    if fun.(),
+      do: :ok,
+      else:
+        (
+          Process.sleep(10)
+          await(fun, left - 1)
+        )
+  end
+end

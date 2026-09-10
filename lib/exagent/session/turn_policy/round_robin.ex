@@ -29,7 +29,7 @@ defmodule ExAgent.Session.TurnPolicy.RoundRobin do
 
   def next_participant(%__MODULE__{ids: ids, index: i} = state, _ctx) do
     current = Enum.at(ids, rem(i, length(ids)))
-    {:ok, current, %{state | index: i + 1, current: current}}
+    {:ok, current, %{state | index: rem(i, length(ids)) + 1, current: current}}
   end
 
   @impl true
@@ -37,11 +37,18 @@ defmodule ExAgent.Session.TurnPolicy.RoundRobin do
 
   @impl true
   def participant_joined(%__MODULE__{ids: ids} = state, participant) do
-    %{state | ids: ids ++ [participant.id]}
+    if participant.id in ids,
+      do: state,
+      else: %{
+        state
+        | ids: ids ++ [participant.id],
+          index: ExAgent.Session.PolicyCodec.cursor(state.index, length(ids))
+      }
   end
 
   @impl true
   def participant_left(%__MODULE__{ids: ids, index: i} = state, id) do
+    i = ExAgent.Session.PolicyCodec.cursor(i, length(ids))
     # Realign `index` so removing a participant before it doesn't shift the
     # next pick forward (skipping someone). The Session re-advances when the
     # current participant leaves; this only keeps the index honest.
@@ -58,4 +65,7 @@ defmodule ExAgent.Session.TurnPolicy.RoundRobin do
     current = if state.current == id, do: nil, else: state.current
     %{state | ids: new_ids, index: new_index, current: current}
   end
+
+  @impl true
+  def handoff(state, id, _ctx), do: {:ok, %{state | current: id}}
 end

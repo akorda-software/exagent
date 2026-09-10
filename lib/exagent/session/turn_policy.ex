@@ -8,6 +8,12 @@ defmodule ExAgent.Session.TurnPolicy do
   drive a round-robin chat, an initiative-ordered combat, or a supervisor that
   delegates (Phase 4).
 
+  Policy state is a struct whose module implements this behaviour; arbitrary map
+  or tuple states are not dispatched. Handoff uses an explicit callback, or keeps
+  state unchanged when the destination is already admitted by `can_act?/3`.
+  Custom persistence requires the opt-in versioned data codec callbacks; stored
+  bytes never select a module to load or execute.
+
   ## Callbacks
 
     * `init/1`              — build the policy state from options. `opts` carries
@@ -32,7 +38,7 @@ defmodule ExAgent.Session.TurnPolicy do
   alias ExAgent.Session.Participant
 
   @type id :: term()
-  @type state :: term()
+  @type state :: struct()
   @type context :: %{shared_state: term(), participants: [Participant.t()]}
 
   @callback init(opts :: keyword()) :: state()
@@ -46,7 +52,21 @@ defmodule ExAgent.Session.TurnPolicy do
 
   @callback participant_left(state(), id()) :: state()
 
-  @optional_callbacks [participant_joined: 2, participant_left: 2]
+  @doc "Override the current actor without advancing the scheduling cursor."
+  @callback handoff(state(), id(), context()) :: {:ok, state()} | {:error, term()}
+
+  @doc "Opt-in JSON data codec for persisted custom policies."
+  @callback snapshot(state()) :: {:ok, pos_integer(), term()} | {:error, term()}
+  @callback restore_snapshot(pos_integer(), term(), context()) ::
+              {:ok, state()} | {:error, term()}
+
+  @optional_callbacks [
+    participant_joined: 2,
+    participant_left: 2,
+    handoff: 3,
+    snapshot: 1,
+    restore_snapshot: 3
+  ]
 
   # ---------------------------------------------------------------------------
   # Dispatch (struct-based, like ExAgent.Model). Lets callers hold an opaque
@@ -78,6 +98,14 @@ defmodule ExAgent.Session.TurnPolicy do
       mod.participant_left(state, id)
     else
       state
+    end
+  end
+
+  def handoff(%mod{} = state, id, ctx) do
+    cond do
+      function_exported?(mod, :handoff, 3) -> mod.handoff(state, id, ctx)
+      mod.can_act?(state, id, ctx) == true -> {:ok, state}
+      true -> {:error, :unsupported_handoff}
     end
   end
 end

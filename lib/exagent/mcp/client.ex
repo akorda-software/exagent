@@ -24,19 +24,31 @@ defmodule ExAgent.MCP.Client do
       agent = ExAgent.new(model: "anthropic:claude-3-5-haiku", tools: tools)
       ExAgent.run(agent, "list the files")
 
-  ## Why a single client per server
+  ## Concurrency and request ownership
 
-  MCP servers are stateful and not generally concurrency-safe; this client
-  serializes `tools/call` requests through one GenServer, which is the safe
-  default. Tool execution in ExAgent already runs tools concurrently — if a
-  particular MCP server is safe to call in parallel, give each agent its own
-  client (and thus its own server process).
+  A client owns one transport. Requests are sent independently and can execute
+  concurrently on the remote server; the GenServer does not serialize remote
+  tool effects. Each pending request has a deadline and monitors its caller.
+  A timeout returns `{:error, :timeout}` and caller death drops the local request.
+  Neither proves that a remote tool stopped or rolled back, and neither triggers
+  replay. Requests beyond `:max_pending` return `{:error, :busy}` before sending.
+
+  Incoming newline-delimited frames are limited by `:max_frame_bytes`. An oversized
+  frame closes the transport, fails remaining pending requests, and leaves the
+  client not ready. Complete responses preceding that frame are processed first,
+  independently of transport chunk boundaries. These bounds limit pending state
+  and individual frames, not the BEAM mailbox or aggregate traffic from a push
+  transport.
 
   ## Testing seam
 
   The transport is pluggable: pass `transport: {send_fun, ref}` (mostly for
   tests) to inject a fake transport instead of spawning a real process. The
   client receives data as messages shaped `{ref, {:data, binary}}`.
+  `send_fun` must return promptly: it runs in the client process, so a blocking
+  callback delays deadlines and other client operations. `{:error, reason}`,
+  `false`, exceptions and throws/exits indicate an unconfirmed send; other return
+  values (including the value returned by `send/2`) retain their existing meaning.
   """
 
   use GenServer
@@ -44,15 +56,21 @@ defmodule ExAgent.MCP.Client do
   alias ExAgent.MCP.Protocol
 
   @default_timeout 5_000
+  @default_max_pending 128
+  @default_max_frame_bytes 8_388_608
 
   defstruct transport_ref: nil,
+            parent: nil,
             send_fun: nil,
             id: 0,
-            # id => {from, method}
+            # id => %{from, method, timer, monitor}; IDs never repeat.
             pending: %{},
+            monitors: %{},
             buffer: "",
             ready: false,
-            timeout: @default_timeout
+            timeout: @default_timeout,
+            max_pending: @default_max_pending,
+            max_frame_bytes: @default_max_frame_bytes
 
   @type t :: GenServer.server()
 
@@ -70,6 +88,11 @@ defmodule ExAgent.MCP.Client do
     * `:args` — list of args passed to the command (default `[]`).
     * `:env` — list of `{bin, bin}` env vars (default `[]`).
     * `:timeout` — handshake / per-request timeout in ms (default `5000`).
+      Must be a positive integer; requests return `{:error, :timeout}` on expiry.
+    * `:max_pending` — maximum concurrent pending requests (default `128`).
+    * `:max_frame_bytes` — maximum bytes in a newline-delimited incoming frame,
+      excluding its newline (default `8388608`, 8 MiB). Also bounds partial frames.
+      Both limits must be positive integers.
     * `:cd` — working directory for the spawned server.
     * `:transport` — `{send_fun, ref}` test seam (see moduledoc). When set, no
       process is spawned; `send_fun.(ref, iodata)` must deliver bytes to the
@@ -87,7 +110,7 @@ defmodule ExAgent.MCP.Client do
   """
   @spec tools(GenServer.server()) :: {:ok, [ExAgent.Tool.t()]} | {:error, term()}
   def tools(client) do
-    GenServer.call(client, :tools, timeout(client))
+    GenServer.call(client, :tools, :infinity)
   end
 
   @doc """
@@ -97,21 +120,13 @@ defmodule ExAgent.MCP.Client do
   @spec call_tool(GenServer.server(), String.t(), map()) ::
           {:ok, String.t()} | {:error, term()}
   def call_tool(client, name, arguments) do
-    GenServer.call(client, {:call_tool, name, arguments}, timeout(client))
+    GenServer.call(client, {:call_tool, name, arguments}, :infinity)
   end
 
   @doc "Shut the client and its server process down."
   @spec close(GenServer.server()) :: :ok
   def close(client) do
-    GenServer.stop(client, :normal)
-  end
-
-  defp timeout(client) do
-    try do
-      :sys.get_state(client).timeout || @default_timeout
-    rescue
-      _ -> @default_timeout
-    end
+    GenServer.call(client, :close, :infinity)
   end
 
   # ---------------------------------------------------------------------------
@@ -120,30 +135,75 @@ defmodule ExAgent.MCP.Client do
 
   @impl true
   def init(opts) do
-    timeout = Keyword.get(opts, :timeout, @default_timeout)
+    with {:ok, timeout} <- positive_option(opts, :timeout, @default_timeout),
+         {:ok, max_pending} <- positive_option(opts, :max_pending, @default_max_pending),
+         {:ok, max_frame_bytes} <-
+           positive_option(opts, :max_frame_bytes, @default_max_frame_bytes) do
+      init_transport(opts, timeout, max_pending, max_frame_bytes)
+    else
+      {:error, reason} -> {:stop, reason}
+    end
+  end
 
+  defp positive_option(opts, key, default) do
+    case Keyword.get(opts, key, default) do
+      value when is_integer(value) and value > 0 -> {:ok, value}
+      _ -> {:error, {:invalid_option, key}}
+    end
+  end
+
+  defp init_transport(opts, timeout, max_pending, max_frame_bytes) do
     {ref, send_fun} =
       case Keyword.get(opts, :transport) do
         {fun, transport_ref} when is_function(fun, 2) ->
+          if is_port(transport_ref), do: Process.flag(:trap_exit, true)
           {transport_ref, fun}
 
         nil ->
+          # The owned Port is linked. Trap before opening it so even an early
+          # abnormal Port death reaches the handshake instead of killing Client.
+          Process.flag(:trap_exit, true)
           port = open_port(opts)
           {port, fn p, data -> true = Port.command(p, data) end}
       end
 
-    state = %__MODULE__{transport_ref: ref, send_fun: send_fun, timeout: timeout}
+    state = %__MODULE__{
+      transport_ref: ref,
+      parent: parent_pid(),
+      send_fun: send_fun,
+      timeout: timeout,
+      max_pending: max_pending,
+      max_frame_bytes: max_frame_bytes
+    }
 
-    # initialize handshake (synchronous: we wait for the response here so that
-    # start_link only returns once the server is actually ready).
-    case request_sync(state, "initialize", handshake_params(opts), timeout) do
-      {:ok, _result, state} ->
-        # acknowledge, then mark ready. No reply expected for notifications.
-        send_data(state, Protocol.encode_notification("notifications/initialized", %{}))
-        {:ok, %{state | ready: true}}
+    # Consume initialize synchronously. A known response followed by a broken
+    # frame still completes initialize, then leaves Client alive but not ready,
+    # just as when those bytes arrive as separate chunks.
+    with {:ok, _result, state, frame_error} <-
+           request_sync(state, "initialize", handshake_params(opts)),
+         :ok <- send_data(state, Protocol.encode_notification("notifications/initialized", %{})) do
+      state = %{state | ready: true}
 
+      if frame_error do
+        close_transport(state)
+        {:ok, fail_all(state, frame_error)}
+      else
+        {:ok, state}
+      end
+    else
       {:error, reason} ->
+        close_transport(state)
         {:stop, reason}
+    end
+  end
+
+  # GenServer handles its parent's EXIT in the normal loop. During the inline
+  # initialize receive we must do the same rather than await the request timeout.
+  defp parent_pid do
+    case Process.get(:"$ancestors", []) do
+      [pid | _] when is_pid(pid) -> pid
+      [name | _] when is_atom(name) -> Process.whereis(name)
+      _ -> nil
     end
   end
 
@@ -174,6 +234,10 @@ defmodule ExAgent.MCP.Client do
   end
 
   @impl true
+  def handle_call(:close, _from, state) do
+    {:stop, :normal, :ok, fail_all(state, :closed)}
+  end
+
   def handle_call(:tools, from, %__MODULE__{ready: true} = state) do
     {:noreply, async_request(state, "tools/list", %{}, from)}
   end
@@ -188,35 +252,77 @@ defmodule ExAgent.MCP.Client do
 
   # Incoming data from the transport (Port or injected ref). Buffer + split lines.
   @impl true
-  def handle_info({ref, {:data, chunk}}, %__MODULE__{transport_ref: ref} = state) do
-    {lines, buffer} = split_lines(state.buffer <> chunk)
-    state = Enum.reduce(lines, %{state | buffer: buffer}, &handle_line(&2, &1))
-    {:noreply, state}
+  def handle_info({ref, {:data, chunk}}, %__MODULE__{transport_ref: ref, ready: true} = state) do
+    case receive_frames(state, chunk) do
+      {:ok, lines, state} ->
+        {:noreply, Enum.reduce(lines, state, &handle_line(&2, &1))}
+
+      {:error, reason, lines, state} ->
+        state = Enum.reduce(lines, state, &handle_line(&2, &1))
+        close_transport(state)
+        {:noreply, fail_all(state, reason)}
+    end
   end
 
   # Transport exited — fail any pending callers and mark not-ready. The client
   # process is left alive (ready: false) so the host can observe the failure and
   # shut it down cleanly, rather than racing a reply against an EXIT.
   def handle_info({ref, {:exit_status, status}}, %__MODULE__{transport_ref: ref} = state) do
-    fail_all(state, {:server_exited, status})
-    {:noreply, %{state | ready: false}}
+    close_transport(state)
+    {:noreply, fail_all(state, {:server_exited, status})}
   end
 
   def handle_info({ref, {:eof, _}}, %__MODULE__{transport_ref: ref} = state) do
-    fail_all(state, :eof)
-    {:noreply, %{state | ready: false}}
+    close_transport(state)
+    {:noreply, fail_all(state, :eof)}
+  end
+
+  def handle_info({ref, :eof}, %__MODULE__{transport_ref: ref} = state) do
+    close_transport(state)
+    {:noreply, fail_all(state, :eof)}
+  end
+
+  def handle_info({:EXIT, ref, reason}, %__MODULE__{transport_ref: ref} = state)
+      when is_port(ref) do
+    {:noreply, fail_all(state, {:port_exited, reason})}
+  end
+
+  # Preserve ordinary link semantics for links other than the owned transport.
+  # Parent exits are normally consumed by GenServer itself, before handle_info.
+  def handle_info({:EXIT, _from, :normal}, state), do: {:noreply, state}
+  def handle_info({:EXIT, _from, reason}, state), do: {:stop, reason, state}
+
+  def handle_info({:timeout, timer, {:request_timeout, id}}, state) do
+    case Map.get(state.pending, id) do
+      %{timer: ^timer} -> {:noreply, finish_pending(state, id, {:error, :timeout})}
+      _ -> {:noreply, state}
+    end
+  end
+
+  def handle_info({:DOWN, monitor, :process, _pid, _reason}, state) do
+    case Map.fetch(state.monitors, monitor) do
+      {:ok, id} -> {:noreply, finish_pending(state, id, :no_reply)}
+      :error -> {:noreply, state}
+    end
   end
 
   def handle_info(_msg, state), do: {:noreply, state}
 
   @impl true
-  def terminate(_reason, state) do
-    if is_port(state.transport_ref) do
-      Port.close(state.transport_ref)
-    end
-
+  def terminate(reason, state) do
+    fail_all(state, {:client_stopped, reason})
+    close_transport(state)
     :ok
   end
+
+  defp close_transport(%{transport_ref: ref}) when is_port(ref) do
+    Port.close(ref)
+    :ok
+  rescue
+    ArgumentError -> :ok
+  end
+
+  defp close_transport(_), do: :ok
 
   # ---------------------------------------------------------------------------
   # Request machinery
@@ -224,51 +330,108 @@ defmodule ExAgent.MCP.Client do
 
   # A synchronous request used during init (before the GenServer loop is serving
   # calls): we send and then receive the matching response inline.
-  defp request_sync(state, method, params, timeout) do
-    {id, iod} = outbound(state, method, params)
-    send_data(state, iod)
-    deadline = System.monotonic_time(:millisecond) + timeout
+  defp request_sync(state, method, params) do
+    id = state.id
+    deadline = System.monotonic_time(:millisecond) + state.timeout
 
-    case await_response(id, deadline, "") do
-      {:ok, result} -> {:ok, result, %{state | id: id + 1}}
-      {:error, _} = e -> e
+    with {:ok, iod} <- encode_request(id, method, params),
+         :ok <- send_data(state, iod) do
+      await_response(%{state | id: id + 1}, id, deadline)
     end
   end
 
   # An async request from a GenServer.call: store `from`, send, reply later when
   # the response arrives (in handle_info/handle_line). Returns the new state.
   defp async_request(state, method, params, from) do
-    {id, iod} = outbound(state, method, params)
-    send_data(state, iod)
-    %{state | id: id + 1, pending: Map.put(state.pending, id, {from, method})}
+    if map_size(state.pending) >= state.max_pending do
+      GenServer.reply(from, {:error, :busy})
+      state
+    else
+      id = state.id
+      monitor = Process.monitor(elem(from, 0))
+      timer = :erlang.start_timer(state.timeout, self(), {:request_timeout, id})
+      pending = %{from: from, method: method, monitor: monitor, timer: timer}
+
+      state = %{
+        state
+        | id: id + 1,
+          pending: Map.put(state.pending, id, pending),
+          monitors: Map.put(state.monitors, monitor, id)
+      }
+
+      with {:ok, iod} <- encode_request(id, method, params),
+           :ok <- send_data(state, iod) do
+        state
+      else
+        {:error, reason} -> finish_pending(state, id, {:error, reason})
+      end
+    end
   end
 
-  defp outbound(state, method, params) do
-    id = state.id
-    {id, Protocol.encode_request(id, method, params)}
+  defp encode_request(id, method, params) do
+    {:ok, Protocol.encode_request(id, method, params)}
+  rescue
+    error -> {:error, {:encode_failed, error}}
   end
 
-  defp send_data(state, iod), do: state.send_fun.(state.transport_ref, iod)
+  defp send_data(state, iod) do
+    case state.send_fun.(state.transport_ref, iod) do
+      {:error, reason} -> {:error, {:send_failed, reason}}
+      false -> {:error, {:send_failed, :rejected}}
+      _ -> :ok
+    end
+  rescue
+    error -> {:error, {:send_failed, {:exception, error}}}
+  catch
+    kind, reason -> {:error, {:send_failed, {kind, reason}}}
+  end
 
-  # During init we own the mailbox; collect {ref, {:data, _}} chunks until the
-  # matching response id arrives (or timeout). Non-matching messages are flushed.
-  # A JSON-RPC frame may be split across data chunks (the port doesn't preserve
-  # message boundaries), so we buffer the way handle_info does — a partial frame
-  # with no trailing newline is kept for the next chunk rather than crashing.
-  defp await_response(id, deadline, buffer) do
+  # Selective receive leaves other transports and unrelated mailbox messages
+  # untouched. Preserve a trailing partial frame when initialize completes.
+  defp await_response(%{transport_ref: ref, parent: parent} = state, id, deadline) do
     remaining = deadline - System.monotonic_time(:millisecond)
 
-    receive do
-      {ref, {:data, chunk}} when ref != nil ->
-        {lines, buffer} = split_lines(buffer <> IO.iodata_to_binary(chunk))
+    if remaining <= 0 do
+      {:error, :timeout}
+    else
+      receive do
+        {^ref, {:data, chunk}} ->
+          case receive_frames(state, chunk) do
+            {:ok, lines, state} ->
+              case find_response(lines, id) do
+                {:ok, result} -> {:ok, result, state, nil}
+                {:error, _} = error -> error
+                :none -> await_response(state, id, deadline)
+              end
 
-        case find_response(lines, id) do
-          {:ok, result} -> {:ok, result}
-          {:error, _} = e -> e
-          :none -> await_response(id, deadline, buffer)
-        end
-    after
-      max(0, remaining) -> {:error, :timeout}
+            {:error, reason, lines, state} ->
+              case find_response(lines, id) do
+                {:ok, result} -> {:ok, result, state, reason}
+                {:error, _} = error -> error
+                :none -> {:error, reason}
+              end
+          end
+
+        {:EXIT, ^ref, reason} when is_port(ref) ->
+          {:error, {:port_exited, reason}}
+
+        {:EXIT, ^parent, reason} when is_pid(parent) ->
+          {:error, reason}
+
+        {:EXIT, _from, reason} when reason != :normal ->
+          {:error, reason}
+
+        {^ref, {:exit_status, status}} ->
+          {:error, {:server_exited, status}}
+
+        {^ref, :eof} ->
+          {:error, :eof}
+
+        {^ref, {:eof, _}} ->
+          {:error, :eof}
+      after
+        remaining -> {:error, :timeout}
+      end
     end
   end
 
@@ -285,10 +448,10 @@ defmodule ExAgent.MCP.Client do
   defp handle_line(state, line) do
     case Protocol.decode(line) do
       {:response, id, result} ->
-        reply_pending(state, id, {:ok, result})
+        finish_pending(state, id, {:ok, result})
 
       {:error_response, id, error} ->
-        reply_pending(state, id, {:error, error})
+        finish_pending(state, id, {:error, error})
 
       {:notification, _method, _params} ->
         # Server-initiated notifications are accepted but not acted on (e.g.
@@ -300,23 +463,31 @@ defmodule ExAgent.MCP.Client do
     end
   end
 
-  defp reply_pending(%{pending: pending} = state, id, reply) do
+  defp finish_pending(%{pending: pending} = state, id, reply) do
     case Map.pop(pending, id) do
       {nil, _} ->
         state
 
-      {{from, "tools/list"}, pending} ->
-        GenServer.reply(from, map_tools_reply(reply))
-        %{state | pending: pending}
+      {%{from: from, method: method, timer: timer, monitor: monitor}, pending} ->
+        Process.cancel_timer(timer)
+        Process.demonitor(monitor, [:flush])
 
-      {{from, "tools/call"}, pending} ->
-        GenServer.reply(from, tools_call_reply(reply))
-        %{state | pending: pending}
+        unless reply == :no_reply do
+          GenServer.reply(from, map_reply(method, reply))
+        end
 
-      {{from, _method}, pending} ->
-        GenServer.reply(from, reply)
-        %{state | pending: pending}
+        %{state | pending: pending, monitors: Map.delete(state.monitors, monitor)}
     end
+  end
+
+  defp map_reply(method, reply) do
+    case method do
+      "tools/list" -> map_tools_reply(reply)
+      "tools/call" -> tools_call_reply(reply)
+      _ -> reply
+    end
+  rescue
+    error -> {:error, {:invalid_response, error}}
   end
 
   defp map_tools_reply({:ok, %{"tools" => _} = result}), do: {:ok, map_tools(result, nil)}
@@ -338,19 +509,36 @@ defmodule ExAgent.MCP.Client do
 
   defp map_tools(_, _state), do: []
 
-  defp fail_all(%{pending: pending}, reason) do
-    for {_id, {from, _method}} <- pending, do: GenServer.reply(from, {:error, reason})
-    :ok
+  defp fail_all(state, reason) do
+    Enum.reduce(Map.keys(state.pending), %{state | ready: false, buffer: ""}, fn id, state ->
+      finish_pending(state, id, {:error, reason})
+    end)
   end
 
-  defp split_lines(buffer) do
-    case :binary.split(buffer, "\n") do
-      [line, rest] ->
-        {next_lines, final} = split_lines(rest)
-        {[String.trim(line) | next_lines], final}
+  defp receive_frames(state, chunk) do
+    chunk = IO.iodata_to_binary(chunk)
 
-      [rest] ->
-        {[], rest}
+    case split_lines(state.buffer, chunk, state.max_frame_bytes, []) do
+      {:ok, lines, buffer} -> {:ok, lines, %{state | buffer: buffer}}
+      {:error, reason, lines} -> {:error, reason, lines, %{state | buffer: ""}}
+    end
+  rescue
+    ArgumentError -> {:error, :invalid_transport_data, [], %{state | buffer: ""}}
+  end
+
+  defp split_lines(buffer, chunk, limit, lines) do
+    case :binary.match(chunk, "\n") do
+      {index, 1} when byte_size(buffer) + index <= limit ->
+        {line, <<"\n", rest::binary>>} = :erlang.split_binary(chunk, index)
+        split_lines("", rest, limit, [buffer <> line | lines])
+
+      :nomatch when byte_size(buffer) + byte_size(chunk) <= limit ->
+        # A small trailing sub-binary must not retain a much larger input chunk.
+        carry = if buffer == "", do: :binary.copy(chunk), else: buffer <> chunk
+        {:ok, Enum.reverse(lines), carry}
+
+      _ ->
+        {:error, {:frame_too_large, limit}, Enum.reverse(lines)}
     end
   end
 end

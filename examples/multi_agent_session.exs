@@ -47,14 +47,14 @@ IO.puts("=== starting session ===")
 IO.puts("first to act: #{first}")
 
 # A tiny driver: for each participant, run its agent server once and record its
-# reply as a shared-state change. Three rounds (so both agents act a few times).
+# reply as a shared-state change. Four turns (two per agent).
 Enum.each(1..4, fn _ ->
   current = Session.current(session)
   %{ref: server} = Enum.find(Session.participants(session), &(&1.id == current))
 
   {:ok, %{output: action}} = Server.chat(server, "what do you do this turn?")
 
-  {:ok, world, next} =
+  {:ok, _world, next} =
     Session.take_turn(session, current, fn s ->
       {:ok, %{s | actions: [{current, action} | s.actions]}}
     end)

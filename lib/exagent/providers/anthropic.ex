@@ -22,7 +22,7 @@ defmodule ExAgent.Providers.Anthropic do
 
   alias ExAgent.{Message, ModelSettings, ModelRequestParameters, Tool}
   alias ExAgent.Message.{Part, Response, Usage}
-  alias ExAgent.Providers.SSE
+  alias ExAgent.Providers.{SSE, StreamTransport, EventStream}
 
   @anthropic_version "2023-06-01"
   @default_max_tokens 4096
@@ -64,13 +64,14 @@ defmodule ExAgent.Providers.Anthropic do
     {system, tools} = apply_cache(system, tools, config.cache)
 
     %{}
+    |> maybe_put("tool_choice", tool_choice(params))
+    |> put_extra(settings)
     |> Map.put("model", config.model)
     |> Map.put("max_tokens", max_tokens(settings))
     |> maybe_put("system", system)
     |> Map.put("messages", convo)
     |> put_settings(settings)
     |> maybe_put("tools", tools)
-    |> maybe_put("tool_choice", tool_choice(params))
   end
 
   # Anthropic prompt caching: a `cache_control: ephemeral` breakpoint on the
@@ -96,6 +97,8 @@ defmodule ExAgent.Providers.Anthropic do
            method: :post,
            headers: build_headers(config),
            json: body,
+           retry: false,
+           redirect: false,
            finch: ExAgent.Finch,
            receive_timeout: settings_timeout(settings) || @default_timeout
          ) do
@@ -140,7 +143,7 @@ defmodule ExAgent.Providers.Anthropic do
      %ExAgent.RequestError{
        provider: :anthropic,
        reason: :provider_error,
-       body: error["message"] || inspect(error)
+       body: if(is_map(error), do: error["message"] || inspect(error), else: error)
      }}
   end
 
@@ -164,15 +167,16 @@ defmodule ExAgent.Providers.Anthropic do
   defp build_headers(%Config{api_key: api_key, auth_token: auth_token}) do
     auth =
       cond do
-        auth_token -> [{"authorization", "Bearer " <> auth_token}]
-        api_key -> [{"x-api-key", api_key}]
+        is_binary(auth_token) and auth_token != "" -> [{"authorization", "Bearer " <> auth_token}]
+        is_binary(api_key) and api_key != "" -> [{"x-api-key", api_key}]
       end
 
     [{"content-type", "application/json"}, {"anthropic-version", @anthropic_version} | auth]
   end
 
-  defp ensure_credentials(%{api_key: nil, auth_token: nil}),
-    do: {:error, %ExAgent.RequestError{provider: :anthropic, reason: :missing_credentials}}
+  defp ensure_credentials(%{api_key: key, auth_token: token})
+       when key in [nil, ""] and token in [nil, ""],
+       do: {:error, %ExAgent.RequestError{provider: :anthropic, reason: :missing_credentials}}
 
   defp ensure_credentials(_), do: :ok
 
@@ -282,7 +286,6 @@ defmodule ExAgent.Providers.Anthropic do
   end
 
   defp tool_choice(%ModelRequestParameters{output_mode: :tool}), do: %{type: "any"}
-
   defp tool_choice(%ModelRequestParameters{function_tools: [], output_tools: []}), do: nil
   defp tool_choice(_), do: %{type: "auto"}
 
@@ -291,7 +294,9 @@ defmodule ExAgent.Providers.Anthropic do
   Perform a streaming Messages API request. Returns a lazy stream of:
 
     * `{:text_delta, binary}`,
-    * `{:response, Response.t()}` (final assembled),
+    * `{:thinking_delta, binary}` when present,
+    * `{:usage, Usage.t()}` — latest per-request snapshot, never an additive delta,
+    * `{:response, Response.t(), final_model}` (single final assembled response),
     * `{:error, reason}` on failure.
   """
   @spec request_stream(
@@ -300,122 +305,244 @@ defmodule ExAgent.Providers.Anthropic do
           ModelSettings.t() | nil,
           ModelRequestParameters.t()
         ) ::
-          Enumerable.t() | {:error, term()}
+          Enumerable.t()
   def request_stream(model, messages, settings, params) do
-    config = config(model)
+    Stream.flat_map([:start], fn _ ->
+      config = config(model)
+      opts = StreamTransport.options!(Map.get(model, :stream_options, []))
 
-    case ensure_credentials(config) do
-      :ok ->
-        body =
-          model
-          |> build_body(messages, settings, params)
-          |> Map.put("stream", true)
+      case ensure_credentials(config) do
+        :ok ->
+          body = model |> build_body(messages, settings, params) |> Map.put("stream", true)
 
-        do_request_stream(config, body, settings)
+          [
+            url: String.trim_trailing(config.base_url, "/") <> "/v1/messages",
+            method: :post,
+            headers: build_headers(config),
+            json: body,
+            finch: ExAgent.Finch,
+            receive_timeout: settings_timeout(settings) || @default_timeout
+          ]
+          |> StreamTransport.stream(opts)
+          |> SSE.stream(opts)
+          |> adapt_stream(model)
 
-      {:error, _} = e ->
-        [e]
+        {:error, _} = error ->
+          [error]
+      end
+    end)
+  end
+
+  @doc false
+  def adapt_stream(sse, model) do
+    acc = %{blocks: %{}, started: false, usage: nil, model: model.model, stop_reason: nil}
+    EventStream.transform(sse, acc, fn event, acc -> stream_step(event, acc, model) end)
+  end
+
+  defp stream_step(%{"type" => "message_stop"}, acc, model) do
+    if acc.started and acc.stop_reason != nil and Enum.all?(acc.blocks, fn {_, b} -> b.closed end) do
+      {:halt, [{:response, build_streamed_response(acc), model}], acc}
+    else
+      stream_error(:incomplete_stream_response, acc, model)
     end
   end
 
-  defp do_request_stream(config, body, settings) do
-    case Req.request(
-           url: String.trim_trailing(config.base_url, "/") <> "/v1/messages",
-           method: :post,
-           headers: build_headers(config),
-           json: body,
-           into: :self,
-           finch: ExAgent.Finch,
-           receive_timeout: settings_timeout(settings) || @default_timeout
-         ) do
-      {:ok, %Req.Response{status: 200, body: %Req.Response.Async{}} = resp} ->
-        resp |> SSE.stream() |> adapt_anthropic(config.model)
+  defp stream_step(event, acc, model) when event in [:done, :eof],
+    do: stream_error(:missing_stream_terminal, acc, model)
 
-      {:ok, %{status: status, body: body}} ->
-        [
-          {:error,
-           %ExAgent.RequestError{
-             provider: :anthropic,
-             status: status,
-             reason: :http_error,
-             body: body
-           }}
-        ]
+  defp stream_step({:error, reason}, acc, model), do: stream_error(reason, acc, model)
 
-      {:error, exception} ->
-        [
-          {:error,
-           %ExAgent.RequestError{
-             provider: :anthropic,
-             reason: :request_failed,
-             body: inspect(exception)
-           }}
-        ]
+  defp stream_step(%{"type" => "error", "error" => error}, acc, model),
+    do: stream_error({:provider_error, error}, acc, model)
+
+  defp stream_step(%{"type" => "ping"}, acc, _), do: {:cont, [], acc}
+
+  defp stream_step(%{"type" => "message_start", "message" => msg}, %{started: false} = acc, model)
+       when is_map(msg) do
+    if (is_nil(msg["usage"]) or is_map(msg["usage"])) and
+         (is_nil(msg["model"]) or is_binary(msg["model"])) do
+      events = if is_map(msg["usage"]), do: [{:usage, parse_usage(msg["usage"])}], else: []
+
+      {:cont, events,
+       %{acc | started: true, model: msg["model"] || acc.model, usage: msg["usage"]}}
+    else
+      stream_error(:invalid_stream_chunk, acc, model)
     end
   end
 
-  defp adapt_anthropic(sse, model_name) do
-    reducer = fn
-      :done, acc ->
-        if Map.get(acc, :error),
-          do: {[], acc},
-          else: {[{:response, build_streamed_response(acc)}], acc}
-
-      {:error, _} = e, acc ->
-        {[e], Map.put(acc, :error, true)}
-
-      map, acc ->
-        interpret_anthropic(map, acc)
+  defp stream_step(
+         %{"type" => "content_block_start", "index" => index, "content_block" => block},
+         %{started: true} = acc,
+         model
+       )
+       when is_integer(index) and index >= 0 and is_map(block) do
+    with false <- Map.has_key?(acc.blocks, index),
+         {:ok, block, events} <- start_block(block) do
+      {:cont, events, %{acc | blocks: Map.put(acc.blocks, index, block)}}
+    else
+      _ -> stream_error(:invalid_content_block, acc, model)
     end
+  end
 
-    Stream.transform(
-      sse,
-      %{text: <<>>, in_tokens: nil, out_tokens: nil, model: model_name, error: false},
-      reducer
+  defp stream_step(
+         %{"type" => "content_block_delta", "index" => index, "delta" => delta},
+         acc,
+         model
+       ) do
+    with %{closed: false} = block <- Map.get(acc.blocks, index),
+         {:ok, block, events} <- update_block(block, delta) do
+      {:cont, events, %{acc | blocks: Map.put(acc.blocks, index, block)}}
+    else
+      _ -> stream_error(:invalid_content_block_delta, acc, model)
+    end
+  end
+
+  defp stream_step(%{"type" => "content_block_stop", "index" => index}, acc, model) do
+    with %{closed: false} = block <- Map.get(acc.blocks, index),
+         true <- valid_block?(block) do
+      {:cont, [], %{acc | blocks: Map.put(acc.blocks, index, %{block | closed: true})}}
+    else
+      _ -> stream_error(:invalid_tool_arguments, acc, model)
+    end
+  end
+
+  defp stream_step(
+         %{"type" => "message_delta"} = event,
+         %{started: true} = acc,
+         model
+       ) do
+    delta = event["delta"] || %{}
+    usage = event["usage"] || (is_map(delta) && delta["usage"]) || nil
+
+    if is_map(delta) and (is_nil(usage) or is_map(usage)) and
+         (is_nil(delta["stop_reason"]) or is_binary(delta["stop_reason"])) do
+      latest = if is_map(usage), do: Map.merge(acc.usage || %{}, usage), else: acc.usage
+      events = if is_map(usage), do: [{:usage, parse_usage(latest)}], else: []
+
+      {:cont, events,
+       %{acc | usage: latest, stop_reason: delta["stop_reason"] || acc.stop_reason}}
+    else
+      stream_error(:invalid_stream_chunk, acc, model)
+    end
+  end
+
+  defp stream_step(_, acc, model), do: stream_error(:invalid_stream_chunk, acc, model)
+
+  defp start_block(%{"type" => "text", "text" => text}) when is_binary(text),
+    do: {:ok, %{type: :text, content: text, closed: false}, delta_event(:text_delta, text)}
+
+  defp start_block(%{"type" => "thinking", "thinking" => text} = block) when is_binary(text),
+    do:
+      {:ok, %{type: :thinking, content: text, signature: block["signature"] || "", closed: false},
+       delta_event(:thinking_delta, text)}
+
+  defp start_block(%{"type" => "redacted_thinking", "data" => data}) when is_binary(data),
+    do: {:ok, %{type: :thinking, content: data, signature: nil, closed: false}, []}
+
+  defp start_block(%{"type" => "tool_use", "id" => id, "name" => name, "input" => input})
+       when is_binary(id) and id != "" and is_binary(name) and name != "" and is_map(input),
+       do: {:ok, %{type: :tool, id: id, name: name, input: input, json: "", closed: false}, []}
+
+  defp start_block(_), do: :error
+
+  defp update_block(%{type: :text} = block, %{"type" => "text_delta", "text" => text})
+       when is_binary(text),
+       do: {:ok, %{block | content: block.content <> text}, delta_event(:text_delta, text)}
+
+  defp update_block(%{type: :thinking} = block, %{"type" => "thinking_delta", "thinking" => text})
+       when is_binary(text),
+       do: {:ok, %{block | content: block.content <> text}, delta_event(:thinking_delta, text)}
+
+  defp update_block(
+         %{type: :thinking, signature: signature} = block,
+         %{"type" => "signature_delta", "signature" => text}
+       )
+       when is_binary(text) and is_binary(signature),
+       do: {:ok, %{block | signature: signature <> text}, []}
+
+  defp update_block(
+         %{type: :tool, input: input} = block,
+         %{"type" => "input_json_delta", "partial_json" => json}
+       )
+       when is_binary(json) and map_size(input) == 0,
+       do: {:ok, %{block | json: block.json <> json}, []}
+
+  defp update_block(_, _), do: :error
+
+  defp valid_block?(%{type: :tool, json: json}) when json != "",
+    do: match?({:ok, args} when is_map(args), Jason.decode(json))
+
+  defp valid_block?(_), do: true
+  defp delta_event(_, ""), do: []
+  defp delta_event(type, text), do: [{type, text}]
+
+  defp build_streamed_response(acc) do
+    parts =
+      acc.blocks
+      |> Enum.sort_by(&elem(&1, 0))
+      |> Enum.map(fn {_, block} ->
+        case block do
+          %{type: :text} ->
+            %Part.Text{content: block.content}
+
+          %{type: :thinking} ->
+            %Part.Thinking{content: block.content, signature: block.signature}
+
+          %{type: :tool} ->
+            args = if block.json == "", do: block.input, else: block.json
+
+            args =
+              case args do
+                json when is_binary(json) ->
+                  case Jason.decode(json) do
+                    {:ok, map} when is_map(map) -> map
+                    _ -> json
+                  end
+
+                map ->
+                  map
+              end
+
+            %Part.ToolCall{
+              tool_name: block.name,
+              tool_call_id: block.id,
+              args: args,
+              kind: :function
+            }
+        end
+      end)
+
+    Message.new_response(parts,
+      usage: parse_usage(acc.usage),
+      model_name: acc.model,
+      finish_reason: map_stop_reason(acc.stop_reason)
     )
   end
 
-  defp interpret_anthropic(%{"type" => "message_start", "message" => msg}, acc) do
-    in_t = get_in(msg, ["usage", "input_tokens"])
-    {[], %{acc | in_tokens: in_t, model: msg["model"] || acc.model}}
-  end
-
-  defp interpret_anthropic(
-         %{"type" => "content_block_delta", "delta" => %{"type" => "text_delta", "text" => t}},
-         acc
-       ) do
-    {[{:text_delta, t}], %{acc | text: acc.text <> t}}
-  end
-
-  # Real Anthropic carries usage under delta.usage; Z.AI carries it at top-level usage.
-  defp interpret_anthropic(%{"type" => "message_delta", "usage" => usage}, acc)
-       when is_map(usage) do
-    out = usage["output_tokens"] || acc.out_tokens
-    inp = usage["input_tokens"] || acc.in_tokens
-    {[], %{acc | out_tokens: out, in_tokens: inp}}
-  end
-
-  defp interpret_anthropic(%{"type" => "message_delta", "delta" => %{"usage" => usage}}, acc)
-       when is_map(usage) do
-    out = usage["output_tokens"] || acc.out_tokens
-    inp = usage["input_tokens"] || acc.in_tokens
-    {[], %{acc | out_tokens: out, in_tokens: inp}}
-  end
-
-  defp interpret_anthropic(_, acc), do: {[], acc}
-
-  defp build_streamed_response(acc) do
-    parts = if acc.text == "", do: [], else: [%Part.Text{content: acc.text}]
-
-    usage =
-      if acc.in_tokens || acc.out_tokens do
-        %Usage{input_tokens: acc.in_tokens || 0, output_tokens: acc.out_tokens || 0}
-      else
-        nil
+  defp stream_error(reason, acc, model) do
+    {reason, status, body} =
+      case reason do
+        {:http_error, status, body} -> {:http_error, status, body}
+        {:provider_error, body} -> {:provider_error, nil, body}
+        %{reason: :timeout} = exception -> {:timeout, nil, inspect(exception)}
+        %_{} = exception -> {:request_failed, nil, inspect(exception)}
+        reason -> {reason, nil, nil}
       end
 
-    Message.new_response(parts, usage: usage, model_name: acc.model)
+    error = %ExAgent.RequestError{
+      provider: :anthropic,
+      reason: reason,
+      status: status,
+      body: body,
+      partial_response: partial_stream_response(acc),
+      model: model
+    }
+
+    {:halt, [{:error, error}], acc}
   end
+
+  defp partial_stream_response(%{blocks: blocks, usage: nil}) when map_size(blocks) == 0, do: nil
+  defp partial_stream_response(acc), do: build_streamed_response(acc)
 
   # ----- decode: response -> our structs ----------------------------------
   # Anthropic / Z.AI occasionally return a 200 with `content: null` (overload,
@@ -469,8 +596,14 @@ defmodule ExAgent.Providers.Anthropic do
   defp map_stop_reason(other) when is_binary(other), do: :unknown
   defp map_stop_reason(nil), do: nil
 
-  defp parse_usage(%{"input_tokens" => in_t, "output_tokens" => out_t}) do
-    %Usage{input_tokens: in_t || 0, output_tokens: out_t || 0, details: %{}}
+  defp parse_usage(%{} = usage) do
+    details = usage |> Map.take(["cache_creation_input_tokens", "cache_read_input_tokens"])
+
+    %Usage{
+      input_tokens: usage["input_tokens"] || 0,
+      output_tokens: usage["output_tokens"] || 0,
+      details: details
+    }
   end
 
   defp parse_usage(_), do: nil
@@ -489,6 +622,18 @@ defmodule ExAgent.Providers.Anthropic do
   end
 
   defp put_settings(body, nil), do: body
+
+  defp put_extra(body, %ModelSettings{extra: extra}) do
+    normalized =
+      Map.new(extra, fn {key, value} ->
+        key = to_string(key)
+        {key, Map.get(extra, key, value)}
+      end)
+
+    Map.merge(body, Map.drop(normalized, ["model", "messages", "system", "tools", "stream"]))
+  end
+
+  defp put_extra(body, nil), do: body
 
   defp encode_content(content) when is_binary(content), do: content
   defp encode_content(content), do: Jason.encode!(content)

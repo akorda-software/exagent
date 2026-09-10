@@ -41,15 +41,13 @@ defmodule ExAgent.ServerRunOptionsTest do
   test "cost estimator reaches the budget guard" do
     parent = self()
 
-    agent =
-      ExAgent.new(
-        model: %Test{label: "unused"},
-        usage_limits: %ExAgent.UsageLimits{max_budget_cents: 1}
-      )
+    # Estimates describe observed request usage, not a prediction on empty usage.
+    # The first response spends the budget; no subsequent tool/request may run.
+    agent = %{tool_agent(parent) | usage_limits: %ExAgent.UsageLimits{max_budget_cents: 1}}
 
     server = start_supervised!({Server, agent: agent})
 
-    assert {:error, {:usage_limit_exceeded, :budget_cents, 2}} =
+    assert {:error, %ExAgent.RunError{reason: {:usage_limit_exceeded, :budget_cents, 2}}} =
              Server.chat(server, "go",
                estimate_cost: fn usage ->
                  send(parent, {:estimated, usage})
@@ -57,7 +55,8 @@ defmodule ExAgent.ServerRunOptionsTest do
                end
              )
 
-    assert_receive {:estimated, %Message.Usage{}}
+    assert_receive {:estimated, %Message.Usage{input_tokens: 1, output_tokens: 1}}
+    refute_received :executed
   end
 
   test "queued send_message and steer retain per-run options" do
@@ -84,7 +83,7 @@ defmodule ExAgent.ServerRunOptionsTest do
       )
 
     assert {:ok, _} = Server.send_message(server, "block")
-    assert_receive {:blocked, worker}
+    assert_receive {:blocked, worker}, 1000
     deny = Permissions.new!(default: :deny)
     assert {:ok, queued} = Server.send_message(server, "queued", permissions: deny)
     assert {:ok, steered} = Server.steer(server, "steered", permissions: deny)
@@ -102,6 +101,68 @@ defmodule ExAgent.ServerRunOptionsTest do
     assert Enum.all?(returns, &String.contains?(&1, "not permitted"))
   end
 
+  test "an expired negative absolute deadline is forwarded before any model request" do
+    parent = self()
+
+    model = %Test{
+      script: [
+        fn ->
+          send(parent, :unexpected_model_request)
+          "too late"
+        end
+      ]
+    }
+
+    server = start_supervised!({Server, agent: ExAgent.new(model: model)})
+    deadline = min(-1, System.monotonic_time(:millisecond) - 1)
+
+    assert {:error, %ExAgent.RunError{reason: :deadline_exceeded}} =
+             Server.chat(server, "go", deadline: deadline)
+
+    refute_received :unexpected_model_request
+  end
+
+  test "max_concurrent_requests reaches the scope validation boundary" do
+    parent = self()
+
+    model = %Test{
+      script: [
+        fn ->
+          send(parent, :unexpected_model_request)
+          "unbounded"
+        end
+      ]
+    }
+
+    server = start_supervised!({Server, agent: ExAgent.new(model: model)})
+
+    assert {:error, %ExAgent.RunError{reason: :invalid_execution_scope_options}} =
+             Server.chat(server, "go", max_concurrent_requests: 0)
+
+    refute_received :unexpected_model_request
+  end
+
+  test "model-aware arity-two pricing survives the Server boundary" do
+    parent = self()
+    server = start_supervised!({Server, agent: ExAgent.new(model: %Test{label: "priced"})})
+
+    estimator = fn identity, usage ->
+      send(parent, {:model_priced, identity, usage})
+      if (usage.input_tokens || 0) + (usage.output_tokens || 0) == 0, do: 0, else: 2
+    end
+
+    assert {:ok, result} =
+             Server.chat(server, "go",
+               estimate_cost: estimator,
+               deadline: System.monotonic_time(:millisecond) + 30_000,
+               max_concurrent_requests: 1
+             )
+
+    assert_receive {:model_priced, _identity, %Message.Usage{}}
+    assert result.cost_cents == 2
+    assert result.cost_status == :known
+  end
+
   test "explicit history stays supported and internal event/run options cannot be replaced" do
     parent = self()
     agent = ExAgent.new(model: %Test{label: "ok"}, instructions: "system")
@@ -115,6 +176,12 @@ defmodule ExAgent.ServerRunOptionsTest do
 
     opts = [
       run_id: "injected",
+      root_run_id: "injected-root",
+      parent_run_id: "injected-parent",
+      model_request_id: "injected-request",
+      execution_scope: self(),
+      parent_context: %{execution_scope: self()},
+      on_progress: fn _ -> send(parent, :injected_progress) end,
       on_event: fn e -> send(parent, {:injected, e}) end,
       prepend_instructions: false
     ]
@@ -123,6 +190,10 @@ defmodule ExAgent.ServerRunOptionsTest do
     assert %Message.Request{parts: [%Part.System{}, %Part.User{}]} = hd(first.messages)
     assert_receive {:exagent_event, %Event{type: :run_started, run_id: id}}
     refute id == "injected"
+    assert first.root_run_id == first.run_id
+    assert first.parent_run_id == nil
+    refute first.model_request_id == "injected-request"
+    refute_received :injected_progress
     refute_received {:injected, _}
     history = [Message.new_request([%Part.User{content: "shared"}])]
     assert {:ok, result} = Server.chat(server, "next", message_history: history)

@@ -3,7 +3,7 @@ defmodule ExAgent.Store do
   Behaviour for persisting `ExAgent.Server.Snapshot`s (and, in Phase 3, session
   snapshots).
 
-  ExAgent never owns a database: the store is a pluggable behaviour. The default
+   ExAgent never owns a database: the store is a pluggable behaviour. The optional
   `ExAgent.Store.ETS` keeps snapshots in an in-process ETS table (dev/test); a
   future `ExAgent.Store.Postgres` will implement the same contract for durable,
   multi-node persistence.
@@ -22,7 +22,13 @@ defmodule ExAgent.Store do
   Implementations MUST round-trip snapshots through a portable encoding (JSON
   for the ETS impl), never `term_to_binary` of arbitrary terms. This guarantees
   the same data can land in Postgres later without redesign, and refuses to
-  persist non-serializable state (pids, secrets, closures).
+   persist non-serializable state (pids, closures). JSON does not redact secrets.
+
+   Save replaces one complete snapshot atomically and returns `:ok` only after
+   the backend confirms the write. Error/timeout can mean an unknown write
+   outcome. There must be one logical writer per key; this contract does not
+   provide distributed locking or replay of external effects. Adapter IO must
+   be bounded: a synchronous blocked adapter also blocks its runtime owner.
 
   A store is referenced as `{module, config}` where `config` is opaque to
   ExAgent (e.g. an ETS table name). `normalize/1` turns friendly forms into that
@@ -83,14 +89,14 @@ defmodule ExAgent.Store do
   @doc "Persist an agent snapshot via the resolved `{module, config}` tuple."
   @spec save_agent_snapshot({module(), term()}, Snapshot.t()) :: :ok | {:error, term()}
   def save_agent_snapshot({mod, config}, %Snapshot{} = snapshot) do
-    mod.save_agent_snapshot(config, snapshot)
+    protect(fn -> mod.save_agent_snapshot(config, snapshot) end, :save)
   end
 
   @doc "Load an agent snapshot via the resolved tuple."
   @spec load_agent_snapshot({module(), term()}, String.t()) ::
           {:ok, Snapshot.t()} | {:error, term()}
   def load_agent_snapshot({mod, config}, agent_id) do
-    mod.load_agent_snapshot(config, agent_id)
+    protect(fn -> mod.load_agent_snapshot(config, agent_id) end, :load)
   end
 
   @doc "List agent snapshots via the resolved tuple."
@@ -108,19 +114,33 @@ defmodule ExAgent.Store do
   @doc "Persist a session snapshot via the resolved tuple."
   @spec save_session_snapshot({module(), term()}, SessionSnapshot.t()) :: :ok | {:error, term()}
   def save_session_snapshot({mod, config}, %SessionSnapshot{} = snapshot) do
-    mod.save_session_snapshot(config, snapshot)
+    protect(fn -> mod.save_session_snapshot(config, snapshot) end, :save)
   end
 
   @doc "Load a session snapshot via the resolved tuple."
   @spec load_session_snapshot({module(), term()}, String.t()) ::
           {:ok, SessionSnapshot.t()} | {:error, term()}
   def load_session_snapshot({mod, config}, session_id) do
-    mod.load_session_snapshot(config, session_id)
+    protect(fn -> mod.load_session_snapshot(config, session_id) end, :load)
   end
 
   @doc "Delete a session snapshot via the resolved tuple."
   @spec delete_session_snapshot({module(), term()}, String.t()) :: :ok
   def delete_session_snapshot({mod, config}, session_id) do
     mod.delete_session_snapshot(config, session_id)
+  end
+
+  @doc false
+  def protect(fun, operation) do
+    case fun.() do
+      :ok when operation == :save -> :ok
+      {:ok, _} = result when operation == :load -> result
+      {:error, _} = error -> error
+      other -> {:error, {:invalid_store_return, other}}
+    end
+  rescue
+    exception -> {:error, {:exception, exception}}
+  catch
+    kind, reason -> {:error, {kind, reason}}
   end
 end

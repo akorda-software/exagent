@@ -1,23 +1,13 @@
 defmodule ExAgent.Session.Snapshot do
   @moduledoc """
-  A serializable checkpoint of an `ExAgent.Session`'s coordination state.
+  Version 2 JSON checkpoint of coordination data; reads valid v1 data.
 
-  Carries the **serializable** parts of a session: the app-defined
-  `shared_state`, the participant roster (ids + kinds — never the live `ref`s),
-  the turn-policy module and its state, the current participant, and the status.
-
-  Just like `ExAgent.Server.Snapshot`, it round-trips through **strict JSON** so
-  nothing opaque (pids, secrets, closures, the live agent refs) can land in the
-  store. The live participant `ref`s come from the app on restart.
-
-  ## The shared_state portability rule
-
-  `shared_state` must be JSON-encodable (plain maps/lists/scalars, or a struct
-  with `@derive [Jason.Encoder]` whose fields are themselves JSON-safe — avoid
-  tuples, which Jason turns into arrays that don't round-trip). `Jason.encode!`
-  raises rather than persisting junk, exactly like `Server.Snapshot` does for
-  `metadata`.
+  Decoding never loads modules or constructs structs chosen by stored bytes.
+  `restore/3` uses only the policy explicitly supplied by the host app. Custom
+  policies opt in with TurnPolicy.snapshot/1 and restore_snapshot/3. Participant
+  refs and live processes are not stored. JSON does not redact secret strings.
   """
+  alias ExAgent.{SnapshotData, Session.PolicyCodec}
 
   defstruct [
     :session_id,
@@ -27,141 +17,164 @@ defmodule ExAgent.Session.Snapshot do
     :policy_state,
     :current,
     :status,
-    :seq,
-    :metadata,
-    :version,
-    :saved_at
+    :saved_at,
+    seq: 0,
+    metadata: %{},
+    version: 2,
+    policy_version: 1,
+    revision: 0
   ]
 
-  @type t :: %__MODULE__{
-          session_id: String.t(),
-          shared_state: term(),
-          participants: [%{id: term(), kind: atom()}],
-          policy_mod: module(),
-          policy_state: term(),
-          current: term() | nil,
-          status: atom(),
-          seq: non_neg_integer(),
-          metadata: map(),
-          version: pos_integer(),
-          saved_at: String.t() | nil
+  @type t :: %__MODULE__{}
+  @statuses [:created, :running, :paused, :closed, :done]
+
+  def new(state) do
+    unless Enum.all?(state.participants, fn {id, _} -> SnapshotData.id?(id) end) do
+      raise ArgumentError, "persisted participant ids must be strings or integers"
+    end
+
+    case PolicyCodec.dump(state.policy_state) do
+      {:ok, version, data} ->
+        %__MODULE__{
+          session_id: state.session_id,
+          shared_state: state.shared_state,
+          participants: Enum.map(state.participants, fn {id, p} -> %{id: id, kind: p.kind} end),
+          policy_mod: Atom.to_string(state.policy_mod),
+          policy_state: data,
+          policy_version: version,
+          current: state.current,
+          status: state.status,
+          seq: state.seq,
+          metadata: state.metadata,
+          revision: state.revision,
+          saved_at: DateTime.utc_now()
         }
 
-  @version 1
-
-  @doc "Build a snapshot from a `Session.State`, stripping non-serializable refs."
-  def new(%ExAgent.Session.State{} = s) do
-    %__MODULE__{
-      session_id: s.session_id,
-      shared_state: s.shared_state,
-      participants:
-        Enum.map(s.participants, fn {_id, %ExAgent.Session.Participant{id: id, kind: kind}} ->
-          %{id: id, kind: kind}
-        end),
-      policy_mod: s.policy_mod,
-      policy_state: s.policy_state,
-      current: s.current,
-      status: s.status,
-      seq: s.seq,
-      metadata: s.metadata,
-      version: @version
-    }
-  end
-
-  @doc "Strict JSON encode. Raises on non-encodable values (pids, closures, …)."
-  @spec serialize(t()) :: binary()
-  def serialize(%__MODULE__{} = snap) do
-    Jason.encode!(%{
-      version: snap.version || @version,
-      session_id: snap.session_id,
-      shared_state: snap.shared_state,
-      participants: snap.participants,
-      policy_mod: Atom.to_string(snap.policy_mod),
-      policy_state: encode_policy_state(snap.policy_state),
-      current: snap.current,
-      status: snap.status,
-      seq: snap.seq,
-      metadata: snap.metadata,
-      saved_at: DateTime.utc_now() |> DateTime.to_iso8601()
-    })
-  end
-
-  @doc "Decode JSON back into a snapshot, reconstructing the policy struct."
-  @spec deserialize(binary()) :: {:ok, t()} | {:error, term()}
-  def deserialize(binary) do
-    with {:ok, %{} = map} <- Jason.decode(binary) do
-      {:ok,
-       %__MODULE__{
-         session_id: map["session_id"],
-         shared_state: map["shared_state"],
-         participants:
-           Enum.map(map["participants"] || [], fn
-             %{"id" => id, "kind" => kind} -> %{id: id, kind: atomize(kind)}
-             p -> p
-           end),
-         policy_mod: safe_module(map["policy_mod"]),
-         policy_state: decode_policy_state(map["policy_state"]),
-         current: map["current"],
-         status: atomize(map["status"]),
-         seq: map["seq"] || 0,
-         metadata: map["metadata"] || %{},
-         version: map["version"] || @version,
-         saved_at: map["saved_at"]
-       }}
+      {:error, reason} ->
+        raise ArgumentError, "cannot snapshot policy: #{inspect(reason)}"
     end
   end
 
-  # A policy_state is normally a struct (RoundRobin/Initiative/SupervisorPolicy)
-  # with JSON-safe fields. Round-trip it via its __struct__ tag so the turn
-  # position (index/current) survives a restart.
-  defp encode_policy_state(%{__struct__: mod} = state) do
-    fields = state |> Map.from_struct() |> encode_fields()
-    Map.put(fields, "__struct__", Atom.to_string(mod))
+  def serialize(%__MODULE__{} = snapshot),
+    do: snapshot |> Map.from_struct() |> Jason.encode!()
+
+  def deserialize(binary), do: SnapshotData.decode(binary, &from_map/1)
+
+  def validate(%__MODULE__{} = snapshot, expected_id) do
+    with {:ok, snapshot} <- deserialize(serialize(snapshot)),
+         true <- snapshot.session_id == expected_id do
+      {:ok, snapshot}
+    else
+      false -> {:error, :snapshot_id_mismatch}
+      {:error, _} = error -> error
+    end
+  rescue
+    _ -> {:error, :invalid_snapshot}
   end
 
-  defp encode_policy_state(other), do: other
+  def validate(_, _), do: {:error, :invalid_snapshot}
 
-  defp decode_policy_state(%{"__struct__" => mod_str} = map) when is_binary(mod_str) do
-    case safe_module(mod_str) do
-      nil ->
-        nil
+  def restore(snapshot, trusted_mod, context) do
+    if snapshot.policy_mod == Atom.to_string(trusted_mod) do
+      PolicyCodec.restore(trusted_mod, snapshot.policy_version, snapshot.policy_state, context)
+    else
+      {:error, :snapshot_policy_mismatch}
+    end
+  rescue
+    _ -> {:error, :invalid_policy_state}
+  catch
+    _, _ -> {:error, :invalid_policy_state}
+  end
 
-      mod ->
-        map
-        |> Map.delete("__struct__")
-        |> Enum.into(%{}, fn {k, v} -> {atomize(k), decode_field(v)} end)
-        |> then(&struct(mod, &1))
+  defp from_map(map) do
+    version = Map.get(map, "version", 1)
+    status = Enum.find(@statuses, &(Atom.to_string(&1) == map["status"]))
+    participants = map["participants"]
+
+    cond do
+      version not in [1, 2] ->
+        {:error, {:unsupported_snapshot_version, version}}
+
+      not is_binary(map["session_id"]) ->
+        {:error, :invalid_session_id}
+
+      is_nil(status) ->
+        {:error, :invalid_status}
+
+      not valid_participants?(participants) ->
+        {:error, :invalid_participants}
+
+      not SnapshotData.counter?(Map.get(map, "revision", 0)) ->
+        {:error, :invalid_revision}
+
+      not SnapshotData.counter?(Map.get(map, "seq", 0)) ->
+        {:error, :invalid_seq}
+
+      not is_map(Map.get(map, "metadata", %{})) ->
+        {:error, :invalid_metadata}
+
+      not is_binary(map["policy_mod"]) ->
+        {:error, :invalid_policy_module}
+
+      true ->
+        with {:ok, date} <- SnapshotData.timestamp(map["saved_at"]),
+             {:ok, data} <- policy_data(map, version) do
+          roster =
+            Enum.map(participants, fn p ->
+              %{id: p["id"], kind: if(p["kind"] == "agent", do: :agent, else: :human)}
+            end)
+
+          current = map["current"]
+
+          if (is_nil(current) or Enum.any?(roster, &(&1.id == current))) and
+               (status != :running or not is_nil(current)) and
+               (status not in [:created, :done] or is_nil(current)) do
+            {:ok,
+             %__MODULE__{
+               session_id: map["session_id"],
+               shared_state: map["shared_state"],
+               participants: roster,
+               policy_mod: map["policy_mod"],
+               policy_state: data,
+               policy_version: Map.get(map, "policy_version", 1),
+               current: current,
+               status: status,
+               seq: Map.get(map, "seq", 0),
+               revision: Map.get(map, "revision", 0),
+               metadata: Map.get(map, "metadata", %{}),
+               saved_at: date
+             }}
+          else
+            {:error, :invalid_current}
+          end
+        end
     end
   end
 
-  defp decode_policy_state(other), do: other
+  defp policy_data(map, 1) do
+    expected = map["policy_mod"]
 
-  # struct field values: turn tuple-lists back into tuples (JSON lost them) and
-  # leave everything else as decoded. Only do this for known tuple-shaped fields?
-  # No — heuristics are fragile. Keep values as decoded; apps with tuples in
-  # policy_state must make them JSON-portable (same rule as shared_state).
-  defp encode_fields(fields), do: fields
-  defp decode_field(v), do: v
+    case map["policy_state"] do
+      %{"__struct__" => ^expected} = data ->
+        {:ok, Map.delete(data, "__struct__")}
 
-  defp atomize(value) when is_binary(value) do
-    # Only mint atoms that already exist (the policy modules/status atoms are
-    # loaded with the app); avoids atom-table growth from a hostile store.
-    try do
-      String.to_existing_atom(value)
-    rescue
-      ArgumentError -> value
+      _ ->
+        {:error, :invalid_policy_state}
     end
   end
 
-  defp atomize(value), do: value
-
-  defp safe_module(mod_str) when is_binary(mod_str) do
-    case Code.ensure_loaded(atomize(mod_str)) do
-      {:module, mod} -> mod
-      _ -> nil
-    end
+  defp policy_data(map, 2) do
+    if is_integer(map["policy_version"]) and map["policy_version"] > 0,
+      do: {:ok, map["policy_state"]},
+      else: {:error, :invalid_policy_version}
   end
 
-  defp safe_module(mod) when is_atom(mod), do: mod
-  defp safe_module(_), do: nil
+  defp valid_participants?(participants) when is_list(participants) do
+    Enum.all?(participants, fn
+      %{"id" => id, "kind" => kind} -> SnapshotData.id?(id) and kind in ["agent", "human"]
+      _ -> false
+    end) and length(participants) == MapSet.size(MapSet.new(participants, & &1["id"]))
+  end
+
+  defp valid_participants?(_), do: false
 end

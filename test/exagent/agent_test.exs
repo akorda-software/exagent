@@ -118,8 +118,8 @@ defmodule ExAgent.AgentTest do
 
       assert {:ok, %{output: "recovered", messages: messages}} = ExAgent.run(agent, "weather?")
 
-      assert %Part.Retry{tool_name: "get_weather"} =
-               find_part(messages, ExAgent.Message.Part.Retry)
+      assert %Part.ToolReturn{tool_name: "get_weather", status: :validation_error} =
+               find_part(messages, ExAgent.Message.Part.ToolReturn)
     end
   end
 
@@ -168,7 +168,10 @@ defmodule ExAgent.AgentTest do
           output_retries: 0
         )
 
-      assert {:error, {:unexpected_model_behavior, {:output_retries_exhausted, _}}} =
+      assert {:error,
+              %ExAgent.RunError{
+                reason: {:unexpected_model_behavior, {:output_retries_exhausted, _}}
+              }} =
                ExAgent.run(agent, "loop?")
     end
 
@@ -197,7 +200,8 @@ defmodule ExAgent.AgentTest do
       agent =
         ExAgent.new(model: model, tools: [echo], usage_limits: %UsageLimits{tool_calls_limit: 2})
 
-      assert {:error, {:usage_limit_exceeded, :tool_calls, 3}} = ExAgent.run(agent, "go")
+      assert {:error, %ExAgent.RunError{reason: {:usage_limit_exceeded, :tool_calls, 3}}} =
+               ExAgent.run(agent, "go")
     end
 
     test "max_budget_cents halts the run via an estimate_cost function" do
@@ -223,7 +227,7 @@ defmodule ExAgent.AgentTest do
         ExAgent.new(model: model, tools: [echo], usage_limits: %UsageLimits{max_budget_cents: 2})
 
       # 1 cent per input token; the TestModel reports 1 input token per response.
-      assert {:error, {:usage_limit_exceeded, :budget_cents, 2}} =
+      assert {:error, %ExAgent.RunError{reason: {:usage_limit_exceeded, :budget_cents, 2}}} =
                ExAgent.run(agent, "go", estimate_cost: fn u -> u.input_tokens end)
     end
 

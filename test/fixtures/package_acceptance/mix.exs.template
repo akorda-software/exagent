@@ -1,0 +1,23 @@
+defmodule PackageAcceptance.MixProject do
+  use Mix.Project
+
+  def project do
+    [app: :package_acceptance, version: "0.0.0", elixir: "~> 1.17", deps: deps()]
+  end
+
+  def application, do: [extra_applications: [:logger]]
+
+  defp deps do
+    base = [{:exagent, path: "vendor/exagent"}]
+    api = [{:opentelemetry_api, "~> 1.5.0"}]
+    sdk = [{:opentelemetry, "~> 1.7.0"}]
+    exporter = [{:opentelemetry_exporter, "~> 1.10.0", runtime: false}]
+
+    case System.get_env("PACKAGE_ACCEPTANCE_MODE", "none") do
+      "none" -> base
+      "api" -> base ++ api
+      "sdk" -> base ++ api ++ sdk
+      "exporter" -> base ++ api ++ sdk ++ exporter
+    end
+  end
+end

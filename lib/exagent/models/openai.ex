@@ -10,16 +10,21 @@ defmodule ExAgent.Models.OpenAI do
   """
   @behaviour ExAgent.Model
 
-  defstruct [:model, :api_key, :base_url, extra_headers: []]
+  defstruct [:model, :api_key, :base_url, extra_headers: [], stream_options: []]
 
   @type t :: %__MODULE__{
           model: String.t(),
           api_key: String.t() | nil,
           base_url: String.t() | nil,
-          extra_headers: [{String.t(), String.t()}]
+          extra_headers: [{String.t(), String.t()}],
+          stream_options: keyword()
         }
 
-  @doc "Build an OpenAI model. `:api_key` falls back to `OPENAI_API_KEY`."
+  @doc """
+  Build an OpenAI model. `:api_key` falls back to `OPENAI_API_KEY`.
+  `:stream_options` configures local byte limits/demand timeout; see
+  `ExAgent.Providers.StreamTransport`. It is never sent in the model payload.
+  """
   @spec new(keyword()) :: t()
   def new(opts) when is_list(opts) do
     opts = Keyword.put_new(opts, :api_key, System.get_env("OPENAI_API_KEY"))

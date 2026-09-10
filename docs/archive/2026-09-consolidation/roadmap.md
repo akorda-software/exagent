@@ -1,5 +1,9 @@
 # ExAgent — Roadmap
 
+> **Archivo cerrado de septiembre de 2026.** Conserva el seguimiento tal como
+> quedó tras la consolidación; contiene checklists y estados de fechas distintas.
+> La [hoja de ruta vigente](../../development/roadmap.md) es la fuente de prioridades.
+
 > Estado: **1.0 completo**. Las fases 0–6 (núcleo, runtime con estado,
 > persistencia, sesión, coordinación, robustez, producción + ecosistema) están
 > implementadas y testeadas. Lo que queda está abajo, en "Próximo". El caso
@@ -15,7 +19,7 @@ no presupone el estado de los consumidores externos ni permite omitir SemVer.
 La finalización histórica de 1.0 no certifica que estos criterios estén cerrados.
 
 La política y criterios completos están en las secciones 2.1–2.3 de
-[`DESIGN.md`](./DESIGN.md). Este bloque tiene prioridad sobre ampliar funciones
+[`DESIGN.md`](../../architecture/design.md). Este bloque tiene prioridad sobre ampliar funciones
 del apartado «Próximo»; no vuelve a abrir indiscriminadamente todo lo entregado.
 
 - [x] Documentar visión, compatibilidad por defecto, justificación de rupturas
@@ -34,6 +38,142 @@ del apartado «Próximo»; no vuelve a abrir indiscriminadamente todo lo entrega
   guía de migración, en lugar de publicar rupturas parciales sucesivas.
 - [ ] Cerrar la consolidación con contratos revisados, pruebas y documentación;
   desde ese punto priorizar evolución aditiva y deprecaciones planificadas.
+
+### Investigación de base (2026-09-08)
+
+- [x] Revisar la implementación y contrastar frameworks/harnesses, ecosistema
+  Elixir y observabilidad abierta. Diagnóstico, fuentes y propuesta por unidades
+  en [`RESEARCH.md`](research.md); no son decisiones de contrato aprobadas.
+- [x] Verificar la suite offline del estado local: 310 tests pasan, 28 excluidos,
+  con dos warnings preexistentes de aliases en el test de concurrencia del Server.
+  Hex se instaló en un `MIX_HOME` temporal, sin modificar dependencias ni versión.
+- [ ] Acordar contratos y alcance de recuperación; reproducir los
+  gaps prioritarios antes de cerrar contratos o preparar nuevas firmas.
+- [ ] Probar instrumentación OTel nativa y el mismo escenario en Langfuse/Opik,
+  incluyendo privacidad, propagación entre procesos, uso y saturación. Ningún
+  adaptador de observabilidad está implementado por esta investigación.
+- [ ] Inventariar usos de Dragonex/WhoamAI con autorización y validar después la
+  migración. No se han inspeccionado ni modificado consumidores en esta unidad.
+
+Limitaciones: auditoría estática más suite existente, no reproducciones nuevas
+de todos los hallazgos. Sin llamadas a proveedores, Postgres, despliegues de
+tracing ni benchmarks; no se han verificado cambios remotos pendientes de Git.
+Se mantiene abierta la revisión conjunta de contratos indicada arriba.
+
+### Plan de acción preparado (2026-09-09)
+
+- [x] Concretar la investigación en [`ACTION_PLAN.md`](action-plan.md), con
+  tareas, dependencias, criterios de cierre, verificación y decisiones pendientes.
+- [x] Registrar preferencia de observabilidad: mayor cobertura sin licencia
+  comercial a calidad comparable; aceptar funciones avanzadas comerciales por
+  una mejora relevante demostrada. D2 queda aclarada; backend pendiente de C6.
+- [x] **C0 técnico:** base, inventario inicial y siete riesgos P0 reproducidos;
+  medidas sintéticas iniciales registradas. Consumidores aún desconocidos.
+- [x] **C1 decisiones:** semánticas transversales y migraciones fijadas en DESIGN
+  8.2–8.4 bajo autonomía delegada, con dos propuestas Astra y el inventario real
+  de consumidores. La verificación de su implementación pertenece a C2–C5.
+- [x] **C2 (offline):** validación, permisos, resultados y retries explícitos de tools.
+  - [x] **C2.1:** corregir admisión ante configuración/acciones de permisos
+    inválidas y callbacks de aprobación no invocables, con regresiones de efectos.
+- [x] **C3 (offline):** loop sync/stream común, transporte limitado, adapters y
+  evaluación acotada de ReqLLM; aceptación real por backend pendiente en C8.
+- [x] **C4 (offline):** uso, presupuesto/autoridad de delegación y proyección de contexto.
+- [x] **C5 (offline):** ownership, eventos, checkpoint/retry-save, snapshots y FSM;
+  Store Postgres real y recuperación de efectos arbitrarios no están certificados.
+- [ ] **C6:** integrar OTel opcional y validar el backend de referencia.
+  - [x] Instrumentación neutral y aceptación offline mediante Orca/Astra, dos
+    revisiones frescas y verificador final independiente. Spans, propagación,
+    privacidad opt-in, processor acotado y ejemplo documentados en OBSERVABILITY.
+  - [x] **579 correctos/28 excluidos** en Elixir1.20/OTP29 y 1.18/OTP28, compile72
+    con warnings-as-errors, 14 invariantes C0 en ambos y probe R3 determinista.
+    Tres consumidores limpios (sin OTel, API sola y SDK) compilan sin warnings;
+    el último prueba el orden de compilación SDK→ExAgent y exportación real al fake.
+  - [x] Ejemplo509/509 spans, cero pérdidas/fallos. Overhead local de200 muestras
+    tras50 warmup: p50/p95 desactivado56/70us, activado123/178us, concurrencia1.
+    Son medidas sintéticas, no SLO de proveedores. Detalle en ACTION_PLAN9.
+  - [x] Auditoría focal del SDK/API publicados y perfil GenAI actual: cota BSP
+    blanda, flush sin ACK, contadores ausentes y metadata Logger residual. Se
+    justifica un processor nativo opt-in acotado; decisiones/fuentes en DESIGN8.6.
+    Los fixes de revisión incluyen compilación opcional, trap_exit/flush, Logger,
+    bigint y completitud conservadora de abort; decisiones en DESIGN8.6–8.7.
+  - [x] Exporter OTLP nativo contra loopback con protobuf inspeccionado, matriz de
+    fallos y caracterización de lifecycle (N01–N03; evidencia nocturna debajo).
+  - [ ] Cleanup HTTP general del exporter y comparación API/UI Langfuse/Opik con
+    acceso autorizado. Los límites upstream están reproducidos; ningún backend
+    está elegido ni desplegado.
+- [ ] **C7, condicionado al alcance:** aprobación diferida como datos recuperables.
+- [ ] **C8:** aceptación real, medidas de carga/evals y migración de la major.
+
+Estado: bloque C1–C5 implementado, revisado e integrado mediante Orca/Astra.
+Resultado final: **542 tests correctos, 28 excluidos**, con warnings como errores,
+en Elixir 1.20/OTP29 y 1.18/OTP28; compilación forzada de 70 archivos correcta.
+El verificador fresco independiente confirmó primero 541/28 en ambos runtimes;
+el cierre posterior añadió una regresión TCP y mínimos seguros Mint/HPAX,
+repitiendo ambas suites. Las 14 invariantes de los siete grupos C0 pasan.
+Se corrigieron también los dos warnings preexistentes de aliases de tests.
+Detalle y límites en [ACTION_PLAN, sección 8](action-plan.md#8-consolidacion-orquestada-c1-c5).
+Los workers están cerrados y el checkpoint está en ORCHESTRATION.md.
+El inventario read-only de Dragonex/WhoamAI
+ya está disponible: Dragonex Git a31b306/1.3.0, WhoamAI vendor c08125b/1.2.0;
+aceptación/migración de consumidores aún pendiente, sin editar sus aplicaciones.
+La selección Langfuse/Opik depende de comprobar calidad, funciones disponibles
+y operación con el criterio aclarado; el alojamiento sigue por confirmar.
+Esto no bloquea las primeras unidades ni el diseño OTel.
+Siguiente externo: resolver el lifecycle HTTP nativo y comparar Langfuse/Opik;
+el transporte local y la base neutral tienen la evidencia nocturna de abajo.
+Después, alcance C7 y aceptación/migración real C8.
+No se ha publicado ni cambiado versión. Los cinco workers C6 también están cerrados.
+El mínimo Elixir1.17 quedó verificado posteriormente en N06/N18, en la combinación
+concreta indicada abajo. Las fases históricas no sustituyen estos criterios.
+
+- [x] Preparar `NEXT_AGENT_PROMPT.md` para relevar al coordinador con contexto
+  limpio: mandato, Orca/Astra, contratos, evidencia final y restricciones.
+- [x] Ampliar el relevo para el encargo nocturno posterior: 18 unidades priorizadas
+  de OTLP local, paquete/toolchains, propiedades de runtime/protocolos, privacidad,
+  cargas, evals y cierre. El usuario pausó la implementación para preparar ese
+  prompt; ese corte histórico precede a la ejecución nocturna descrita debajo.
+  Baseline previo al relevo: 579 correctos/28 excluidos, seed806578. La comparación
+  de plataforma requiere acceso, pero no bloquea las demás unidades autónomas.
+
+### Consolidación nocturna: alcance local cerrado (2026-09-09/10)
+
+Run Orca `run_4315531152c9`, generación1, workers Astra. Baseline579/28,
+seed280440; cierre independiente **619 correctos,28 excluidos** en cada runtime,
+seed37556: Elixir1.20.0/OTP29.0.5,1.18.4/OTP28.0 y1.17.3/OTP27.3.4.17.
+Son40 tests nuevos sobre la base; los casos generados y probes tienen sus propios
+denominadores. Detalles, comandos y límites en ACTION_PLAN10.
+
+- [x] N01–N04/N12: OTLP nativo loopback con protobuf, fallos y privacidad; escenario
+  compuesto68 spans/11POST. N03 caracteriza retención nativa de perfiles/átomos/
+  sockets y verifica cleanup propio, sin certificar lifecycle HTTP general.
+- [x] N05/N06: consumidores de bytes TAR y mínima combinación comprobada. Startup
+  SDK opcional corregido para compilar sin warnings propios en1.17 y1.20. Runner
+  revisado protege selectores/destinos y conserva grafos/diagnósticos por separado.
+- [x] N07–N11: secuencias con oráculos independientes, restore adversarial, admisión
+  y autoridad por árbol, cache/schema/hooks y fragmentación/cleanup de protocolos.
+  No se demostró un defecto productivo nuevo en esos escenarios.
+- [x] N13/N15:4000 runs medidos correctos y12200 spans locales sin pérdidas normales;
+  percentiles c1/8/32, mini-soak finito y saturación32/610. Evals en dos dominios con
+  controles negativos. N14 concluye no-change, sin hotspot causal que justifique
+  otra optimización ni retirar garantías.
+- [x] N16/N17 focal:16 snippets (11 ejecutados/5 recetas),7 checks y dos errores
+  README corregidos; matriz de promesas y auditoría de deps tocadas, sin upgrades
+  especulativos ni inferir soporte de cada backend real.
+- [x] N18: compile forzado73 y suite en tres runtimes; C0 14/14, snippets7/7 y R3 1/1
+  en los tres; siete ejemplos y smoke final. Paquete final:72/72 contratos runtime,
+ 11/12 consumidores estrictos verdes. Exporter/OTP29 sigue rojo estricto por nueve
+  warnings gproc conocidos; no se ocultan ni se cuentan como fallos runtime.
+  Docs con warnings-as-errors, formato y diff correctos; ningún worker activo.
+
+**Límites abiertos:** P1 operacional del HTTP nativo, booleans/partial-success del
+exporter, comparación Langfuse/Opik, proveedores/DB/consumidores reales y alcance C7.
+C8 completo no se declara cerrado. Se conserva HEAD/WIP/untracked y nominal1.2.0,
+sin publicación, commit, bump, merge, despliegue ni cambios en consumidores.
+
+**Incidente de tooling:** un bootstrap heredó MIX_ARCHIVES y sustituyó Hex
+compartido por BEAM incompatible. Se contuvo y corrigió el runner; los gates finales
+usan tooling explícitamente aislado. El Hex compartido sigue pendiente de reparación
+autorizada. Evidencia y comandos locales seguros en ORCHESTRATION/ACTION_PLAN.
 
 Convención histórica: cada fase = módulos + tests + un ejemplo en `examples/` o
 `test/support/`. (Nota: el alias `mix check` corre tests en entorno dev; usar

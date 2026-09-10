@@ -32,7 +32,7 @@ defmodule ExAgent.Scenarios.StoreAndArgsSafetyTest do
             )
 
           # A run completes; checkpoint raises on the closure in metadata.
-          assert {:ok, _} = Server.chat(server, "go")
+          assert {:error, %ExAgent.CheckpointError{result: {:ok, _}}} = Server.chat(server, "go")
           # The server is still alive and usable.
           assert %{status: :idle} = Server.health(server)
 

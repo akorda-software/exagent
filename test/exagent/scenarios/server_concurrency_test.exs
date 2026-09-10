@@ -11,7 +11,7 @@ defmodule ExAgent.Scenarios.ServerConcurrencyTest do
 
   use ExUnit.Case, async: true
 
-  alias ExAgent.{Event, Models.Test, PubSub, Server}
+  alias ExAgent.{Models.Test, Server}
 
   # Defined at top level so the `{ErrorPubSub, []}` tuple stores the full module
   # atom (a nested module would store only the short name and fail to resolve).
