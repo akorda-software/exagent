@@ -1,9 +1,48 @@
 # Estado actual y recapitulación
 
-**Base revisada: cierre de consolidación del 2026-09-10.** El framework tiene una
+**Base revisada: auditoría de testing del 2026-09-10.** El framework tiene una
 base local ampliamente verificada. La aceptación de sistemas externos y la
 publicación de la major siguen abiertas. La versión nominal del checkout es
-**1.2.0**, pero contiene cambios incompatibles destinados a una major posterior.
+**1.3.0** en HEAD `69c2747`, pero contiene cambios incompatibles destinados a una
+major posterior. Los registros nocturnos de abajo corresponden al nominal1.2.0.
+
+## Última aceptación: auditoría de testing
+
+Inventario readonly completo, mejoras y dos revisiones frescas por área. Se
+corrigieron falsos verdes de eventos/cola/telemetry, oráculos de datos/efectos y
+cleanup; la auditoría reprodujo y cerró cinco familias de defectos de biblioteca.
+Se retiró un test ficticio de payload sólo después de comprobar sus sustitutos
+mediante mutación del adapter. Detalle y backlog en
+[auditoría de testing](development/testing-audit.md).
+
+**Auditoría cerrada por acuerdo del usuario; se retoma el desarrollo.** El testing
+se centra en los contratos e integración de ExAgent; los internals de sus
+dependencias corresponden a sus mantenedores. Los warnings Req/gproc se conservan
+como seguimiento externo y no bloquean por sí solos esa continuidad. El
+[criterio de verificación](development/verification.md) delimita responsabilidades
+y frecuencia; la segunda revisión queda diferida al paquete funcionalmente terminado.
+
+| Runtime de esta unidad | Compile forzado | Correctos | Fallos | Excluidos |
+|---|---:|---:|---:|---:|
+| Elixir1.20.0 / OTP29.0.5 | 75 fuentes | 655 | 0 | 28 |
+| Elixir1.17.3 / OTP27.3.4.17 | 75 fuentes + dependencias desde build vacío | 655 | 0 | 28 |
+
+Seed37556, warnings-as-errors. Los28excluidos son22proveedores y6Postgres;
+no son aceptación de esos sistemas. No se repitió1.18/28 en esta unidad.
+Harness compilado23/23; C0 exige14indicadores, docs7/7, R3instrumentado1/1,
+tres reports de evals y load smoke160, todos con exit0.
+
+**Paquete runtime24/24, strict pendiente en los cuatro grafos nativos.** El TAR
+de93archivos, seed771506, pasa seis nombres ExUnit por none/API/SDK/exporter,
+sin excluidos/skips. Cada grafo emite una deprecación `xref.exclude` de Req0.6.1
+bajo Mix1.20; exporter añade los nueve warnings gproc/OTP29 conocidos. El runner
+retiene **exit1**, aunque el runtime pase. No se cambió lock, floors ni dependencias
+para ocultarlo. La CI quedó explícitamente offline y con artefactos por fase;
+su driver pasó localmente, no se atribuye una ejecución remota GitHub.
+
+El estado de fuentes continúa como WIP de esta auditoría sobre69c2747, sin commit,
+bump ni publicación. El archivo `docs/archive/2026-09-testing-audit.md` conserva
+comandos, provenance, controles negativos y liquidación de Orca.
 
 ## Qué hemos consolidado
 
@@ -24,7 +63,7 @@ el runner de aceptación: selectores Mix heredados, destinos con enlaces, warnin
 por fase y colisión entre el grafo y su diagnóstico. No se presentan esas
 correcciones de tooling como bugs del loop de agentes.
 
-## Evidencia de la base
+## Evidencia de la consolidación anterior
 
 | Runtime | Compile forzado | Correctos | Fallos | Excluidos |
 |---|---:|---:|---:|---:|
@@ -74,13 +113,16 @@ la reorganización documental produce un artefacto local distinto.
 
 ## Situación de trabajo
 
-Todo sigue como WIP, incluidos los untracked, sobre HEAD
-`c08125be71eada363d08ca463cc7df2ea7855e4a`. No se hizo commit, merge, bump, publicación,
-despliegue ni modificación de consumidores. La ejecución Orca nocturna terminó:
+La ejecución nocturna cerró como WIP, incluidos los untracked, sobre HEAD
+`c08125be71eada363d08ca463cc7df2ea7855e4a`, sin commit, merge, bump, publicación,
+despliegue ni modificación de consumidores durante aquella ejecución. Orca terminó:
 16 Dispatches, 15 workers distintos cerrados; sus handles no se reutilizan.
 
-La prioridad inmediata es mantener la documentación ordenada y después cerrar
-[el plan de backend y paquete](development/roadmap.md), con sus gates explícitos.
+Al iniciar la auditoría de testing se observó HEAD `69c2747` y árbol limpio: la
+consolidación ya estaba integrada en Git. El baseline reproducido fue620/28,
+seed37556; las mejoras de esta sesión se mantienen como WIP nuevo. La prioridad
+activa y los gates posteriores están en [el roadmap](development/roadmap.md) y
+la [auditoría de testing](development/testing-audit.md).
 
 ## Reorganización documental verificada — 2026-09-10
 

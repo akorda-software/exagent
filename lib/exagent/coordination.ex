@@ -34,7 +34,7 @@ defmodule ExAgent.Coordination do
       so the delegate can be constructed lazily with the parent's context (e.g.
       to forward `deps` or pick a model per call).
     * `opts` — `:name` (default `"delegate"`), `:description`,
-      `:max_retries` (default `1`), `:prompt_arg` (default `"prompt"`). Optional
+      `:max_retries` (default `1`), `:prompt_arg` (string, default `"prompt"`). Optional
       `:permissions`, `:approve`, `:deadline`, `:max_concurrent_requests` and
       `:estimate_cost` configure child restrictions/pricing; none override an
       ancestor's policy or limits. Builders only choose the child definition.
@@ -73,7 +73,7 @@ defmodule ExAgent.Coordination do
       takes_ctx: true,
       max_retries: opts[:max_retries] || 1,
       call: fn ctx, args ->
-        prompt = prompt_string(args[prompt_arg] || args[to_string(prompt_arg)])
+        prompt = prompt_string(prompt_value(args, prompt_arg))
         agent = resolve_delegate(delegate, ctx, args)
 
         child_opts =
@@ -123,6 +123,22 @@ defmodule ExAgent.Coordination do
     do: "Delegate a sub-task to agent #{inspect(name)}."
 
   defp default_description(_), do: "Delegate a sub-task to another agent."
+
+  # Validation preserves the callable's original atom/string keys and rejects
+  # collisions. Find an already-existing equivalent key without creating atoms
+  # or replacing the argument map passed to the builder.
+  defp prompt_value(args, key) do
+    case Map.fetch(args, key) do
+      {:ok, value} ->
+        value
+
+      :error ->
+        Enum.find_value(args, fn
+          {name, value} when is_atom(name) -> if Atom.to_string(name) == key, do: value
+          _ -> nil
+        end)
+    end
+  end
 
   defp prompt_string(prompt) when is_binary(prompt), do: prompt
   defp prompt_string(prompt) when is_list(prompt), do: Enum.join(prompt, " ")

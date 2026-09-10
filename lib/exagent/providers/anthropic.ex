@@ -600,8 +600,9 @@ defmodule ExAgent.Providers.Anthropic do
     details = usage |> Map.take(["cache_creation_input_tokens", "cache_read_input_tokens"])
 
     %Usage{
-      input_tokens: usage["input_tokens"] || 0,
-      output_tokens: usage["output_tokens"] || 0,
+      # Omitted/nil dimensions are unknown; cache details cannot fill them in.
+      input_tokens: usage["input_tokens"],
+      output_tokens: usage["output_tokens"],
       details: details
     }
   end

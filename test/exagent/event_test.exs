@@ -57,27 +57,47 @@ defmodule ExAgent.EventTest do
 
   describe "serialization" do
     test "round-trips through JSON with all envelope fields" do
+      timestamp = ~U[2026-09-10 09:00:00Z]
+
       event =
         Event.new(
+          id: "evt_fixed",
+          emitter_id: "emitter_fixed",
+          occurred_at: timestamp,
           type: :run_finished,
           seq: 3,
           source: :run,
           agent_id: "agent_x",
           run_id: "run_1",
           request_id: "req_1",
+          session_id: "session_1",
+          participant_id: "participant_1",
+          metadata: %{tenant: "synthetic"},
           payload: %{steps: 2, usage: %{input_tokens: 10, output_tokens: 4}}
         )
 
       json = Jason.encode!(event)
       decoded = Jason.decode!(json)
 
-      assert decoded["type"] == "run_finished"
-      assert decoded["seq"] == 3
-      assert decoded["source"] == "run"
-      assert decoded["agent_id"] == "agent_x"
-      assert decoded["payload"]["steps"] == 2
-      assert decoded["payload"]["usage"]["input_tokens"] == 10
-      assert String.starts_with?(decoded["id"], "evt_")
+      assert decoded == %{
+               "version" => 1,
+               "id" => "evt_fixed",
+               "emitter_id" => "emitter_fixed",
+               "occurred_at" => "2026-09-10T09:00:00Z",
+               "type" => "run_finished",
+               "seq" => 3,
+               "source" => "run",
+               "agent_id" => "agent_x",
+               "run_id" => "run_1",
+               "request_id" => "req_1",
+               "session_id" => "session_1",
+               "participant_id" => "participant_1",
+               "metadata" => %{"tenant" => "synthetic"},
+               "payload" => %{
+                 "steps" => 2,
+                 "usage" => %{"input_tokens" => 10, "output_tokens" => 4}
+               }
+             }
     end
   end
 end

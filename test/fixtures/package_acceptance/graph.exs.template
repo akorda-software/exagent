@@ -38,8 +38,14 @@ if mode in ["sdk", "exporter"], do: true = sdk.opts[:runtime] == false
 package = Path.expand("vendor/exagent") <> "/"
 build = Path.expand("_build") <> "/"
 
+modules = Application.spec(:exagent, :modules)
+true = is_list(modules) and modules != []
+for required <- [ExAgent, ExAgent.Tool, ExAgent.Server, ExAgent.Server.Snapshot,
+                 ExAgent.Observability.OpenTelemetry, ExAgent.Observability.BoundedProcessor],
+  do: true = required in modules
+
 provenance =
-  for module <- Application.spec(:exagent, :modules) do
+  for module <- modules do
     {:module, ^module} = Code.ensure_loaded(module)
     source = module.module_info(:compile) |> Keyword.fetch!(:source) |> to_string()
     beam = :code.which(module) |> to_string()

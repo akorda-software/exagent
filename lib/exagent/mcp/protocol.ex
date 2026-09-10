@@ -64,11 +64,21 @@ defmodule ExAgent.MCP.Protocol do
   Map an MCP `tools/list` entry to an `ExAgent.Tool` whose `call` forwards to the
   server via `call_fun`. The tool's result text is extracted from the MCP
   `content` blocks; an MCP `isError: true` becomes `{:error, _}`.
+
+  `inputSchema` takes precedence over `input_schema` by key presence. Explicit
+  false or invalid values are preserved for the common Tool validation boundary;
+  only an absent schema uses the default object schema.
   """
   @spec to_tool(map(), (String.t(), map() -> {:ok, String.t()} | {:error, term()})) :: Tool.t()
   def to_tool(spec, call_fun) when is_function(call_fun, 2) do
     name = spec["name"]
-    schema = spec["inputSchema"] || spec["input_schema"] || %{type: "object", properties: %{}}
+
+    schema =
+      Map.get(
+        spec,
+        "inputSchema",
+        Map.get(spec, "input_schema", %{type: "object", properties: %{}})
+      )
 
     Tool.new(
       name: name,

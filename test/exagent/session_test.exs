@@ -134,30 +134,48 @@ defmodule ExAgent.SessionTest do
 
   describe "events" do
     test "emits session lifecycle + turn + state events on the session topic" do
-      :ok = PubSub.subscribe({PubSub.Local, []}, Event.session_topic("evt-1"))
+      id = "session-events-#{System.unique_integer([:positive])}"
+      :ok = PubSub.subscribe({PubSub.Local, []}, Event.session_topic(id))
 
-      {:ok, session} =
-        Session.start_link(
-          shared_state: %{n: 0},
-          policy: :round_robin,
-          participants: [p("a"), p("b")],
-          session_id: "evt-1",
-          pubsub: :local
+      session =
+        start_supervised!(
+          {Session,
+           shared_state: %{n: 0},
+           policy: :round_robin,
+           participants: [p("a"), p("b")],
+           session_id: id,
+           pubsub: :local}
         )
 
-      {:ok, _} = Session.start(session)
-      Session.take_turn(session, "a", fn s -> {:ok, %{s | n: 1}} end)
+      assert {:ok, "a"} = Session.start(session)
+      assert :ok = Session.join(session, id: "joined", kind: :human)
+      assert "joined" in Enum.map(Session.participants(session), & &1.id)
+      assert {:ok, %{n: 1}, "b"} = Session.take_turn(session, "a", fn s -> %{s | n: 1} end)
+      assert :ok = Session.close(session)
 
-      types = collect_event_types(150)
+      events =
+        for _ <- 1..6 do
+          assert_receive {:exagent_event, %Event{session_id: ^id} = event}
+          event
+        end
 
-      assert :session_started in types
-      assert :participant_joined in types or true
-      assert :session_turn_changed in types
-      assert :shared_state_updated in types
+      assert [
+               %Event{type: :session_started, payload: %{first: "a"}},
+               %Event{type: :session_turn_changed, payload: %{participant_id: "a"}},
+               %Event{
+                 type: :participant_joined,
+                 payload: %{participant_id: "joined", kind: :human}
+               },
+               %Event{type: :shared_state_updated, payload: %{participant_id: "a"}},
+               %Event{type: :session_turn_changed, payload: %{participant_id: "b"}},
+               %Event{type: :session_closed}
+             ] = events
 
-      Session.close(session)
-      types_after_close = collect_event_types(50)
-      assert :session_closed in types_after_close
+      assert Enum.map(events, & &1.seq) == Enum.to_list(1..6)
+      emitter = Session.health(session).emitter_id
+      assert Enum.all?(events, &(&1.emitter_id == emitter and &1.source == :session))
+      assert Enum.map(events, & &1.payload.persistence.revision) == [1, 1, 2, 3, 3, 4]
+      refute_received {:exagent_event, %Event{session_id: ^id}}
     end
   end
 
@@ -223,19 +241,4 @@ defmodule ExAgent.SessionTest do
 
   # ---------------------------------------------------------------------------
   defp p(id), do: Participant.new(id: id)
-
-  defp collect_event_types(timeout) do
-    deadline = System.monotonic_time(:millisecond) + timeout
-    do_collect([], deadline)
-  end
-
-  defp do_collect(acc, deadline) do
-    remaining = max(0, deadline - System.monotonic_time(:millisecond))
-
-    receive do
-      {:exagent_event, %Event{type: type}} -> do_collect([type | acc], deadline)
-    after
-      remaining -> Enum.reverse(acc)
-    end
-  end
 end

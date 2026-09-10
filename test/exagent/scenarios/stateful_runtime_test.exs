@@ -39,17 +39,30 @@ defmodule ExAgent.Scenarios.StatefulRuntimeTest do
 
   describe "async queue + steer ordering" do
     test "a steered (front) request runs before rear-queued ones on drain" do
-      # First item blocks briefly so we can stage the queue while it runs.
+      owner = self()
+
+      observe = fn messages, _ ->
+        prompt =
+          messages
+          |> ExAgent.Message.parts()
+          |> Enum.reverse()
+          |> Enum.find(&match?(%ExAgent.Message.Part.User{}, &1))
+          |> Map.fetch!(:content)
+
+        send(owner, {:requested, prompt})
+        prompt
+      end
+
       {:ok, server} =
         start_server(
           model: %Test{
             script: [
-              fn ->
-                Process.sleep(80)
-                "first"
+              fn messages, params ->
+                send(owner, {:queue_barrier, self()})
+                receive do: (:release_queue -> observe.(messages, params))
               end,
-              "front",
-              "rear"
+              observe,
+              observe
             ]
           },
           pubsub: :local,
@@ -61,19 +74,36 @@ defmodule ExAgent.Scenarios.StatefulRuntimeTest do
       :ok = PubSub.subscribe({PubSub.Local, []}, topic)
 
       # 1. Start the slow run (becomes :running).
-      {:ok, _first} = Server.send_message(server, "slow")
-      wait_for_status(server, :running)
+      {:ok, first} = Server.send_message(server, "slow")
+      assert_receive {:queue_barrier, worker}, 1000
 
       # 2. While busy, enqueue a rear item then a steer (front) item.
       {:ok, rear} = Server.send_message(server, "rear")
       {:ok, front} = Server.steer(server, "front")
+      assert Server.health(server).pending == 2
+      send(worker, :release_queue)
 
-      # 3. Let everything drain naturally. The steered "front" must finish first.
-      assert_receive {:exagent_event, %Event{type: :run_finished, request_id: ^front}}, 300
-      assert_receive {:exagent_event, %Event{type: :run_finished, request_id: ^rear}}, 300
+      # A common receive pattern preserves arrival order; pinned ids would skip
+      # an incorrectly ordered event and could make a rear-first drain pass.
+      finished =
+        for _ <- 1..3 do
+          assert_receive {:exagent_event,
+                          %Event{type: :run_finished, request_id: id, payload: %{output: output}}},
+                         1000
 
-      # Receiving front before rear proves steer-at-front ordering.
-      Server.abort(server)
+          {id, output}
+        end
+
+      assert finished == [{first, "slow"}, {front, "front"}, {rear, "rear"}]
+
+      requested =
+        for _ <- 1..3 do
+          assert_receive {:requested, prompt}
+          prompt
+        end
+
+      assert requested == ["slow", "front", "rear"]
+      assert Server.health(server).pending == 0
     end
   end
 
@@ -163,22 +193,34 @@ defmodule ExAgent.Scenarios.StatefulRuntimeTest do
   describe "telemetry" do
     test "the loop emits [:exagent, :run, :start] and :stop with measurements" do
       handler = {:scenarios, :telemetry, unique()}
+      agent_name = "telemetry-owner-#{unique()}"
 
       :ok =
         :telemetry.attach_many(
           handler,
           [[:exagent, :run, :start], [:exagent, :run, :stop]],
           &__MODULE__.handle_telemetry/4,
-          self()
+          {self(), agent_name}
         )
 
       on_exit(fn -> :telemetry.detach(handler) end)
 
-      {:ok, server} = start_server(model: %Test{label: "ok"})
+      # Live distractor: an unrelated producer must not satisfy this test.
+      :telemetry.execute([:exagent, :run, :start], %{system_time: -1}, %{agent: "other"})
+      :telemetry.execute([:exagent, :run, :stop], %{duration: -1}, %{agent: "other"})
+      refute_received {:telemetry, _, _, _}
+
+      {:ok, server} = start_server(model: %Test{label: "ok"}, name: agent_name)
       assert {:ok, _} = Server.chat(server, "go")
 
-      assert_received {:telemetry, [:exagent, :run, :start], %{system_time: _}}
-      assert_received {:telemetry, [:exagent, :run, :stop], %{duration: d}} when d > 0
+      assert_received {:telemetry, [:exagent, :run, :start], %{system_time: t},
+                       %{agent: ^agent_name}}
+                      when is_integer(t)
+
+      assert_received {:telemetry, [:exagent, :run, :stop], %{duration: d}, %{agent: ^agent_name}}
+                      when d > 0
+
+      refute_received {:telemetry, _, _, _}
     end
   end
 
@@ -196,7 +238,7 @@ defmodule ExAgent.Scenarios.StatefulRuntimeTest do
       assert {:ok, _} = Server.chat(server, "a")
       assert {:ok, _} = Server.chat(server, "b")
 
-      events = collect_events(150)
+      events = collect_events()
       assert length(events) > 2
 
       assert Enum.all?(events, &(&1.agent_id == server_agent_id(server)))
@@ -207,6 +249,8 @@ defmodule ExAgent.Scenarios.StatefulRuntimeTest do
       # Each run ties its start to its finish by request_id.
       starts = for %Event{type: :run_started, request_id: r} <- events, do: r
       fins = for %Event{type: :run_finished, request_id: r} <- events, do: r
+      assert length(starts) == 2
+      assert length(Enum.uniq(starts)) == 2
       assert starts == fins
     end
   end
@@ -215,12 +259,20 @@ defmodule ExAgent.Scenarios.StatefulRuntimeTest do
   # Helpers
   # ---------------------------------------------------------------------------
 
-  def handle_telemetry(event, measurements, _meta, target),
-    do: send(target, {:telemetry, event, measurements})
+  def handle_telemetry(event, measurements, metadata, {target, agent_name}) do
+    if metadata[:agent] == agent_name,
+      do: send(target, {:telemetry, event, measurements, metadata})
+  end
 
   defp start_server(opts) do
     model = Keyword.get(opts, :model, %Test{label: "hi"})
-    agent = ExAgent.new(model: model, instructions: Keyword.get(opts, :instructions))
+
+    agent =
+      ExAgent.new(
+        model: model,
+        instructions: Keyword.get(opts, :instructions),
+        name: Keyword.get(opts, :name)
+      )
 
     start_opts =
       [agent: agent]
@@ -228,7 +280,7 @@ defmodule ExAgent.Scenarios.StatefulRuntimeTest do
       |> maybe(:agent_id, Keyword.get(opts, :agent_id))
       |> maybe(:max_pending, Keyword.get(opts, :max_pending))
 
-    {:ok, pid} = Server.start_link(start_opts)
+    pid = start_supervised!({Server, start_opts})
     _ = :sys.get_state(pid)
     {:ok, pid}
   end
@@ -255,18 +307,12 @@ defmodule ExAgent.Scenarios.StatefulRuntimeTest do
     end
   end
 
-  defp collect_events(timeout) do
-    deadline = System.monotonic_time(:millisecond) + timeout
-    do_collect([], deadline)
-  end
-
-  defp do_collect(acc, deadline) do
-    remaining = max(0, deadline - System.monotonic_time(:millisecond))
-
+  # Both synchronous chats have replied after publishing their terminal events.
+  defp collect_events(acc \\ []) do
     receive do
-      {:exagent_event, %Event{} = e} -> do_collect([e | acc], deadline)
+      {:exagent_event, %Event{} = e} -> collect_events([e | acc])
     after
-      remaining -> Enum.reverse(acc)
+      0 -> Enum.reverse(acc)
     end
   end
 end

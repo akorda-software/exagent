@@ -82,14 +82,27 @@ defmodule ExAgent.ServerRunOptionsTest do
         Event.agent_topic(:sys.get_state(server).agent_id)
       )
 
-    assert {:ok, _} = Server.send_message(server, "block")
+    assert {:ok, first} = Server.send_message(server, "block")
     assert_receive {:blocked, worker}, 1000
     deny = Permissions.new!(default: :deny)
     assert {:ok, queued} = Server.send_message(server, "queued", permissions: deny)
     assert {:ok, steered} = Server.steer(server, "steered", permissions: deny)
     send(worker, :go)
-    assert_receive {:exagent_event, %Event{type: :run_finished, request_id: ^steered}}, 1000
-    assert_receive {:exagent_event, %Event{type: :run_finished, request_id: ^queued}}, 1000
+
+    finished =
+      for _ <- 1..3 do
+        assert_receive {:exagent_event, %Event{type: :run_finished, request_id: id}}, 1000
+        id
+      end
+
+    assert finished == [first, steered, queued]
+
+    prompts =
+      for %Message.Request{parts: parts} <- Server.history(server),
+          %Part.User{content: prompt} <- parts,
+          do: prompt
+
+    assert prompts == ["block", "steered", "queued"]
     refute_received :executed
 
     returns =

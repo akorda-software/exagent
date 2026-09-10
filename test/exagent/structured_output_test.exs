@@ -77,30 +77,6 @@ defmodule ExAgent.StructuredOutputTest do
     end
   end
 
-  describe "output tool is sent to providers" do
-    test "the OpenAI adapter encodes output_tools in the tools payload" do
-      model = %ExAgent.Models.Test{
-        script: [
-          {:tool_calls, [%Part.ToolCall{tool_name: "final_result", args: @valid_args}]}
-        ]
-      }
-
-      agent = ExAgent.new(model: model, output: WeatherReport)
-
-      # Build the params the agent would hand a provider, then encode.
-      {:ok, %{messages: messages}} = ExAgent.run(agent, "weather?")
-
-      # The first model response must have been a final_result tool call.
-      assert Enum.any?(messages, fn
-               %ExAgent.Message.Response{parts: parts} ->
-                 Enum.any?(parts, &match?(%Part.ToolCall{tool_name: "final_result"}, &1))
-
-               _ ->
-                 false
-             end)
-    end
-  end
-
   defp find_part(messages, mod) do
     matcher = fn
       %struct{} = part -> if struct == mod, do: part, else: nil

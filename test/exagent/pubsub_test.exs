@@ -45,8 +45,13 @@ defmodule ExAgent.PubSubTest do
       assert PubSub.broadcast({ExAgent.PubSub.Local, []}, topic, e1) == :ok
       assert PubSub.broadcast({ExAgent.PubSub.Local, []}, topic, e2) == :ok
 
-      assert_receive {:exagent_event, ^e1}
-      assert_receive {:exagent_event, ^e2}
+      received =
+        for _ <- 1..2 do
+          assert_receive {:exagent_event, event}
+          event
+        end
+
+      assert received == [e1, e2]
     end
 
     test "broadcast to a topic with no subscribers is still :ok" do
@@ -55,20 +60,21 @@ defmodule ExAgent.PubSubTest do
 
     test "two subscribers both receive the same event" do
       topic = unique_topic()
+      owner = self()
+      e = event(:run_started, 1)
 
       task =
         Task.async(fn ->
           :ok = PubSub.subscribe({ExAgent.PubSub.Local, []}, topic)
-          assert_receive {:exagent_event, _}
+          send(owner, {:subscribed, self()})
+          assert_receive {:exagent_event, ^e}, 1000
           :ok
         end)
 
       :ok = PubSub.subscribe({ExAgent.PubSub.Local, []}, topic)
 
-      e = event(:run_started, 1)
-
-      # Give the task a moment to register before broadcasting.
-      Process.sleep(10)
+      subscriber = task.pid
+      assert_receive {:subscribed, ^subscriber}, 1000
       assert PubSub.broadcast({ExAgent.PubSub.Local, []}, topic, e) == :ok
 
       assert Task.await(task) == :ok
@@ -79,12 +85,13 @@ defmodule ExAgent.PubSubTest do
   describe "Phoenix" do
     test "returns a graceful error when Phoenix.PubSub is not available" do
       # Phoenix is not a dependency of exagent, so the adapter must not raise.
-      result = PubSub.broadcast({ExAgent.PubSub.Phoenix, :missing}, "t", event())
+      refute Code.ensure_loaded?(Phoenix.PubSub)
 
-      assert result in [
-               :ok,
-               {:error, {:phoenix_pubsub_not_available, Phoenix.PubSub}}
-             ]
+      assert {:error, {:phoenix_pubsub_not_available, Phoenix.PubSub}} =
+               PubSub.broadcast({ExAgent.PubSub.Phoenix, :missing}, "t", event())
+
+      assert {:error, {:phoenix_pubsub_not_available, Phoenix.PubSub}} =
+               PubSub.subscribe({ExAgent.PubSub.Phoenix, :missing}, "t")
     end
   end
 

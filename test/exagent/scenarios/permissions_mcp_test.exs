@@ -18,52 +18,50 @@ defmodule ExAgent.Scenarios.PermissionsMcpTest do
   alias ExAgent.MCP.Client
   alias ExAgent.Models.Test
   alias ExAgent.Permissions
+  alias ExAgent.Test.TestingAuditCore
 
   # A mock MCP server over the in-process transport seam. `tools` is a list of
   # {name, description, schema} and `call` is (name, args) -> text.
   defp start_mock_server(ref, tools, call_fn) do
-    spawn(fn -> loop(ref, tools, call_fn) end)
-  end
+    owner = self()
 
-  defp loop(ref, tools, call_fn) do
-    receive do
-      {:sent, bin, from} ->
-        req = bin |> IO.iodata_to_binary() |> String.trim() |> Jason.decode!()
+    TestingAuditCore.start_owned_mock(fn {:sent, bin, from} ->
+      req = bin |> IO.iodata_to_binary() |> String.trim() |> Jason.decode!()
 
-        unless req["id"] == nil do
-          case req["method"] do
-            "initialize" ->
-              reply(ref, from, req["id"], %{"capabilities" => %{}})
+      unless req["id"] == nil do
+        case req["method"] do
+          "initialize" ->
+            reply(ref, from, req["id"], %{"capabilities" => %{}})
 
-            "tools/list" ->
-              reply(ref, from, req["id"], %{"tools" => Enum.map(tools, &tool_spec/1)})
+          "tools/list" ->
+            reply(ref, from, req["id"], %{"tools" => Enum.map(tools, &tool_spec/1)})
 
-            "tools/call" ->
-              %{"name" => name, "arguments" => args} =
-                Map.merge(%{"arguments" => %{}}, req["params"])
+          "tools/call" ->
+            %{"name" => name, "arguments" => args} =
+              Map.merge(%{"arguments" => %{}}, req["params"])
 
-              case call_fn.(name, args) do
-                {:error, text} ->
-                  reply(
-                    ref,
-                    from,
-                    req["id"],
-                    %{"isError" => true, "content" => [%{"type" => "text", "text" => text}]}
-                  )
+            send(owner, {:remote_call, ref, name, args})
 
-                text ->
-                  reply(
-                    ref,
-                    from,
-                    req["id"],
-                    %{"content" => [%{"type" => "text", "text" => text}]}
-                  )
-              end
-          end
+            case call_fn.(name, args) do
+              {:error, text} ->
+                reply(
+                  ref,
+                  from,
+                  req["id"],
+                  %{"isError" => true, "content" => [%{"type" => "text", "text" => text}]}
+                )
+
+              text ->
+                reply(
+                  ref,
+                  from,
+                  req["id"],
+                  %{"content" => [%{"type" => "text", "text" => text}]}
+                )
+            end
         end
-
-        loop(ref, tools, call_fn)
-    end
+      end
+    end)
   end
 
   defp tool_spec({name, desc, schema}),
@@ -126,6 +124,8 @@ defmodule ExAgent.Scenarios.PermissionsMcpTest do
 
       # The MCP tool genuinely ran: its return text is in the history.
       assert find_return(messages, "search") =~ "results for: elixir"
+      assert_receive {:remote_call, ^ref, "search", %{"q" => "elixir"}}
+      refute_receive {:remote_call, ^ref, _, _}, 0
 
       Client.close(client)
     end
@@ -149,7 +149,9 @@ defmodule ExAgent.Scenarios.PermissionsMcpTest do
       agent = ExAgent.new(model: model, tools: [search])
 
       assert {:ok, %{messages: messages}} = ExAgent.run(agent, "go", permissions: perms)
-      assert find_return(messages, "search") =~ "results for"
+      assert find_return(messages, "search") == "results for: x"
+      assert_receive {:remote_call, ^ref, "search", %{"q" => "x"}}
+      refute_receive {:remote_call, ^ref, _, _}, 0
 
       Client.close(client)
     end
@@ -172,6 +174,11 @@ defmodule ExAgent.Scenarios.PermissionsMcpTest do
 
       assert {:ok, %{messages: messages}} = ExAgent.run(agent, "go", permissions: perms)
       assert find_return(messages, "delete_file") =~ "not permitted"
+
+      assert [%Part.ToolReturn{tool_name: "delete_file", status: :denied}] =
+               Enum.filter(ExAgent.Message.parts(messages), &match?(%Part.ToolReturn{}, &1))
+
+      refute_receive {:remote_call, ^ref, _, _}, 0
 
       Client.close(client)
     end
@@ -196,6 +203,11 @@ defmodule ExAgent.Scenarios.PermissionsMcpTest do
       assert {:ok, %{messages: messages}} = ExAgent.run(agent, "go", permissions: perms)
       assert find_return(messages, "search") =~ "not permitted"
 
+      assert [%Part.ToolReturn{tool_name: "search", status: :denied}] =
+               Enum.filter(ExAgent.Message.parts(messages), &match?(%Part.ToolReturn{}, &1))
+
+      refute_receive {:remote_call, ^ref, _, _}, 0
+
       Client.close(client)
     end
 
@@ -218,7 +230,9 @@ defmodule ExAgent.Scenarios.PermissionsMcpTest do
       assert {:ok, %{messages: messages}} =
                ExAgent.run(agent, "go", permissions: perms, approve: fn _call -> :approve end)
 
-      assert find_return(messages, "search") =~ "results for"
+      assert find_return(messages, "search") == "results for: x"
+      assert_receive {:remote_call, ^ref, "search", %{"q" => "x"}}
+      refute_receive {:remote_call, ^ref, _, _}, 0
 
       Client.close(client)
     end
@@ -265,6 +279,8 @@ defmodule ExAgent.Scenarios.PermissionsMcpTest do
       assert find_return(partial.messages, "flaky") == "boom"
       assert_received :flaky_called
       refute_received :flaky_called
+      assert_receive {:remote_call, ^ref, "flaky", %{}}
+      refute_receive {:remote_call, ^ref, _, _}, 0
 
       Client.close(client)
     end

@@ -5,6 +5,15 @@ defmodule ExAgent.ToolsTest do
   alias ExAgent.Message.Part
   alias ExAgent.Test.SampleTools
 
+  defmodule ContextTools do
+    use ExAgent.Tools
+
+    deftool quote_total(ctx, quantity :: integer(), fee :: integer()) do
+      send(ctx.deps.observer, {:macro_context, ctx, quantity, fee})
+      {:ok, %{"tenant" => ctx.deps.tenant, "total" => ctx.deps.unit_price * quantity + fee}}
+    end
+  end
+
   describe "tools/0 (macro-defined)" do
     test "returns Tool structs with derived schemas and descriptions" do
       tools = SampleTools.tools()
@@ -40,9 +49,13 @@ defmodule ExAgent.ToolsTest do
 
   describe "call closure" do
     test "maps string-keyed args to positional, with ctx" do
-      weather = SampleTools.tool(:get_weather)
-      ctx = %RunContext{}
-      assert weather.call.(ctx, %{"city" => "Madrid", "days" => 3}) == {:ok, "Madrid (3d)"}
+      quote = ContextTools.tool(:quote_total)
+      ctx = %RunContext{deps: %{observer: self(), tenant: "direct", unit_price: 7}}
+
+      assert quote.call.(ctx, %{"quantity" => 3, "fee" => 2}) ==
+               {:ok, %{"tenant" => "direct", "total" => 23}}
+
+      assert_receive {:macro_context, ^ctx, 3, 2}
     end
 
     test "plain tool maps args without ctx" do
@@ -73,18 +86,43 @@ defmodule ExAgent.ToolsTest do
     end
 
     test "deftool with ctx receives the RunContext" do
-      weather = SampleTools.tool(:get_weather)
+      quote = ContextTools.tool(:quote_total)
 
       model = %ExAgent.Models.Test{
         script: [
           {:tool_calls,
-           [%Part.ToolCall{tool_name: "get_weather", args: ~s({"city":"X","days":1})}]},
-          "done"
+           [
+             %Part.ToolCall{
+               tool_name: "quote_total",
+               tool_call_id: "quote-ctx",
+               args: ~s({"quantity":4,"fee":3})
+             }
+           ]},
+          fn messages, _params ->
+            %Part.ToolReturn{content: %{"tenant" => tenant, "total" => total}} =
+              find_part(messages, Part.ToolReturn)
+
+            "#{tenant}: #{total}"
+          end
         ]
       }
 
-      agent = ExAgent.new(model: model, tools: [weather])
-      assert {:ok, %{output: "done"}} = ExAgent.run(agent, "w", deps: %{name: "Kukapu"})
+      deps = %{observer: self(), tenant: "loop", unit_price: 11}
+      agent = ExAgent.new(model: model, tools: [quote])
+      assert {:ok, %{output: "loop: 47"} = result} = ExAgent.run(agent, "quote", deps: deps)
+
+      assert_receive {:macro_context, ctx, 4, 3}
+      assert ctx.deps == deps
+      assert ctx.run_id == result.run_id
+      assert ctx.tool_call_id == "quote-ctx"
+      assert ctx.tool_name == "quote_total"
+      assert ctx.run_step == 1
+
+      assert %Part.ToolReturn{
+               tool_call_id: "quote-ctx",
+               status: :succeeded,
+               content: %{"tenant" => "loop", "total" => 47}
+             } = find_part(result.messages, Part.ToolReturn)
     end
   end
 

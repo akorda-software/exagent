@@ -4,7 +4,29 @@ Este es el punto de entrada actual para retomar el trabajo, no un diario de todo
 los Dispatches. Leer `AGENTS.md`, [estado](../status.md),
 [roadmap](roadmap.md) y [principios/decisiones](../architecture/design.md).
 
-## Mandato actual
+## Última unidad: auditoría de testing — 2026-09-10
+
+**Cerrada por el usuario. Retomar el desarrollo, no otra oleada de auditoría.**
+Se acuerda probar ExAgent y su integración; el mantenimiento/testing interno de
+Req, gproc y demás dependencias pertenece a sus mantenedores. Sus warnings quedan
+anotados con menor prioridad y no bloquean por sí solos el desarrollo. Conservar
+las regresiones de frontera cuando exista impacto real sobre una garantía nuestra.
+La guía [verificación](verification.md) recoge este criterio y los gates habituales.
+
+El usuario activó `docs/prompts/testing-audit.md`. Inventario readonly completo,
+mejoras y dos revisiones frescas: [síntesis y backlog](testing-audit.md), con
+655correctos/28excluidos en1.20/29 y1.17/27 y24contratos runtime del TAR. Strict
+permanece rojo en los cuatro grafos por Req0.6.1/Mix1.20; exporter añade gproc/OTP29.
+La CI está configurada y su driver probado localmente; no se ejecutó GitHub remoto.
+
+Base real de esta sesión:69c2747, nominal1.3.0, inicialmente limpio. Las mejoras
+siguen como WIP, sin commit/bump/publicación. El registro de autoridad, ownership,
+provenance y recursos está en `docs/archive/2026-09-testing-audit.md`. Recuperar
+Orca antes de asignar otro trabajo; no reutilizar handles cerrados de ese registro.
+Prioridades concretas en [roadmap](roadmap.md), separando diagnósticos de paquete,
+gaps P2 y aceptación externa autorizada.
+
+## Contexto anterior
 
 El usuario pidió recapitular el cierre nocturno y ordenar la documentación antes
 de continuar con la elección de backend y la mejora del paquete. La documentación
@@ -50,8 +72,14 @@ Los IDs son contexto histórico, no autoridad para una tarea nueva.
 
 ## Siguiente resultado útil
 
-Seguir el prompt elegido. Para [backend](backend-evaluation.md), concretar cuál de
-las instancias Opik usar, acceso e histórico, resolver el gate de transporte y
-comparar con el mismo escenario sintético. La aceptación real de proveedores/DB/consumidores y C7 son
-unidades independientes, todavía abiertas. No confundir esa planificación con
-permiso de instalar una plataforma o publicar la major.
+Continuar las unidades funcionales del [roadmap](roadmap.md), añadiendo pruebas de
+sus cambios, sin anteponer una limpieza general de dependencias. Para
+[backend](backend-evaluation.md), concretar la instancia Opik, acceso e histórico
+y resolver su frontera de transporte con evidencia de integración; la aceptación
+externa y C7 conservan su alcance propio.
+
+Cuando el alcance del paquete esté terminado y el usuario pida una revisión final,
+usar `docs/prompts/testing-review-final.md`: revisar lo cambiado desde esta auditoría,
+los contratos nuevos, la instalación real del paquete y el valor/frecuencia de los
+probes. La nota está diferida; no reactiva `docs/prompts/testing-audit.md`, no exige
+un contador mayor de tests ni autoriza publicar o acceder a sistemas externos.

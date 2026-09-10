@@ -60,8 +60,8 @@ defmodule ExAgent.Scenarios.ProviderRobustnessTest do
   end
 
   describe "OpenAI: partial usage is preserved" do
-    test "only prompt_tokens still yields a Usage (no silent drop)" do
-      assert %Response{usage: %ExAgent.Message.Usage{input_tokens: 7, output_tokens: 0}} =
+    test "only prompt_tokens preserves known input without inventing output usage" do
+      assert %Response{usage: %ExAgent.Message.Usage{input_tokens: 7, output_tokens: nil}} =
                OpenAIChat.parse_response(
                  %{
                    "choices" => [%{"message" => %{"content" => "hi"}}],

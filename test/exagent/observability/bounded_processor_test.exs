@@ -113,6 +113,9 @@ defmodule ExAgent.Observability.BoundedProcessorTest do
     send(exporter, {:bounded_reply, :success})
     assert_receive {:bounded_export, ^exporter, _table, :test_resource, last}, 1000
     assert length(last) == 2
+    # Slots are not FIFO. The complete multiset must nevertheless contain every
+    # admitted identity exactly once, independent of batch/slot ordering.
+    assert Enum.sort(Enum.map(batch ++ next ++ last, &span(&1, :span_id))) == Enum.to_list(1..8)
     send(exporter, {:bounded_reply, :ok})
     assert eventually(fn -> Processor.stats(config).exported == 8 end)
     assert Processor.stats(config).retained == 0
@@ -176,7 +179,7 @@ defmodule ExAgent.Observability.BoundedProcessorTest do
     assert Processor.on_end(make_span(1), config) == true
     assert Processor.on_end(make_span(2), config) == true
     assert Processor.force_flush(config) == :ok
-    assert_receive {:bounded_export, first, table, :test_resource, [_]}, 1000
+    assert_receive {:bounded_export, first, table, :test_resource, [expired]}, 1000
     monitor = Process.monitor(first)
     assert Processor.on_end(make_span(3), config) == :dropped
     assert_receive {:DOWN, ^monitor, :process, ^first, :killed}, 1000
@@ -185,12 +188,17 @@ defmodule ExAgent.Observability.BoundedProcessorTest do
     refute first == second
     refute Process.alive?(first)
     assert_receive {:bounded_export, ^second, _, :test_resource, [remaining]}, 1000
-    assert span(remaining, :span_id) in [1, 2]
+    expired_id = span(expired, :span_id)
+    remaining_id = span(remaining, :span_id)
+    refute remaining_id == expired_id
+    assert Enum.sort([expired_id, remaining_id]) == [1, 2]
     send(second, {:bounded_reply, :ok})
     assert eventually(fn -> Processor.stats(config).exported == 1 end)
     assert Processor.stats(config).export_timed_out == 1
     assert Processor.stats(config).batches_timed_out == 1
     assert Processor.stats(config).retained == 0
+    assert Processor.force_flush(config) == :ok
+    refute_receive {:bounded_export, _, _, _, _}, 30
   end
 
   test "late completion after deadline cannot change a timed-out batch into success" do

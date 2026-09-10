@@ -300,6 +300,7 @@ defmodule ExAgent.Providers.OpenAIChatTest do
                resp
 
       assert resp.parts |> hd() |> Part.ToolCall.args_as_map() == {:ok, %{"city" => "Madrid"}}
+      assert hd(resp.parts).args == ~s({"city":"Madrid"})
       assert resp.finish_reason == :tool_calls
     end
 
@@ -360,8 +361,8 @@ defmodule ExAgent.Providers.OpenAIChatTest do
     end
   end
 
-  describe "end-to-end translation (round trip)" do
-    test "a full conversation encodes then decodes losslessly" do
+  describe "conversation projection to OpenAI messages" do
+    test "preserves ordered content, call arguments and call/return identity" do
       conv = [
         Msg.new_request([%Part.System{content: "be brief"}, %Part.User{content: "weather?"}]),
         Msg.new_response([
@@ -379,15 +380,25 @@ defmodule ExAgent.Providers.OpenAIChatTest do
 
       encoded = OpenAIChat.to_openai_messages(conv)
 
-      assert [
-               %{"role" => "system"},
-               %{"role" => "user"},
-               %{"role" => "assistant"} = a,
-               %{"role" => "tool"},
-               %{"role" => "assistant" = _} | _
-             ] = encoded
-
-      assert %{"tool_calls" => [%{"id" => "c1"}]} = a
+      assert encoded == [
+               %{"role" => "system", "content" => "be brief"},
+               %{"role" => "user", "content" => "weather?"},
+               %{
+                 "role" => "assistant",
+                 "tool_calls" => [
+                   %{
+                     "id" => "c1",
+                     "type" => "function",
+                     "function" => %{
+                       "name" => "get_weather",
+                       "arguments" => ~s({"city":"Madrid"})
+                     }
+                   }
+                 ]
+               },
+               %{"role" => "tool", "tool_call_id" => "c1", "content" => "sunny"},
+               %{"role" => "assistant", "content" => "It's sunny in Madrid"}
+             ]
     end
   end
 

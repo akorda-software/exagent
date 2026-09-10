@@ -119,15 +119,16 @@ defmodule PackageAcceptance.Tracing do
         :otel_tracer_provider.get_tracer(:package_acceptance_provider, :exagent, "1", :undefined)
 
       tracing = OpenTelemetry.new(tracer: tracer)
-      PackageAcceptance.Scenario.simple(tracing)
-      PackageAcceptance.Scenario.typed(tracing, false)
-      PackageAcceptance.Scenario.typed(tracing, true)
-      PackageAcceptance.Scenario.checkpoint(tracing)
-      accepted = BoundedProcessor.stats(:package_acceptance_export).accepted
-      assert accepted >= 13
+      scenarios = [
+        {PackageAcceptance.Scenario.simple(tracing), %{"run" => 1, "model" => 1}},
+        {PackageAcceptance.Scenario.typed(tracing, false), %{"run" => 1, "model" => 2, "tool" => 1}},
+        {PackageAcceptance.Scenario.typed(tracing, true), %{"run" => 1, "model" => 2, "tool" => 1}},
+        {PackageAcceptance.Scenario.checkpoint(tracing), %{"run" => 1, "model" => 1, "checkpoint" => 1}}
+      ]
+      assert BoundedProcessor.stats(:package_acceptance_export).accepted == 13
       assert :ok = BoundedProcessor.force_flush(:package_acceptance_export)
 
-      exported =
+      observed =
         if receiver do
           assert_receive {:package_otlp, "/package/v1/traces", headers, body}, 6000
           assert headers["content-type"] == "application/x-protobuf"
@@ -163,31 +164,77 @@ defmodule PackageAcceptance.Tracing do
           spans = Enum.flat_map(scopes, & &1.spans)
           assert Enum.all?(scopes, &(&1.scope.name == "exagent"))
           assert Enum.all?(spans, &(byte_size(&1.trace_id) == 16 and byte_size(&1.span_id) == 8))
-          assert Enum.any?(spans, &(byte_size(Map.get(&1, :parent_span_id, "")) == 8))
-          length(spans)
+          Enum.map(spans, fn span ->
+            attrs = Map.new(span.attributes, fn %{key: key, value: %{value: {type, value}}} ->
+              if key in ["exagent.operation", "exagent.run_id", "exagent.model_request_id", "exagent.tool_call_id"],
+                do: assert(type == :string_value)
+              if key == "exagent.checkpoint.revision", do: assert(type == :int_value)
+              {key, value}
+            end)
+            %{id: span.span_id, trace: span.trace_id, parent: Map.get(span, :parent_span_id, ""), name: span.name, attrs: attrs}
+          end)
         else
           assert_receive {:package_spans, spans}, 6000
           assert Enum.all?(spans, &(span(&1, :trace_id) > 0 and span(&1, :span_id) > 0))
 
-          assert Enum.any?(spans, fn record ->
-                   parent = span(record, :parent_span_id)
-                   is_integer(parent) and parent > 0
-                 end)
-
           File.write!("sdk-spans.term", inspect(spans, pretty: true, limit: :infinity) <> "\n")
-          length(spans)
+          Enum.map(spans, fn record ->
+            parent = span(record, :parent_span_id)
+            %{id: <<span(record, :span_id)::64>>, trace: <<span(record, :trace_id)::128>>,
+              parent: if(is_integer(parent) and parent > 0, do: <<parent::64>>, else: ""),
+              name: span(record, :name), attrs: :otel_attributes.map(span(record, :attributes))}
+          end)
         end
 
-      assert exported == accepted
-      await(fn -> BoundedProcessor.stats(:package_acceptance_export).exported == accepted end)
+      assert_operations(observed, scenarios)
+      await(fn -> BoundedProcessor.stats(:package_acceptance_export).exported == 13 end)
       stats = BoundedProcessor.stats(:package_acceptance_export)
       assert stats.export_failed == 0 and stats.export_timed_out == 0
+      assert stats.accepted == 13 and stats.dropped_queue_full == 0
       assert stats.queue_depth == 0 and stats.in_flight == 0
       File.write!("tracing-stats.term", inspect(stats, pretty: true, limit: :infinity) <> "\n")
     after
       :supervisor.terminate_child(:otel_tracer_provider_sup, provider)
       if receiver, do: PackageAcceptance.Receiver.stop(receiver)
     end
+  end
+
+  defp assert_operations(spans, scenarios) do
+    assert length(spans) == 13
+    assert length(Enum.uniq_by(spans, &{&1.trace, &1.id})) == 13
+    expected_runs = Enum.map(scenarios, fn {result, _} -> result.run_id end)
+    assert length(Enum.uniq(expected_runs)) == 4
+    roots = Enum.filter(spans, &(&1.attrs["exagent.operation"] == "run"))
+    assert Enum.sort(Enum.map(roots, & &1.attrs["exagent.run_id"])) == Enum.sort(expected_runs)
+
+    for {result, operations} <- scenarios do
+      [root] = Enum.filter(roots, &(&1.attrs["exagent.run_id"] == result.run_id))
+      own = Enum.filter(spans, &(&1.trace == root.trace))
+      assert Enum.frequencies_by(own, & &1.attrs["exagent.operation"]) == operations
+      [root] = Enum.filter(own, &(&1.attrs["exagent.operation"] == "run"))
+      assert root.parent == ""
+      for span <- own do
+        assert span.trace == root.trace
+        assert span.name == "exagent." <> span.attrs["exagent.operation"]
+        if span.id != root.id, do: assert(span.parent == root.id)
+        if span.attrs["exagent.operation"] == "tool", do: assert(span.attrs["exagent.tool_call_id"] == "typed-add")
+        if span.attrs["exagent.operation"] == "checkpoint" do
+          assert span.attrs["exagent.checkpoint.operation"] == "agent"
+          assert span.attrs["exagent.checkpoint.revision"] === 1
+          # Checkpoint is attributed through the active native parent, while the
+          # owner's cleared run_id is intentionally absent from its attributes.
+          assert is_binary(span.attrs["exagent.agent_id"])
+        else
+          assert span.attrs["exagent.run_id"] == result.run_id
+        end
+      end
+    end
+
+    models = Enum.filter(spans, &(&1.attrs["exagent.operation"] == "model"))
+    ids = Enum.map(models, & &1.attrs["exagent.model_request_id"])
+    assert length(ids) == 6 and length(Enum.uniq(ids)) == 6
+    assert Enum.all?(ids, &(is_binary(&1) and byte_size(&1) > 0))
+    assert length(Enum.uniq(Enum.map(spans, & &1.trace))) == 4
   end
 
   defp await(fun, left \\ 500)

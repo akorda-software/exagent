@@ -15,11 +15,13 @@ defmodule ExAgent.Store.PostgresTest do
   describe "Postgres — save / load / delete" do
     test "round-trips a snapshot keyed by agent_id" do
       id = unique_id("pg_rt")
+      on_exit(fn -> Store.delete_agent_snapshot(@store, id) end)
+      history = history()
 
       snap =
         Snapshot.new(
           agent_id: id,
-          history: history(),
+          history: history,
           usage: %Usage{input_tokens: 2, output_tokens: 3},
           metadata: %{scene: "tavern"}
         )
@@ -27,11 +29,11 @@ defmodule ExAgent.Store.PostgresTest do
       assert :ok = Store.save_agent_snapshot(@store, snap)
       assert {:ok, loaded} = Store.load_agent_snapshot(@store, id)
       assert loaded.agent_id == id
-      assert loaded.usage == %{"input_tokens" => 2, "output_tokens" => 3}
+      assert loaded.usage == %{"input_tokens" => 2, "output_tokens" => 3, "details" => %{}}
       assert loaded.metadata == %{"scene" => "tavern"}
 
       {:ok, messages} = Snapshot.messages(loaded)
-      assert length(messages) == length(history())
+      assert messages == history
 
       assert :ok = Store.delete_agent_snapshot(@store, id)
       assert {:error, :not_found} = Store.load_agent_snapshot(@store, id)
@@ -40,6 +42,11 @@ defmodule ExAgent.Store.PostgresTest do
     test "overwrites the same id and lists entries" do
       a = unique_id("pg_a")
       b = unique_id("pg_b")
+
+      on_exit(fn ->
+        Store.delete_agent_snapshot(@store, a)
+        Store.delete_agent_snapshot(@store, b)
+      end)
 
       Store.save_agent_snapshot(@store, Snapshot.new(agent_id: a, history: [], usage: nil))
       Store.save_agent_snapshot(@store, Snapshot.new(agent_id: b, history: [], usage: nil))
@@ -57,7 +64,7 @@ defmodule ExAgent.Store.PostgresTest do
       )
 
       assert {:ok, loaded} = Store.load_agent_snapshot(@store, a)
-      assert loaded.usage == %{"input_tokens" => 9, "output_tokens" => 0}
+      assert loaded.usage == %{"input_tokens" => 9, "output_tokens" => 0, "details" => %{}}
 
       Store.delete_agent_snapshot(@store, a)
       Store.delete_agent_snapshot(@store, b)
@@ -68,8 +75,10 @@ defmodule ExAgent.Store.PostgresTest do
 
       bad = Snapshot.new(agent_id: id, history: [], metadata: %{capture: fn -> :secret end})
 
-      # The strict JSON path raises before anything is written.
-      assert raises?(fn -> Store.save_agent_snapshot(@store, bad) end)
+      # The adapter's strict codec raises; the Store dispatcher contains it.
+      assert {:error, {:exception, %Protocol.UndefinedError{}}} =
+               Store.save_agent_snapshot(@store, bad)
+
       assert {:error, :not_found} = Store.load_agent_snapshot(@store, id)
     end
   end
@@ -87,18 +96,22 @@ defmodule ExAgent.Store.PostgresTest do
           name: name
         )
 
+      on_exit(fn ->
+        ExAgent.Test.TestingAuditRuntime.stop_restarted_agent(pid, name)
+        Store.delete_agent_snapshot(@store, id)
+      end)
+
       assert {:ok, _} = ExAgent.Server.chat(name, "turn one")
       assert {:ok, _} = ExAgent.Server.chat(name, "turn two")
       assert length(ExAgent.Server.history(name)) == 4
 
+      monitor = Process.monitor(pid)
       Process.exit(pid, :kill)
-      assert wait_for_restart(name)
+      assert_receive {:DOWN, ^monitor, :process, ^pid, :killed}, 1000
+      assert wait_for_restart(name, pid)
 
       assert Process.whereis(name) != pid
       assert length(ExAgent.Server.history(name)) == 4
-
-      ExAgent.Store.delete_agent_snapshot(@store, id)
-      ExAgent.AgentSupervisor.stop_agent(Process.whereis(name))
     end
   end
 
@@ -112,28 +125,19 @@ defmodule ExAgent.Store.PostgresTest do
 
   defp unique_id(prefix), do: "#{prefix}_#{:erlang.unique_integer([:positive])}"
 
-  defp raises?(fun) do
-    try do
-      fun.()
-      false
-    rescue
-      _ -> true
-    end
-  end
-
   # PG-backed restart + rehydrate can take longer under DB contention when the
   # full suite runs concurrently; allow up to ~2s.
-  defp wait_for_restart(name, tries \\ 400) do
+  defp wait_for_restart(name, original, tries \\ 400) do
     cond do
       tries <= 0 ->
         false
 
-      Process.whereis(name) != nil and restart_ready?(name) ->
+      Process.whereis(name) not in [nil, original] and restart_ready?(name) ->
         true
 
       true ->
         Process.sleep(5)
-        wait_for_restart(name, tries - 1)
+        wait_for_restart(name, original, tries - 1)
     end
   end
 

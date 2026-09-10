@@ -112,15 +112,20 @@ defmodule ExAgent.PermissionsTest do
   end
 
   describe "integration with ExAgent.run/3" do
-    defp tool(name, result),
-      do:
-        Tool.new(
-          name: name,
-          description: name,
-          parameters_json_schema: %{type: "object", properties: %{}},
-          takes_ctx: false,
-          call: fn _ -> {:ok, result} end
-        )
+    defp tool(name, result) do
+      owner = self()
+
+      Tool.new(
+        name: name,
+        description: name,
+        parameters_json_schema: %{type: "object", properties: %{}},
+        takes_ctx: false,
+        call: fn _ ->
+          send(owner, {:permission_effect, name})
+          {:ok, result}
+        end
+      )
+    end
 
     defp find_return(messages, name) do
       Enum.find_value(messages, fn
@@ -148,6 +153,7 @@ defmodule ExAgent.PermissionsTest do
       assert %Part.ToolReturn{content: content} = find_return(messages, "delete")
       assert content =~ "not permitted"
       refute content =~ "deleted"
+      refute_received {:permission_effect, "delete"}
     end
 
     test "an :ask rule runs the tool when the approve callback approves" do
@@ -165,6 +171,8 @@ defmodule ExAgent.PermissionsTest do
                ExAgent.run(agent, "go", permissions: perms, approve: fn _call -> :approve end)
 
       assert find_return(messages, "bash").content == "executed"
+      assert_received {:permission_effect, "bash"}
+      refute_received {:permission_effect, "bash"}
     end
 
     test "an :ask rule fails closed without an approve callback" do
@@ -180,6 +188,7 @@ defmodule ExAgent.PermissionsTest do
 
       assert {:ok, %{messages: messages}} = ExAgent.run(agent, "go", permissions: perms)
       assert find_return(messages, "bash").content =~ "not permitted"
+      refute_received {:permission_effect, "bash"}
     end
 
     test "invalid actions and approvals cannot execute an effect through the core or Server" do
@@ -206,6 +215,12 @@ defmodule ExAgent.PermissionsTest do
           },
           tools: [effect]
         )
+
+      # A live positive control prevents a disconnected effect fixture from
+      # making every deny assertion trivially green.
+      assert {:ok, "deleted"} = effect.call.(%{})
+      assert Agent.get(counter, & &1) == 1
+      Agent.update(counter, fn _ -> 0 end)
 
       for {permissions, approve} <- [
             {%Permissions{default: :approve}, nil},

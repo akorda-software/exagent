@@ -98,7 +98,7 @@ defmodule ExAgent.IterationCTest do
       parent = self()
 
       script = fn messages, _params ->
-        send(parent, {:seen, length(messages)})
+        send(parent, {:seen, messages})
         "done"
       end
 
@@ -115,9 +115,18 @@ defmodule ExAgent.IterationCTest do
           capabilities: [%HistoryWindow{n: 2}]
         )
 
-      ExAgent.run(agent, "go", message_history: history)
+      assert {:ok, %{output: "done", messages: all}} =
+               ExAgent.run(agent, "go", message_history: history)
 
-      assert_received {:seen, 2}
+      expected = Enum.slice(all, 4, 2)
+      assert_received {:seen, ^expected}
+
+      assert [
+               %ExAgent.Message.Request{parts: [%Part.User{content: "m5"}]},
+               %ExAgent.Message.Request{parts: [%Part.User{content: "go"}]}
+             ] = expected
+
+      assert Enum.take(all, 5) === history
     end
 
     test "after_tool_execute observes tool results" do

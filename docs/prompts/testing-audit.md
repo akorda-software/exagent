@@ -1,5 +1,12 @@
 # Relevo: auditoría de valor y cobertura del testing
 
+> **Mandato completado y cerrado el 2026-09-10.** Se conserva como contexto de la
+> primera auditoría; sus instrucciones siguientes no son una tarea pendiente.
+> El usuario decidió continuar el desarrollo y concentrar el testing en ExAgent
+> y sus fronteras de integración, sin duplicar las suites de dependencias.
+> Para una segunda revisión, al terminar el paquete y cuando se solicite, usar
+> [la nota diferida](testing-review-final.md) y el estado vigente.
+
 Eres el coordinador de una auditoría de testing de ExAgent. Trabaja en
 `/home/kukapu/dev/projects/exAgent`, habla en español y lee este documento COMPLETO
 antes de asignar trabajo. Si eres un worker con Dispatch, sigue sólo tu Task;

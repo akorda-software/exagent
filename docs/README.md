@@ -14,6 +14,7 @@ mantenimiento. Describe el checkout de consolidación, todavía sin publicar com
 | Adaptar un consumidor de 1.x | [Guía de migración](guides/migration.md) |
 | Configurar trazas y entender sus límites | [Observabilidad](guides/observability.md) |
 | Ejecutar tests, probes y comprobaciones del paquete | [Verificación](development/verification.md) |
+| Revisar el valor, los oráculos y los gaps de las pruebas | [Auditoría de testing](development/testing-audit.md) |
 | Resolver el entorno local de desarrollo | [Entorno y tooling](development/environment.md) |
 | Elegir la siguiente unidad útil | [Hoja de ruta](development/roadmap.md) |
 | Preparar la comparación Langfuse/Opik | [Aceptación del backend](development/backend-evaluation.md) |
@@ -57,10 +58,13 @@ no es una copia alternativa de estas guías ni se mueve como si fuera prosa suel
 
 - `docs/prompts/backend-evaluation.md`: continuar desde las instancias Opik
   existentes, con evaluación verificable y mejoras del paquete justificadas.
-- `docs/prompts/testing-audit.md`: auditar valor/cobertura, duplicados y falsos
-  verdes; consolidar o añadir pruebas con evidencia.
+- `docs/prompts/testing-audit.md`: mandato de la auditoría ya cerrada, conservado
+  como contexto; no volver a ejecutarlo automáticamente.
+- `docs/prompts/testing-review-final.md`: nota diferida para la segunda revisión
+  cuando esté terminado el alcance funcional del paquete y se solicite revisarlo.
 
-Son mandatos completos e independientes de la conversación anterior, con Orca y
-Astra. Leer el archivo elegido entero antes de asignar trabajo. Prepararlos no
-inicia una ejecución; los registros bajo `docs/archive/` siguen siendo históricos.
+Leer el archivo elegido entero y respetar su estado de activación antes de asignar
+trabajo. Prepararlos no inicia una ejecución; los registros bajo `docs/archive/`
+siguen siendo históricos. La política de alcance del testing está en
+[verificación](development/verification.md).
 Los prompts operativos no forman parte del paquete ni de los extras de ExDoc.

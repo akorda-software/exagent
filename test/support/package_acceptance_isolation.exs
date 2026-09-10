@@ -16,7 +16,13 @@ defmodule PackageAcceptance.Isolation do
     File.write!(foreign, ~s[IO.puts("FOREIGN_PROJECT_EXECUTED"); System.halt(77)\n])
     original_host = inventory(host)
     runner = Path.expand("package_acceptance.exs", __DIR__)
-    original = File.read!(runner)
+
+    original =
+      File.read!(runner)
+      |> replace!(
+        ~s[Code.require_file("../../examples/testing_audit_harness.exs", __DIR__)],
+        ~s[Code.require_file(#{inspect(Path.expand("../../examples/testing_audit_harness.exs", __DIR__))})]
+      )
 
     env = [
       {"MIX_HOME", Path.join(host, "mix")},
@@ -167,7 +173,16 @@ defmodule PackageAcceptance.Isolation do
       )
       |> replace!(~s|script = project_guard() <> "Mix.CLI.main(System.argv())\\n"|, """
         warning = if System.get_env("ISOLATION_WARNING_PHASE") == name, do: "synthetic.erl:1: Warning: diagnostic control\\n", else: ""
-        artifact = if name == "graph", do: ~s[File.write!("graph.term", "synthetic graph evidence"); ], else: ""
+        artifact = cond do
+          name == "graph" -> ~s[File.write!("graph.term", "synthetic graph evidence"); ]
+          name == "smoke" ->
+            # Deliberately synthetic diagnostic replay, not executed contracts.
+            data = %{tests: Enum.map(ExAgent.TestingAuditHarness.package_names("none"), &%{name: &1, module: "PackageAcceptanceTest", state: nil})}
+            stats = %{total: 6, failures: 0, excluded: 0, skipped: 0}
+            ~s|File.write!("runtime-results.etf", | <> inspect(:erlang.term_to_binary(data), limit: :infinity) <> "); " <>
+              ~s|File.write!("runtime-stats.etf", | <> inspect(:erlang.term_to_binary(stats), limit: :infinity) <> "); "
+          true -> ""
+        end
         script = artifact <> "IO.write(" <> inspect(warning) <> ")"
       """)
 
@@ -217,7 +232,7 @@ defmodule PackageAcceptance.Isolation do
   end
 
   defp replace!(source, needle, replacement) do
-    assert String.contains?(source, needle),
+    assert length(:binary.matches(source, needle)) == 1,
            "update fault injection after runner refactor: #{needle}"
 
     String.replace(source, needle, replacement)

@@ -94,6 +94,7 @@ defmodule ExAgent.MixProject do
         "docs/architecture/design.md",
         "docs/development/roadmap.md",
         "docs/development/verification.md",
+        "docs/development/testing-audit.md",
         "docs/development/environment.md",
         "docs/development/backend-evaluation.md",
         "docs/development/handoff.md",

@@ -17,7 +17,14 @@ defmodule PackageAcceptance.Output do
   end
 
   def changeset(value, attrs) do
-    value |> cast(attrs, [:answer]) |> validate_required([:answer])
+    value
+    |> cast(attrs, [:answer])
+    |> validate_required([:answer])
+    # Deliberately changeset-only: reflection with empty attrs cannot encode this
+    # custom cross-value rule. Runtime Ecto validation must still reject it.
+    |> validate_change(:answer, fn :answer, value ->
+      if rem(value, 2) == 1, do: [], else: [answer: "must be odd"]
+    end)
   end
 end
 
@@ -44,7 +51,11 @@ defmodule PackageAcceptance.Scenario do
 
     agent =
       ExAgent.new(
-        model: %TestModel{script: [{:tool_calls, [call]}, "sum is five"]},
+        model: %TestModel{script: [{:tool_calls, [call]}, fn messages, _ ->
+          returns = for %Part.ToolReturn{} = part <- ExAgent.Message.parts(messages), do: part
+          assert [%Part.ToolReturn{tool_name: "add", tool_call_id: "typed-add", status: :succeeded, content: 5}] = returns
+          "sum is five"
+        end]},
         tools: PackageAcceptance.Tools.tools(),
         observability: tracing
       )
@@ -72,6 +83,10 @@ defmodule PackageAcceptance.Scenario do
     assert %{output: "sum is five", request_count: 2, tool_calls: 1, status: :succeeded} = result
     assert_receive {:effect, 2, 3}
     refute_received {:effect, _, _}
+    assert [%Part.ToolCall{tool_name: "add", tool_call_id: "typed-add", args: %{"a" => 2, "b" => 3}}] =
+      for %Part.ToolCall{} = part <- ExAgent.Message.parts(result.messages), do: part
+    assert [%Part.ToolReturn{tool_name: "add", tool_call_id: "typed-add", status: :succeeded, content: 5}] =
+      for %Part.ToolReturn{} = part <- ExAgent.Message.parts(result.messages), do: part
     result
   end
 
@@ -81,7 +96,7 @@ defmodule PackageAcceptance.Scenario do
     {:ok, server} = ExAgent.Server.start_link(agent: agent, agent_id: id, store: :ets)
 
     try do
-      assert {:ok, %{output: "persisted answer"}} = ExAgent.Server.chat(server, "persist once")
+      assert {:ok, %{output: "persisted answer"} = result} = ExAgent.Server.chat(server, "persist once")
       assert %{persistence: %{status: :confirmed, revision: 1}} = ExAgent.Server.health(server)
       assert :ok = ExAgent.Server.checkpoint(server)
       assert {:ok, snapshot} = ExAgent.Store.ETS.load_agent_snapshot(ExAgent.Store.ETS, id)
@@ -94,7 +109,8 @@ defmodule PackageAcceptance.Scenario do
         assert ExAgent.Server.history(restored) == history
 
         assert %{persistence: %{status: :confirmed, revision: 1}} =
-                 ExAgent.Server.health(restored)
+                  ExAgent.Server.health(restored)
+        result
       after
         GenServer.stop(restored)
       end

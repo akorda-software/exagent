@@ -4,12 +4,8 @@ defmodule ExAgent.Server.SnapshotTest do
   alias ExAgent.Message.{Part, Request, Usage}
   alias ExAgent.Server.Snapshot
 
-  # A small real conversation produced by the loop, to exercise round-trip.
-  defp sample_history do
-    agent = ExAgent.new(model: "test", instructions: "be concise")
-    {:ok, %{messages: messages}} = ExAgent.run(agent, "hi")
-    messages
-  end
+  # Independently authored data exercises every conversation part in this fixture.
+  defp sample_history, do: ExAgent.Test.TestingAuditRuntime.history()
 
   describe "new/1" do
     test "builds a snapshot with serialized history and mapped usage" do
@@ -50,6 +46,8 @@ defmodule ExAgent.Server.SnapshotTest do
       assert restored.agent_id == "rt"
       assert restored.usage == %{"input_tokens" => 5, "output_tokens" => 6, "details" => %{}}
       assert restored.metadata == %{"k" => "v"}
+      assert restored == %{snap | metadata: %{"k" => "v"}}
+      assert {:ok, ^history} = Snapshot.messages(restored)
     end
 
     test "messages/1 reconstructs Message structs after a round-trip" do
@@ -60,7 +58,7 @@ defmodule ExAgent.Server.SnapshotTest do
       {:ok, restored} = snap |> Snapshot.serialize() |> Snapshot.deserialize()
       {:ok, messages} = Snapshot.messages(restored)
 
-      assert length(messages) == length(history)
+      assert messages == history
 
       # The first request still carries the system instruction + user prompt.
       [%Request{parts: parts} | _] = messages
@@ -69,12 +67,12 @@ defmodule ExAgent.Server.SnapshotTest do
     end
 
     test "usage_struct/1 rebuilds a Usage struct" do
-      snap =
-        Snapshot.new(agent_id: "u", history: [], usage: %Usage{input_tokens: 7, output_tokens: 9})
+      usage = %Usage{input_tokens: 7, output_tokens: 9, details: %{"cached_tokens" => 3}}
+      snap = Snapshot.new(agent_id: "u", history: [], usage: usage)
 
       {:ok, restored} = snap |> Snapshot.serialize() |> Snapshot.deserialize()
 
-      assert %Usage{input_tokens: 7, output_tokens: 9} = Snapshot.usage_struct(restored)
+      assert Snapshot.usage_struct(restored) == usage
     end
 
     test "messages/1 on an empty snapshot yields []" do
@@ -83,7 +81,7 @@ defmodule ExAgent.Server.SnapshotTest do
     end
   end
 
-  describe "serialization is strict (no closures / pids / secrets)" do
+  describe "serialization refuses opaque runtime values, without redacting application strings" do
     test "serialize/1 raises when metadata contains a function capture" do
       snap = Snapshot.new(agent_id: "bad", history: [], metadata: %{leak: fn -> :ok end})
       assert refuses_to_serialize?(snap)
@@ -94,7 +92,7 @@ defmodule ExAgent.Server.SnapshotTest do
       assert refuses_to_serialize?(snap)
     end
 
-    test "a snapshot never carries tool closures or api keys by construction" do
+    test "snapshot has no live model/tools fields and preserves explicit application strings" do
       # The Snapshot struct has no fields for tools/model/api_key — only
       # conversational state. This is a static guarantee, asserted here.
       fields = Snapshot.__struct__() |> Map.from_struct() |> Map.keys()
@@ -102,6 +100,20 @@ defmodule ExAgent.Server.SnapshotTest do
       refute :tools in fields
       refute :model in fields
       refute :api_key in fields
+
+      sentinel = "SYNTHETIC_APPLICATION_STRING"
+
+      snapshot =
+        Snapshot.new(
+          agent_id: "strings",
+          history: [],
+          metadata: %{"api_key" => sentinel},
+          provider_state: %{"note" => sentinel}
+        )
+
+      assert {:ok, restored} = Snapshot.deserialize(Snapshot.serialize(snapshot))
+      assert restored.metadata == %{"api_key" => sentinel}
+      assert restored.provider_state == %{"note" => sentinel}
     end
   end
 

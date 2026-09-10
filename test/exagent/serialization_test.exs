@@ -5,6 +5,50 @@ defmodule ExAgent.SerializationTest do
   alias ExAgent.Message.Part
 
   describe "Message.to_json / from_json round-trip" do
+    test "distinct Text and Thinking identities survive actual JSON bytes" do
+      history = [
+        M.new_response(
+          [
+            %Part.Text{content: "visible", id: "text-α"},
+            %Part.Thinking{content: "synthetic reasoning", signature: "sig-17", id: "thinking-β"}
+          ],
+          timestamp: ~U[2026-09-10 09:00:00Z],
+          model_name: "synthetic",
+          finish_reason: :stop
+        )
+      ]
+
+      json = M.to_json(history)
+      assert [%{"parts" => [text, thinking]}] = Jason.decode!(json)
+      assert text == %{"__type__" => "text", "content" => "visible", "id" => "text-α"}
+
+      assert thinking == %{
+               "__type__" => "thinking",
+               "content" => "synthetic reasoning",
+               "signature" => "sig-17",
+               "id" => "thinking-β"
+             }
+
+      assert {:ok, ^history} = M.from_json(json)
+    end
+
+    test "legacy parts without identities remain readable and nil identities are not written" do
+      json =
+        ~s([{"__type__":"response","parts":[{"__type__":"text","content":"legacy text"},{"__type__":"thinking","content":"legacy thought","signature":"legacy signature"}]}])
+
+      assert {:ok, [%M.Response{parts: [text, thinking]}] = restored} = M.from_json(json)
+      assert text == %Part.Text{content: "legacy text", id: nil}
+
+      assert thinking == %Part.Thinking{
+               content: "legacy thought",
+               signature: "legacy signature",
+               id: nil
+             }
+
+      assert [%{"parts" => parts}] = Jason.decode!(M.to_json(restored))
+      assert Enum.all?(parts, &(not Map.has_key?(&1, "id")))
+    end
+
     test "a full conversation survives encode → decode losslessly" do
       conv = [
         M.new_request(

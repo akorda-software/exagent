@@ -338,11 +338,11 @@ defmodule ExAgent.Message do
       "tool_call_id" => id
     }
 
-  defp to_encodable(%Part.Text{content: c}),
-    do: %{"__type__" => "text", "content" => c}
+  defp to_encodable(%Part.Text{content: c, id: id}),
+    do: maybe_put_id(%{"__type__" => "text", "content" => c}, id)
 
-  defp to_encodable(%Part.Thinking{content: c, signature: s}),
-    do: %{"__type__" => "thinking", "content" => c, "signature" => s}
+  defp to_encodable(%Part.Thinking{content: c, signature: s, id: id}),
+    do: maybe_put_id(%{"__type__" => "thinking", "content" => c, "signature" => s}, id)
 
   defp to_encodable(%Part.ToolCall{tool_name: n, args: a, tool_call_id: id, kind: k}),
     do: %{
@@ -400,10 +400,14 @@ defmodule ExAgent.Message do
     }
 
   defp from_encodable(%{"__type__" => "text"} = p),
-    do: %Part.Text{content: p["content"]}
+    do: %Part.Text{content: p["content"], id: if(is_binary(p["id"]), do: p["id"])}
 
   defp from_encodable(%{"__type__" => "thinking"} = p),
-    do: %Part.Thinking{content: p["content"], signature: p["signature"]}
+    do: %Part.Thinking{
+      content: p["content"],
+      signature: p["signature"],
+      id: if(is_binary(p["id"]), do: p["id"])
+    }
 
   defp from_encodable(%{"__type__" => "tool_call"} = p),
     do: %Part.ToolCall{
@@ -415,6 +419,9 @@ defmodule ExAgent.Message do
 
   defp maybe_put_ts(map, %DateTime{} = ts), do: Map.put(map, "timestamp", DateTime.to_iso8601(ts))
   defp maybe_put_ts(map, _), do: map
+
+  defp maybe_put_id(map, id) when is_binary(id), do: Map.put(map, "id", id)
+  defp maybe_put_id(map, _), do: map
 
   defp parse_ts(nil), do: nil
 

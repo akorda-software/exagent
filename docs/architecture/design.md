@@ -857,6 +857,82 @@ the SDK-present processor passes16 tests; N18 repeats the real TAR consumer matr
 after this final change. Earlier595/28 and the initial TAR are historical gates,
 not the final matrix. Detailed red/green evidence remains in ACTION_PLAN10.
 
+### 8.10. Auditoría de testing: fidelidad de IDs en mensajes (2026-09-10)
+
+- **Problema demostrado:** un roundtrip público `Message.to_json/from_json` pierde
+  los IDs no nulos de `Part.Text` y `Part.Thinking`, aunque conserva contenido y
+  firma. Las fixtures anteriores de igualdad usaban `id: nil` y no discriminaban
+  esa pérdida. La reproducción sobre BEAM del baseline devuelve error con IDs
+  sintéticos distintos; se trata de un defecto del codec, además del gap del test.
+- **Decisión y beneficio general:** conservar esos IDs como campos opcionales en
+  el codec. El lector admite datos anteriores sin ID y el escritor no añade una
+  key nula a los mensajes que no lo tienen. La identidad suministrada por un
+  adapter/consumidor sobrevive a la persistencia y reanudación del historial.
+- **Alternativas:** rebajar «lossless» a comparar sólo longitudes/IDs nulos oculta
+  pérdida de datos públicos. Un codec paralelo o una nueva versión completa de
+  snapshot para un campo opcional no aporta una frontera necesaria aquí.
+- **Impacto y migración:** cambia el JSON emitido sólo cuando existe ese ID;
+  lectores anteriores lo ignoraban. Leer snapshots antiguos sigue produciendo
+  `nil` donde no se guardó un ID; no se reconstruyen IDs perdidos. No cambia la
+  omisión documentada de `ToolReturn.usage`, el modelo vivo ni snapshot v2.
+  El conjunto de consolidación sigue destinado a una major; no se cambia versión
+  ni se publica durante la auditoría.
+- **Verificación:** reproducción negativa antes del fix; regresión con igualdad
+  de conversación y JSON crudo, IDs distintos, contenido/firma y datos legacy sin
+  ID. La aceptación compilada y revisión independiente se registran en
+  [auditoría de testing](../development/testing-audit.md).
+
+### 8.11. Auditoría: preservar datos antes de validar/admitir (2026-09-10)
+
+**Problema demostrado.** La auditoría readonly encontró cuatro fronteras sin
+oráculo equivalente. Reproducciones offline sobre el baseline compilado usan
+adapters Req sintéticos, schema público validado por JSV/Ecto, JSON-RPC MCP local
+y callbacks de delegación que consumen sus datos. Los 45 casos temporales producen
+24 controles correctos y 21 fallos; son cuatro familias de defectos, no 21 bugs.
+
+| Frontera | Observación negativa | Decisión autorizada |
+|---|---|---|
+| Usage de OpenAI/Anthropic | Omitir un contador o enviar usage vacío se transforma en cero, complete/known; bajo presupuesto se ejecutan una tool y una segunda request. | Conservar `nil` por dimensión no reportada, tanto omitida como explícitamente nula. Cero explícito sigue siendo conocido; el scope conserva subtotales y decide admisión con sus flags. No inferir consumo desde total/cache. |
+| Reflexión OutputSchema | Enum integer/boolean se convierte en strings; exclusión deja pasar valores prohibidos, arrays reciben minLength/maxLength y `is` se omite. | Conservar tipos JSON nativos, mantener mapeo de enums átomo a string y aplicar minItems/maxItems a arrays, minLength/maxLength a strings, incluido `is`. |
+| MCP → Tool | `inputSchema: false` y su alias se sustituyen por object permisivo, produciendo `tools/call`. | Seleccionar por presencia, con nombre estándar prioritario; conservar `false` para la frontera Tool que ya soporta schemas booleanos. Fallback sólo cuando faltan ambas keys; datos presentes incompatibles no se vuelven permisivos. |
+| Delegación | El builder recibe contexto/args correctos, pero una key átomo válida se busca dos veces como string y el hijo recibe prompt vacío. | Buscar la key JSON equivalente ya presente, sin crear átomos ni alterar los args originales del builder; conservar rechazo previo de colisiones. |
+
+**Beneficio general y alternativas.** La biblioteca no debe perder información
+antes de las fronteras que deciden permisos, coste, output y ejecución. Modificar
+los fixtures para esperar cero/strings/prompt vacío ocultaría el problema;
+desactivar validación, reconstruir uso hipotético o añadir modos legacy duplicaría
+semánticas incorrectas. Se corrigen los adaptadores mínimos y se conserva la
+responsabilidad de JSV, Ecto y ExecutionScope.
+
+**Impacto y migración.** Usage sin una dimensión deja de certificar consumo/coste
+completo y puede bloquear operaciones posteriores bajo presupuesto. Consumidores
+deben respetar `usage_status`/`cost_status`, no convertir `nil` en factura cero.
+Cambian los schemas emitidos para las validaciones descritas: revisar snapshots
+de payload y compatibilidad del backend real. La reflexión sigue siendo aproximada
+para validaciones custom/condicionales y conteos de texto distintos de JSON Schema;
+no se promete equivalencia universal con un changeset. Specs MCP incompatibles
+dejan de recibir defaults permisivos; la opción `prompt_arg` sigue siendo string,
+y se preserva la representación átomo/string ya admitida en argumentos.
+
+Estas correcciones pertenecen al contrato conjunto de la major pendiente; no hay
+nuevo modo, versión ni publicación. No se autorizan aquí nuevos proveedores,
+aprobación persistida, sandbox ni replay de efectos.
+
+La revisión independiente reprodujo dos aristas del primer fix: `true`/`false`
+como nombres de miembros Ecto.Enum son strings publicados, distintos de un field
+booleano nativo; y `is`/min/max deben intersectarse, también entre llamadas de
+validación, no sobrescribirse según su orden. La corrección final consulta el tipo
+Ecto del field y conserva bounds acumulados, incluidas contradicciones que deben
+seguir sin admitir valores. Cinco regresiones nuevas discriminan estos casos.
+
+**Verificación exigida.** Trasladar las reproducciones a regresiones mantenibles,
+incluyendo positivos de cero explícito, schemas string/object y keys string;
+comprobar sync/stream, efecto remoto local observado y datos entregados al hijo.
+El control MCP de casts/refs ya rechazaba correctamente y debe conservarse.
+Compilación y gates integrados con warnings-as-errors, revisión fresca y límites
+se registran en [la auditoría](../development/testing-audit.md). Ninguna VM directa
+contra BEAM previos sustituye la aceptación compilada de los cambios.
+
 ## 9. Estado actual y no-goals
 
 **Hecho (núcleo funcional):** loop, providers (OpenAI/Anthropic/ZAI/OpenRouter/Test),

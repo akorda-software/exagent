@@ -11,6 +11,8 @@
 # Artifacts: input hashes, package file manifest, lock snapshot and per-mode logs,
 # resolved graph, compiled provenance, test result and top-level summary.term.
 
+Code.require_file("../../examples/testing_audit_harness.exs", __DIR__)
+
 defmodule PackageAcceptance.Runner do
   @modes ~w(none api sdk exporter)
   @tooling_phases ~w(tooling-preflight tooling-hex tooling-rebar)
@@ -176,7 +178,31 @@ defmodule PackageAcceptance.Runner do
               mode_env
             )
 
-            %{mode: mode, status: :passed, path: consumer, runtime_contracts: :passed}
+            runtime =
+              consumer
+              |> Path.join("runtime-results.etf")
+              |> File.read!()
+              |> :erlang.binary_to_term()
+
+            stats =
+              consumer
+              |> Path.join("runtime-stats.etf")
+              |> File.read!()
+              |> :erlang.binary_to_term()
+
+            runtime = Map.put(runtime, :stats, stats)
+            errors = ExAgent.TestingAuditHarness.package_result(runtime, mode)
+
+            unless errors == [],
+              do: raise("runtime acceptance failed: #{Enum.join(errors, "; ")}")
+
+            %{
+              mode: mode,
+              status: :passed,
+              path: consumer,
+              runtime_contracts: :passed,
+              runtime_result: runtime
+            }
           rescue
             error ->
               message = Exception.message(error)

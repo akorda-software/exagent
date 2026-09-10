@@ -73,6 +73,7 @@ defmodule ExAgent.SessionPersistenceTest do
   describe "rehydrate across a restart (ETS)" do
     test "a fresh session restores shared_state + current + status" do
       id = "reh-#{unique()}"
+      on_exit(fn -> Store.delete_session_snapshot(@ets, id) end)
 
       # First session: advance a couple turns.
       {:ok, a} =
@@ -110,11 +111,12 @@ defmodule ExAgent.SessionPersistenceTest do
 
       assert Session.read_state(b)["log"] == ["y", "x"]
 
-      Store.delete_session_snapshot(@ets, id)
+      GenServer.stop(b)
     end
 
     test "start with a store but no prior snapshot just starts fresh" do
       id = "empty-#{unique()}"
+      on_exit(fn -> Store.delete_session_snapshot(@ets, id) end)
 
       {:ok, session} =
         Session.start_link(
@@ -128,13 +130,14 @@ defmodule ExAgent.SessionPersistenceTest do
       assert Session.read_state(session).log == []
       assert {:ok, "a"} = Session.start(session)
 
-      Store.delete_session_snapshot(@ets, id)
+      GenServer.stop(session)
     end
 
     test "participant refs come from the app on restart (not the snapshot)" do
       # The snapshot stores only ids/kinds; the live agent refs must be
       # re-attached by the app when starting the new session.
       id = "refs-#{unique()}"
+      on_exit(fn -> Store.delete_session_snapshot(@ets, id) end)
 
       {:ok, a} =
         Session.start_link(
@@ -150,6 +153,7 @@ defmodule ExAgent.SessionPersistenceTest do
 
       # App re-supplies a new ref (a different pid) for the same participant.
       new_ref = spawn(fn -> :timer.sleep(:infinity) end)
+      on_exit(fn -> Process.exit(new_ref, :kill) end)
 
       {:ok, b} =
         Session.start_link(
@@ -164,8 +168,7 @@ defmodule ExAgent.SessionPersistenceTest do
       assert p.id == "p"
       assert p.ref == new_ref
 
-      Store.delete_session_snapshot(@ets, id)
-      Process.exit(new_ref, :kill)
+      GenServer.stop(b)
     end
   end
 

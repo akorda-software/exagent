@@ -1,0 +1,17 @@
+defmodule PackageAcceptance.RuntimeFormatter do
+  use GenServer
+
+  def init(_opts), do: {:ok, []}
+
+  def handle_cast({:test_finished, test}, tests) do
+    observation = %{module: inspect(test.module), name: Atom.to_string(test.name), state: test.state}
+    {:noreply, [observation | tests]}
+  end
+
+  def handle_cast({:suite_finished, times}, tests) do
+    File.write!("runtime-results.etf", :erlang.term_to_binary(%{times: times, tests: tests}))
+    {:noreply, tests}
+  end
+
+  def handle_cast(_, tests), do: {:noreply, tests}
+end

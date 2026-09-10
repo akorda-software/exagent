@@ -601,15 +601,16 @@ defmodule ExAgent.Providers.OpenAIChat do
   end
 
   # Build a Usage from whichever token keys are present; some proxies/prefill
-  # endpoints report only prompt_tokens, and silently dropping those would make
-  # UsageLimits/cost accounting under-count. Keep scalar fields in `details`
+  # endpoints report only prompt_tokens. Missing dimensions stay nil so the
+  # execution scope can retain known subtotals without certifying zero cost.
+  # Keep scalar fields in `details`
   # (sum_details assumes numeric values) — including cached_tokens extracted from
   # prompt_tokens_details, so callers can measure prompt-caching wins.
   defp parse_usage(nil), do: nil
 
   defp parse_usage(%{} = u) do
-    input = Map.get(u, "prompt_tokens", 0)
-    output = Map.get(u, "completion_tokens", 0)
+    input = Map.get(u, "prompt_tokens")
+    output = Map.get(u, "completion_tokens")
 
     details =
       %{"total_tokens" => Map.get(u, "total_tokens")}

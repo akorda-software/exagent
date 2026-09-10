@@ -90,13 +90,18 @@ defmodule ExAgent.CorrectnessFixesTest do
     end
 
     test "sibling function calls get stub returns when a final result is also present" do
+      owner = self()
+
       fn_tool =
         Tool.new(
           name: "lookup",
           description: "some fn tool",
           parameters_json_schema: %{type: "object"},
           takes_ctx: false,
-          call: fn _ -> {:ok, "x"} end
+          call: fn _ ->
+            send(owner, :sibling_effect)
+            {:ok, "x"}
+          end
         )
 
       model = %ExAgent.Models.Test{
@@ -110,25 +115,37 @@ defmodule ExAgent.CorrectnessFixesTest do
       }
 
       agent = ExAgent.new(model: model, output: WeatherReport, tools: [fn_tool])
-      {:ok, %{output: %WeatherReport{}, messages: messages}} = ExAgent.run(agent, "w")
+      assert {:ok, %{output: %WeatherReport{}, messages: messages}} = ExAgent.run(agent, "w")
 
       returns =
         Enum.filter(Msg.parts(messages), &match?(%Part.ToolReturn{}, &1))
-        |> Enum.map(& &1.tool_name)
-        |> MapSet.new()
 
-      # both the output tool and the un-executed sibling got a return (no dangling call)
-      assert MapSet.subset?(MapSet.new(["final_result", "lookup"]), returns)
+      assert [
+               %Part.ToolReturn{
+                 tool_name: "final_result",
+                 tool_call_id: "out1",
+                 status: :succeeded,
+                 content: "ok"
+               },
+               %Part.ToolReturn{tool_name: "lookup", tool_call_id: "fn1", status: :not_executed}
+             ] = returns
+
+      refute_receive :sibling_effect, 0
     end
 
     test "validation retries also stub sibling tool calls" do
+      owner = self()
+
       fn_tool =
         Tool.new(
           name: "lookup",
           description: "some fn tool",
           parameters_json_schema: %{type: "object"},
           takes_ctx: false,
-          call: fn _ -> {:ok, "x"} end
+          call: fn _ ->
+            send(owner, :sibling_effect)
+            {:ok, "x"}
+          end
         )
 
       assert_retry_history = fn messages, _params ->
@@ -140,8 +157,11 @@ defmodule ExAgent.CorrectnessFixesTest do
                end)
 
         assert Enum.any?(parts, fn
-                 %Part.ToolReturn{tool_name: "lookup", tool_call_id: "fn1"} -> true
-                 _ -> false
+                 %Part.ToolReturn{tool_name: "lookup", tool_call_id: "fn1", status: :not_executed} ->
+                   true
+
+                 _ ->
+                   false
                end)
 
         {:tool_calls,
@@ -162,7 +182,8 @@ defmodule ExAgent.CorrectnessFixesTest do
       agent =
         ExAgent.new(model: model, output: WeatherReport, tools: [fn_tool], output_retries: 2)
 
-      assert {:ok, %{output: %WeatherReport{}}} = ExAgent.run(agent, "w")
+      assert {:ok, %{output: %WeatherReport{}, request_count: 2}} = ExAgent.run(agent, "w")
+      refute_receive :sibling_effect, 0
     end
   end
 
@@ -197,12 +218,15 @@ defmodule ExAgent.CorrectnessFixesTest do
       model = %ExAgent.Models.Test{label: "ok"}
       agent = ExAgent.new(model: model)
 
-      {:ok, %{messages: all, new_messages: new}} =
-        ExAgent.run(agent, "again", message_history: prior)
+      assert {:ok, %{messages: all, new_messages: new}} =
+               ExAgent.run(agent, "again", message_history: prior)
 
-      assert length(new) < length(all)
-      # the prior history is excluded from new_messages
-      refute Enum.take(new, 2) == prior
+      assert all === prior ++ new
+
+      assert [
+               %Msg.Request{parts: [%Part.User{content: "again"}]},
+               %Msg.Response{parts: [%Part.Text{content: "ok"}]}
+             ] = new
     end
 
     test "without history, new == all" do

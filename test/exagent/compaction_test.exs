@@ -295,13 +295,30 @@ defmodule ExAgent.CompactionTest do
 
     test "untouched when the history is small" do
       history = [msg("hi"), msg("yo")]
+      owner = self()
 
       compaction = %Compaction.Capability{
         compactor: Summary,
-        opts: [threshold_tokens: 50, keep_recent: 4, summarize: fn _ -> "X" end]
+        opts: [
+          threshold_tokens: 50,
+          keep_recent: 4,
+          summarize: fn old ->
+            send(owner, {:unexpected_summary, old})
+            "X"
+          end
+        ]
       }
 
-      agent = ExAgent.new(model: %Test{label: "done"}, capabilities: [compaction])
+      model = %Test{
+        script: [
+          fn projected, _params ->
+            send(owner, {:small_projection, projected})
+            "done"
+          end
+        ]
+      }
+
+      agent = ExAgent.new(model: model, capabilities: [compaction])
 
       assert {:ok, %{messages: messages}} =
                ExAgent.run(agent, "again", message_history: history)
@@ -309,6 +326,9 @@ defmodule ExAgent.CompactionTest do
       # history(2) + first_request + response = 4; no compaction, no summary.
       refute Enum.any?(messages, &summary?/1)
       assert Enum.take(messages, length(history)) === history
+      expected = Enum.take(messages, 3)
+      assert_receive {:small_projection, ^expected}
+      refute_receive {:unexpected_summary, _}, 0
     end
   end
 

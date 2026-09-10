@@ -1,6 +1,8 @@
 # Shared deterministic fixtures for framework_evals.exs and framework_load_probe.exs.
 # Definitions are prepared once; scripted models consume actual tool returns.
 # These synthetic contracts evaluate the framework, never model intelligence.
+Code.require_file("testing_audit_harness.exs", __DIR__)
+
 defmodule ExAgent.FrameworkScenarios do
   alias ExAgent.{
     CheckpointError,
@@ -230,7 +232,10 @@ defmodule ExAgent.FrameworkScenarios do
     counter = counter()
     definition = definition(:delegation, counter: counter, retry: true)
     table = :ets.new(__MODULE__, [:set, :public])
-    {:ok, server} = Server.start_link(agent: definition.agent, store: {Store.ETS, table})
+    id = "framework-reading-#{System.unique_integer([:positive])}"
+
+    {:ok, server} =
+      Server.start_link(agent: definition.agent, agent_id: id, store: {Store.ETS, table})
 
     try do
       estimator = fn usage ->
@@ -241,6 +246,28 @@ defmodule ExAgent.FrameworkScenarios do
       {:ok, result} = Server.chat(server, "read", definition.opts ++ [estimate_cost: estimator])
       observed = counts(counter)
       %{persistence: persistence} = Server.health(server)
+      {:ok, snapshot} = Store.ETS.load_agent_snapshot(table, id)
+      {:ok, saved_history} = ExAgent.Server.Snapshot.messages(snapshot)
+      raw_history = Jason.decode!(snapshot.message_history)
+
+      final_calls =
+        for %Part.ToolCall{tool_name: "final_result"} = call <- Message.parts(saved_history),
+            do: call
+
+      [%Part.ToolCall{args: saved_answer, tool_call_id: saved_call_id}] = final_calls
+      history = Server.history(server)
+      stop(server)
+
+      {:ok, restored} =
+        Server.start_link(agent: definition.agent, agent_id: id, store: {Store.ETS, table})
+
+      restored_exact =
+        try do
+          Server.history(restored) == history and Server.usage(restored) == result.usage and
+            counts(counter) == observed
+        after
+          stop(restored)
+        end
 
       criteria = %{
         typed_output_from_read: result.output == %Reading{total: 29, count: 4},
@@ -252,14 +279,28 @@ defmodule ExAgent.FrameworkScenarios do
             result.usage_status == :complete,
         known_synthetic_cost: result.cost_status == :known and result.cost_cents == 0.25,
         checkpoint_confirmed: persistence.status == :confirmed and persistence.revision == 1,
-        actual_snapshot: length(Store.ETS.list_agent_snapshots(table)) == 1
+        actual_snapshot:
+          snapshot.agent_id == id and snapshot.revision == 1 and saved_history == result.messages and
+            ExAgent.Server.Snapshot.usage_struct(snapshot) == result.usage and
+            raw_history == Jason.decode!(Message.to_json(result.messages)) and
+            saved_answer == %{"total" => 29, "count" => 4} and saved_call_id == "final_result" and
+            restored_exact
       }
 
       report("typed_reading", criteria, %{
         output: Map.from_struct(result.output),
         ledger: ledger(result),
         observed: observed,
-        persistence: Map.take(persistence, [:status, :revision])
+        persistence: Map.take(persistence, [:status, :revision]),
+        snapshot: %{
+          agent_id: snapshot.agent_id,
+          revision: snapshot.revision,
+          answer: saved_answer,
+          final_call_id: saved_call_id,
+          history: raw_history,
+          usage: snapshot.usage,
+          restored_without_replay: restored_exact
+        }
       })
     after
       stop(server)
@@ -477,7 +518,12 @@ defmodule ExAgent.FrameworkScenarios do
   defp report(name, criteria, evidence),
     do: %{
       name: name,
-      passed: Enum.all?(Map.values(criteria)),
+      passed:
+        ExAgent.TestingAuditHarness.eval_case(
+          %{name: name, criteria: criteria}
+          |> Jason.encode!()
+          |> Jason.decode!()
+        ) == [],
       criteria: criteria,
       evidence: evidence
     }
@@ -492,6 +538,7 @@ defmodule ExAgent.FrameworkScenarios do
            "mix.lock",
            "examples/framework_scenarios.exs",
            "examples/framework_evals.exs",
+           "examples/testing_audit_harness.exs",
            "test/support/framework_load_probe.exs"
          ],
          &Path.join(root, &1)

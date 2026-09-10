@@ -6,6 +6,48 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Testing audit — oracles, boundaries and CI
+
+- Close the audit by user agreement and return to ExAgent development. Document
+  testing ownership, proportionate verification and lower-priority tracking of
+  dependency warnings; upstream internals are not a new ExAgent testing project.
+  Keep the recorded strict failures intact and leave a dormant second-review note
+  for the functionally complete package. This clarification changes documentation
+  and prioritization, not CI flags or runtime behavior.
+- Complete a source-level inventory of root tests, excluded integrations, support,
+  package fixtures, examples and CI before test consolidation. Preserve meaningful
+  distinctions between execution modes, runtime owners, codecs and optional SDK
+  compilation. Track findings and verification in
+  [the testing audit](development/testing-audit.md).
+- Preserve non-null Text/Thinking part IDs in the public message JSON codec, with
+  legacy missing-ID reads unchanged and no new null keys. Previous roundtrip
+  fixtures used nil IDs and missed this data loss. Snapshot version and the
+  intentional omission of ToolReturn contributed usage remain unchanged; old
+  serialized data cannot recover IDs that were not written. See design 8.10.
+- Preserve missing provider usage dimensions as unknown instead of zero, including
+  downstream completeness, cost and budget admission. Explicit zero usage remains
+  valid. Correct OutputSchema's typed inclusion/exclusion and array/exact-length
+  keywords, retain explicit false MCP schemas and forward valid atom-keyed prompts
+  to delegated agents. These reproduced boundary defects and their migration are
+  described in design 8.11; verification of the implementation is tracked in the
+  testing audit rather than inferred from the earlier green baseline.
+- Independent review caught boolean-named Ecto.Enum members and ordering/chaining
+  of length constraints in the first reflection correction. The final mapping uses
+  the Ecto field type and intersects bounds, including contradictory constraints;
+  five regressions preserve the review's negative controls.
+- Strengthen terminal acceptance, effective context/content, effect journals,
+  runtime events/FIFO/stale guards, telemetry attribution and owner cleanup. Remove
+  one fictitious OpenAI payload test only after independent mutation checks proved
+  its existing Req substitutes; consolidate lifecycle support for twelve MCP mocks.
+- Require manifests and meaningful data in C0/evals/load and six actual ExUnit
+  contracts per TAR consumer. CI explicitly runs offline with warnings-as-errors
+  and per-phase evidence; its finite driver is locally verified, not remotely run.
+- Final local suites: **655 passed,28 excluded**, seed37556, on Elixir1.20/OTP29
+  and1.17/OTP27. Four native TAR consumers pass **24/24 runtime contracts**, but
+  all four retain a strict failure for Req0.6.1's Mix1.20 `xref.exclude` deprecation;
+  exporter also retains nine gproc warnings. No dependency/floor/version changes,
+  publication or external-provider/DB acceptance are implied.
+
 ### Documentation — organization and current state
 
 - Group documentation under `docs/`, with a maintained index, current architecture,

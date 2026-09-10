@@ -29,6 +29,8 @@ defmodule ExAgent.Scenarios.CrashRecoveryTest do
 
   describe "Snapshot round-trip of a tool-call conversation" do
     test "a history with ToolCall/ToolReturn survives and can continue a run" do
+      effects = :atomics.new(1, [])
+
       add =
         ExAgent.Tool.new(
           name: "add",
@@ -38,12 +40,22 @@ defmodule ExAgent.Scenarios.CrashRecoveryTest do
             "properties" => %{"a" => %{"type" => "integer"}, "b" => %{"type" => "integer"}}
           },
           takes_ctx: false,
-          call: fn %{"a" => a, "b" => b} -> {:ok, a + b} end
+          call: fn %{"a" => a, "b" => b} ->
+            :atomics.add(effects, 1, 1)
+            {:ok, a + b}
+          end
         )
 
       model = %Test{
         script: [
-          {:tool_calls, [%Part.ToolCall{tool_name: "add", args: %{"a" => 1, "b" => 2}}]},
+          {:tool_calls,
+           [
+             %Part.ToolCall{
+               tool_name: "add",
+               tool_call_id: "add-once",
+               args: %{"a" => 1, "b" => 2}
+             }
+           ]},
           "first answer"
         ]
       }
@@ -60,17 +72,37 @@ defmodule ExAgent.Scenarios.CrashRecoveryTest do
 
       {:ok, recovered} = Snapshot.deserialize(Snapshot.serialize(snap))
       {:ok, messages} = Snapshot.messages(recovered)
-      assert length(messages) == length(history)
+      assert messages == history
 
       # The recovered history contains the ToolCall and its ToolReturn.
       parts = Message.parts(messages)
-      assert Enum.any?(parts, &match?(%Part.ToolCall{tool_name: "add"}, &1))
-      assert Enum.any?(parts, &match?(%Part.ToolReturn{tool_name: "add"}, &1))
+
+      assert [
+               %Part.ToolReturn{
+                 tool_name: "add",
+                 tool_call_id: "add-once",
+                 content: 3,
+                 status: :succeeded
+               }
+             ] =
+               Enum.filter(parts, &match?(%Part.ToolReturn{}, &1))
 
       # A fresh run can continue from the recovered history.
       assert {:ok, %{output: "next"}} =
-               ExAgent.new(model: %Test{label: "next"})
+               ExAgent.new(
+                 model: %Test{
+                   script: [
+                     fn seen, _ ->
+                       assert Enum.take(seen, length(history)) == history
+                       "next"
+                     end
+                   ]
+                 },
+                 tools: [add]
+               )
                |> ExAgent.run("follow up", message_history: messages)
+
+      assert :atomics.get(effects, 1) == 1
     end
   end
 
@@ -88,6 +120,11 @@ defmodule ExAgent.Scenarios.CrashRecoveryTest do
           name: name
         )
 
+      on_exit(fn ->
+        ExAgent.Test.TestingAuditRuntime.stop_restarted_agent(pid, name)
+        cleanup_ets(id)
+      end)
+
       assert {:ok, _} = Server.chat(name, "first")
       assert {:ok, _} = Server.chat(name, "second")
       assert length(Server.history(name)) == 4
@@ -95,15 +132,14 @@ defmodule ExAgent.Scenarios.CrashRecoveryTest do
       # Reset checkpoints an EMPTY snapshot.
       assert :ok = Server.reset(name)
 
+      monitor = Process.monitor(pid)
       Process.exit(pid, :kill)
-      assert wait_for_restart(name)
+      assert_receive {:DOWN, ^monitor, :process, ^pid, :killed}, 1000
+      assert wait_for_restart(name, pid)
 
       # Rehydrated state is empty (reset won), not the 4-message conversation.
       assert Server.history(name) == []
       assert Server.usage(name).input_tokens == 0
-
-      cleanup_ets(id)
-      ExAgent.AgentSupervisor.stop_agent(Process.whereis(name))
     end
   end
 
@@ -111,6 +147,7 @@ defmodule ExAgent.Scenarios.CrashRecoveryTest do
     test "a partial (un-checkpointed) run is not visible after restart" do
       id = unique("midrun_crash")
       name = :"agent_#{id}"
+      owner = self()
 
       # Two fast turns checkpoint; the third is a slow in-flight run we kill.
       {:ok, pid} =
@@ -122,8 +159,9 @@ defmodule ExAgent.Scenarios.CrashRecoveryTest do
                   "one",
                   "two",
                   fn ->
-                    Process.sleep(2_000)
-                    "slow"
+                    Server.health(name)
+                    send(owner, {:crash_barrier, self()})
+                    receive do: (:release -> "slow")
                   end
                 ]
               },
@@ -134,24 +172,32 @@ defmodule ExAgent.Scenarios.CrashRecoveryTest do
           name: name
         )
 
+      on_exit(fn ->
+        ExAgent.Test.TestingAuditRuntime.stop_restarted_agent(pid, name)
+        cleanup_ets(id)
+      end)
+
       # Two completed turns → checkpointed (history = 4).
       assert {:ok, _} = Server.chat(name, "first")
       assert {:ok, _} = Server.chat(name, "second")
       assert length(Server.history(name)) == 4
+      history = Server.history(name)
+      usage = Server.usage(name)
 
       # Start a slow async run, kill the server while it is in flight.
       {:ok, _} = Server.send_message(name, "slow")
-      wait_for_status(name, :running)
+      assert_receive {:crash_barrier, worker}, 1000
+      worker_monitor = Process.monitor(worker)
+      monitor = Process.monitor(pid)
       Process.exit(pid, :kill)
-
-      assert wait_for_restart(name)
+      assert_receive {:DOWN, ^monitor, :process, ^pid, :killed}, 1000
+      assert_receive {:DOWN, ^worker_monitor, :process, ^worker, _}, 1000
+      assert wait_for_restart(name, pid)
 
       # The in-flight run never checkpointed, so history is the last completed
       # turn (4 messages), not 5+ with a half-written partial.
-      assert length(Server.history(name)) == 4
-
-      cleanup_ets(id)
-      ExAgent.AgentSupervisor.stop_agent(Process.whereis(name))
+      assert Server.history(name) == history
+      assert Server.usage(name) == usage
     end
   end
 
@@ -160,6 +206,11 @@ defmodule ExAgent.Scenarios.CrashRecoveryTest do
 
     test "a snapshot saved to ETS round-trips through Postgres unchanged" do
       id = unique("xstore")
+
+      on_exit(fn ->
+        Store.delete_agent_snapshot(@ets, id)
+        Store.delete_agent_snapshot(@pg, id)
+      end)
 
       # Produce a real conversation history (with a tool call).
       add =
@@ -193,12 +244,11 @@ defmodule ExAgent.Scenarios.CrashRecoveryTest do
       {:ok, msgs_ets} = Snapshot.messages(from_ets)
       {:ok, msgs_pg} = Snapshot.messages(from_pg)
 
-      assert length(msgs_pg) == length(msgs_ets)
+      assert msgs_pg == msgs_ets
+      assert msgs_pg == history
+      assert from_pg == from_ets
       assert from_pg.agent_id == id
       assert from_pg.metadata == %{"from" => "ets"}
-
-      Store.delete_agent_snapshot(@ets, id)
-      Store.delete_agent_snapshot(@pg, id)
     end
   end
 
@@ -207,17 +257,17 @@ defmodule ExAgent.Scenarios.CrashRecoveryTest do
 
   defp cleanup_ets(id), do: Store.delete_agent_snapshot(@ets, id)
 
-  defp wait_for_restart(name, tries \\ 400) do
+  defp wait_for_restart(name, original, tries \\ 400) do
     cond do
       tries <= 0 ->
         false
 
-      Process.whereis(name) != nil and restart_ready?(name) ->
+      Process.whereis(name) not in [nil, original] and restart_ready?(name) ->
         true
 
       true ->
         Process.sleep(5)
-        wait_for_restart(name, tries - 1)
+        wait_for_restart(name, original, tries - 1)
     end
   end
 
@@ -229,20 +279,6 @@ defmodule ExAgent.Scenarios.CrashRecoveryTest do
       _ -> false
     catch
       :exit, _ -> false
-    end
-  end
-
-  defp wait_for_status(server, status, tries \\ 100) do
-    cond do
-      tries <= 0 ->
-        flunk("never reached #{inspect(status)}")
-
-      Server.health(server).status == status ->
-        :ok
-
-      true ->
-        Process.sleep(5)
-        wait_for_status(server, status, tries - 1)
     end
   end
 end

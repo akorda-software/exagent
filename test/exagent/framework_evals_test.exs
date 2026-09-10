@@ -11,6 +11,18 @@ defmodule ExAgent.FrameworkEvalsTest do
     assert report.evidence.output == %{total: 29, count: 4}
     assert report.evidence.observed.requests == 5
     assert report.evidence.ledger.cost_cents == 0.25
+    assert report.evidence.snapshot.answer == %{"total" => 29, "count" => 4}
+    assert report.evidence.snapshot.final_call_id == "final_result"
+    assert report.evidence.snapshot.revision == 1
+
+    assert report.evidence.snapshot.usage == %{
+             "input_tokens" => 15,
+             "output_tokens" => 10,
+             "details" => %{}
+           }
+
+    assert report.evidence.snapshot.restored_without_replay
+    assert report.evidence.snapshot.history != []
   end
 
   test "effect survives failed request and checkpoint-only recovery without replay" do

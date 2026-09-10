@@ -101,6 +101,34 @@ defmodule ExAgent.CoreContractTest do
     def after_tool_execute(_, _, _, _), do: raise("after effect")
   end
 
+  defmodule AfterRewrite do
+    use ExAgent.Capability
+    defstruct [:owner, :mode]
+
+    def after_tool_execute(cap, _ctx, _call, {:ok, part}) do
+      send(cap.owner, {:after_tool_barrier, self(), part})
+
+      receive do
+        :continue_after_tool -> :ok
+      end
+
+      updated = %{
+        part
+        | content: %{"receipt" => 73, "reviewed" => true},
+          status: :failed,
+          usage: %Usage{input_tokens: 999, output_tokens: 888}
+      }
+
+      case cap.mode do
+        :transform -> {:ok, updated}
+        :changed_id -> {:ok, %{updated | tool_call_id: "forged-id"}}
+        :changed_name -> {:ok, %{updated | tool_name: "forged-name"}}
+        :invalid_json -> {:ok, %{updated | content: self()}}
+        :throw -> throw(:after_tool_failed)
+      end
+    end
+  end
+
   defmodule ModelSpy do
     use ExAgent.Capability
     defstruct [:owner]
@@ -243,8 +271,13 @@ defmodule ExAgent.CoreContractTest do
 
   test "after-hook exception and timeout retain the successful effect and usage without replay" do
     for sleep? <- [false, true] do
+      owner = self()
+
       effect =
-        tool("effect", fn _ -> {:ok, "saved", %Usage{input_tokens: 3, output_tokens: 4}} end)
+        tool("effect", fn _ ->
+          send(owner, :saved_effect)
+          {:ok, "saved", %Usage{input_tokens: 3, output_tokens: 4}}
+        end)
 
       agent =
         ExAgent.new(
@@ -258,6 +291,48 @@ defmodule ExAgent.CoreContractTest do
       assert [%Part.ToolReturn{status: :succeeded, content: "saved"}] = returns(partial)
       assert partial.usage.input_tokens == 4
       assert partial.model.index == 1
+      assert partial.usage.output_tokens == 5
+      assert_receive :saved_effect
+      refute_receive :saved_effect, 0
+    end
+  end
+
+  test "after-tool content transformation reaches the next model without forging status or usage" do
+    for mode <- [:sync, :stream] do
+      {task, journal, confirmed} = start_after_rewrite(:transform, mode)
+      assert {:ok, result} = Task.await(task)
+
+      assert result.output == "receipt: 73 (reviewed)"
+      assert result.status == :succeeded
+      assert result.usage == %Usage{input_tokens: 9, output_tokens: 4}
+      assert result.request_count == 2
+      assert result.model.index == 2
+      assert [effective] = returns(result)
+      assert effective == %{confirmed | content: %{"receipt" => 73, "reviewed" => true}}
+
+      assert Agent.get(journal, &Enum.reverse/1) == [
+               :first_request,
+               {:effect, "receipt-73"},
+               {:next_request, [effective]}
+             ]
+    end
+  end
+
+  test "invalid after-tool identity, JSON and throw preserve the confirmed effect without replay" do
+    for invalid <- [:changed_id, :changed_name, :invalid_json, :throw],
+        mode <- [:sync, :stream] do
+      {task, journal, confirmed} = start_after_rewrite(invalid, mode)
+
+      assert {:error, %RunError{reason: {:tool_hook_failed, "receipt", _}, partial: partial}} =
+               Task.await(task)
+
+      assert partial.status == :failed
+      assert partial.output == nil
+      assert partial.usage == %Usage{input_tokens: 8, output_tokens: 3}
+      assert partial.request_count == 1
+      assert partial.model.index == 1
+      assert returns(partial) == [confirmed]
+      assert Agent.get(journal, &Enum.reverse/1) == [:first_request, {:effect, "receipt-73"}]
     end
   end
 
@@ -560,6 +635,7 @@ defmodule ExAgent.CoreContractTest do
         end)
       end)
 
+    on_exit(fn -> ExAgent.Test.TestingAuditCore.stop_and_assert_down(consumer) end)
     assert_receive {:opened, worker}
     monitor = Process.monitor(worker)
     assert_receive :consuming
@@ -675,6 +751,80 @@ defmodule ExAgent.CoreContractTest do
         parameters_json_schema: %{"type" => "object"},
         call: fun
       )
+
+  defp start_after_rewrite(rewrite, mode) do
+    owner = self()
+    journal = start_supervised!({Agent, fn -> [] end}, id: make_ref())
+    record = fn event -> Agent.update(journal, &[event | &1]) end
+
+    effect =
+      tool("receipt", fn _ ->
+        record.({:effect, "receipt-73"})
+        {:ok, %{"receipt" => 73}, %Usage{input_tokens: 7, output_tokens: 2}}
+      end)
+
+    model = %TestModel{
+      script: [
+        fn _messages, _params ->
+          record.(:first_request)
+          {:tool_calls, [call("receipt", %{}, "receipt-73")]}
+        end,
+        fn messages, _params ->
+          parts = Enum.filter(Message.parts(messages), &match?(%Part.ToolReturn{}, &1))
+          record.({:next_request, parts})
+          [%Part.ToolReturn{content: %{"receipt" => receipt, "reviewed" => true}}] = parts
+          "receipt: #{receipt} (reviewed)"
+        end
+      ]
+    }
+
+    agent =
+      ExAgent.new(
+        model: model,
+        tools: [effect],
+        capabilities: [%AfterRewrite{owner: owner, mode: rewrite}]
+      )
+
+    task =
+      Task.async(fn ->
+        opts = [on_progress: &send(owner, {:rewrite_progress, journal, &1})]
+
+        case mode do
+          :sync ->
+            ExAgent.run(agent, "save", opts)
+
+          :stream ->
+            events = ExAgent.run_stream(agent, "save", opts) |> Enum.to_list()
+            terminals = Enum.reject(events, &match?({:delta, _}, &1))
+
+            case terminals do
+              [{:result, result}] -> {:ok, result}
+              [{:error, error}] -> {:error, error}
+            end
+        end
+      end)
+
+    on_exit(fn -> ExAgent.Test.TestingAuditCore.stop_and_assert_down(task.pid) end)
+
+    assert_receive {:after_tool_barrier, worker, confirmed}, 1_000
+
+    assert confirmed == %Part.ToolReturn{
+             tool_name: "receipt",
+             tool_call_id: "receipt-73",
+             status: :succeeded,
+             content: %{"receipt" => 73},
+             usage: %Usage{input_tokens: 7, output_tokens: 2}
+           }
+
+    assert Agent.get(journal, &Enum.reverse/1) == [:first_request, {:effect, "receipt-73"}]
+    # The acknowledgement before after_tool makes this progress a causal barrier.
+    assert_receive {:rewrite_progress, ^journal,
+                    %{messages: [_request, _response, %Message.Request{parts: [^confirmed]}]}},
+                   1_000
+
+    send(worker, :continue_after_tool)
+    {task, journal, confirmed}
+  end
 
   defp call(name, args \\ %{}, id \\ nil),
     do: %Part.ToolCall{tool_name: name, args: args, tool_call_id: id}

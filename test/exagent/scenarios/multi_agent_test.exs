@@ -70,8 +70,7 @@ defmodule ExAgent.Scenarios.MultiAgentTest do
 
       # Both contributions landed, in turn order (b's is newest, prepended).
       state = Session.read_state(game)
-      assert {"b", "from-b"} in state.transcript
-      assert {"a", "from-a"} in state.transcript
+      assert state.transcript == [{"b", "from-b"}, {"a", "from-a"}]
     end
 
     test "propose_change fails with :not_your_turn outside the participant's turn" do
@@ -126,10 +125,21 @@ defmodule ExAgent.Scenarios.MultiAgentTest do
           tools: [Coordination.delegation_tool(specialist, name: "ask_billing")]
         )
 
-      assert {:ok, %{output: "triaged", usage: usage}} = ExAgent.run(parent, "help")
+      assert {:ok, %{output: "triaged", usage: usage, messages: messages, request_count: 3}} =
+               ExAgent.run(parent, "help")
 
-      # Parent's 1/1 + specialist's contributed 8/3 = at least 9/4.
-      assert usage.input_tokens >= 9 and usage.output_tokens >= 4
+      # Two parent requests (1/1 each) plus the specialist's 8/3, exactly once.
+      assert usage.input_tokens == 10
+      assert usage.output_tokens == 5
+
+      assert [
+               %Part.ToolReturn{
+                 tool_name: "ask_billing",
+                 content: "refund: $42",
+                 status: :succeeded
+               }
+             ] =
+               Enum.filter(Message.parts(messages), &match?(%Part.ToolReturn{}, &1))
     end
   end
 
@@ -218,11 +228,21 @@ defmodule ExAgent.Scenarios.MultiAgentTest do
 
       assert_receive {:exagent_event, %Event{type: :session_started}}
 
+      assert_receive {:exagent_event,
+                      %Event{type: :session_turn_changed, payload: %{participant_id: "a"}}}
+
       # Hand off directly to the human, skipping "b".
       assert {:ok, "human"} = Coordination.handoff(game, "human")
       assert Session.current(game) == "human"
 
-      assert_receive {:exagent_event, %Event{type: :session_turn_changed}}
+      id = session_id(game)
+
+      assert_receive {:exagent_event,
+                      %Event{
+                        type: :session_turn_changed,
+                        session_id: ^id,
+                        payload: %{participant_id: "human", via: :handoff}
+                      }}
     end
   end
 

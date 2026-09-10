@@ -26,6 +26,15 @@ defmodule ExAgent.OutputSchema do
   for this JSON Schema (including `anyOf` and strict-mode restrictions) must
   be checked against the actual backend.
 
+  Reflected inclusion/exclusion values retain their JSON types; Ecto.Enum atoms
+  use their string names, including boolean-named enum members. Array lengths use
+  `minItems`/`maxItems`, while string lengths use `minLength`/`maxLength`, including
+  exact (`:is`) bounds. Length bounds intersect across options and validation calls;
+  contradictory bounds remain unsatisfiable, as in the changeset. JSON string
+  lengths count Unicode codepoints. Ecto's default grapheme counting and optional
+  byte counting can differ; use `count: :codepoints` when exact alignment is
+  required. The real changeset remains authoritative for those count modes.
+
   ## Example
 
       defmodule WeatherReport do
@@ -89,19 +98,23 @@ defmodule ExAgent.OutputSchema do
   defp merge_changeset_validations(changeset, properties) do
     Enum.reduce(changeset.validations, properties, fn {field, {kind, meta}}, props ->
       case Map.get(props, Atom.to_string(field)) do
-        nil -> props
-        schema -> Map.put(props, Atom.to_string(field), apply_validation(kind, meta, schema))
+        nil ->
+          props
+
+        schema ->
+          type = Map.get(changeset.types, field)
+          Map.put(props, Atom.to_string(field), apply_validation(kind, meta, schema, type))
       end
     end)
   end
 
-  defp apply_validation(:inclusion, values, schema) when is_list(values),
-    do: Map.put(schema, :enum, Enum.map(values, &to_string/1))
+  defp apply_validation(:inclusion, values, schema, type) when is_list(values),
+    do: Map.put(schema, :enum, Enum.map(values, &enum_value(&1, type)))
 
-  defp apply_validation(:exclusion, values, schema) when is_list(values),
-    do: Map.put(schema, :not, %{enum: Enum.map(values, &to_string/1)})
+  defp apply_validation(:exclusion, values, schema, type) when is_list(values),
+    do: Map.put(schema, :not, %{enum: Enum.map(values, &enum_value(&1, type))})
 
-  defp apply_validation(:number, opts, schema) do
+  defp apply_validation(:number, opts, schema, _type) do
     Enum.reduce(opts, schema, fn
       {:greater_than_or_equal_to, n}, s -> Map.put(s, :minimum, n)
       {:less_than_or_equal_to, n}, s -> Map.put(s, :maximum, n)
@@ -112,16 +125,39 @@ defmodule ExAgent.OutputSchema do
     end)
   end
 
-  defp apply_validation(:length, opts, schema) do
-    Enum.reduce(opts, schema, fn
-      {:min, n}, s -> Map.put(s, :minLength, n)
-      {:max, n}, s -> Map.put(s, :maxLength, n)
-      _, s -> s
-    end)
+  defp apply_validation(:length, opts, %{type: type} = schema, _ecto_type)
+       when type in ["string", "array"] do
+    {minimum, maximum} =
+      if type == "array", do: {:minItems, :maxItems}, else: {:minLength, :maxLength}
+
+    # Ecto checks :is first, then still checks :min/:max when :is matches.
+    # Acceptance is their intersection, not whichever keyword appeared last.
+    schema
+    |> put_length_bound(minimum, [opts[:min], opts[:is]], &Enum.max/1)
+    |> put_length_bound(maximum, [opts[:max], opts[:is]], &Enum.min/1)
   end
 
   # format / acceptance / others have no clean JSON Schema equivalent; skip.
-  defp apply_validation(_kind, _meta, schema), do: schema
+  defp apply_validation(_kind, _meta, schema, _type), do: schema
+
+  defp put_length_bound(schema, key, values, aggregate) do
+    case Enum.filter([Map.get(schema, key) | values], & &1) do
+      [] -> schema
+      bounds -> Map.put(schema, key, aggregate.(bounds))
+    end
+  end
+
+  defp enum_value(value, {:parameterized, {Ecto.Enum, _}}) when is_atom(value),
+    do: Atom.to_string(value)
+
+  defp enum_value(value, {:parameterized, Ecto.Enum, _}) when is_atom(value),
+    do: Atom.to_string(value)
+
+  defp enum_value(value, _type)
+       when is_atom(value) and not is_boolean(value) and not is_nil(value),
+       do: Atom.to_string(value)
+
+  defp enum_value(value, _type), do: value
 
   @doc """
   Validate `data` (a map, typically decoded from the model's JSON) against an

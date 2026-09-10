@@ -52,8 +52,6 @@ defmodule ExAgent.MCP.ProtocolTest do
         "inputSchema" => %{"type" => "object", "properties" => %{"name" => %{"type" => "string"}}}
       }
 
-      {:ok, _} = Agent.start_link(fn -> [] end)
-
       call_fun = fn "greet", %{"name" => name} -> {:ok, "hi #{name}"} end
       tool = Protocol.to_tool(spec, call_fun)
 

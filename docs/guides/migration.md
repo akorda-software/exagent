@@ -92,6 +92,23 @@ an explicit schema if their derived fallback is unconstrained.
 - `Tool.prepared_validator` is an internal cache, not persisted configuration.
   `Tool.definition/1` remains the provider-facing projection.
 
+MCP schema selection preserves an explicit `false`, which rejects every invocation
+through the ordinary Tool validator. The empty object fallback applies only when
+both schema keys are absent; a present invalid schema is not replaced by that
+fallback. The standard `inputSchema` key takes precedence over `input_schema`.
+
+OutputSchema reflection preserves numeric/boolean inclusion and exclusion values
+instead of converting them to strings. Array length uses `minItems`/`maxItems`;
+exact length uses equal bounds. Review generated payload snapshots and backend
+support for these corrected constraints. Ecto remains the final output authority;
+custom/conditional validations and differing text-count semantics are still not
+universally equivalent to JSON Schema.
+
+Boolean-named members of Ecto.Enum still use their string names; they are not
+native boolean fields. Length constraints intersect across options and chained
+validation calls, regardless of ordering, and contradictory bounds remain
+unsatisfiable just as in the changeset.
+
 An intentionally correctable tool rejection should use the existing explicit
 `ExAgent.ModelRetry` mechanism, before any uncertain effect. Arbitrary exceptions,
 timeouts and execution failures no longer mean permission to repeat that effect.
@@ -130,6 +147,16 @@ than a new System instruction. Canonical history still needs an application
 retention policy. IO inside an ordinary one-argument summarizer is not implicitly
 part of the scope; use explicit scoped auxiliary calls when accounting is needed.
 
+Provider usage fields that are absent or null remain unknown per dimension.
+Numeric aggregated subtotals remain available, but `usage_status: :partial` and
+`cost_status: :unknown` must not be treated as a complete free request. With a
+monetary budget this can block later tools/requests; explicit zero/zero remains
+known usage. No missing value is inferred from total/cache tokens.
+
+Delegation forwards prompts from valid atom- or string-keyed argument maps while
+preserving the original arguments delivered to the builder. `prompt_arg` remains
+a string option; ambiguous atom/string keys still reject before the builder.
+
 ## 5. Store confirmation and recovery
 
 Without Store, runtime state is in memory. With Store configured, a terminal
@@ -156,6 +183,13 @@ implicitly on a join. A take_turn checkpoint contains the whole transition.
 These guarantees concern conversation/coordination at confirmed boundaries, not
 exactly-once external effects or universal resumption of a killed tool. ETS also
 depends on its table owner/VM; acceptance of Postgres is a separate verification.
+
+The message JSON codec now preserves optional non-null Text/Thinking part IDs.
+Older data without these fields still loads with nil IDs; the writer omits the
+new key when the ID is nil. A previously discarded ID cannot be recovered from
+an old snapshot. Consumers that compare exact JSON objects should allow these
+optional fields. This does not change snapshot v2 or the documented omission of
+ToolReturn contributed usage from message history.
 
 ## 6. Known application migration points
 

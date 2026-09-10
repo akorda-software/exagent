@@ -57,7 +57,13 @@ defmodule PackageAcceptanceTest do
       )
 
     assert {:ok, %{output: %PackageAcceptance.Output{answer: 5}}} =
-             ExAgent.run(agent, "structured answer")
+              ExAgent.run(agent, "structured answer")
+
+    # 4 has the declared integer shape but violates the real changeset-only rule.
+    invalid = %{call | args: %{"answer" => 4}}
+    agent = %{agent | model: %TestModel{script: [{:tool_calls, [invalid]}]}, output_retries: 0}
+    assert {:error, %ExAgent.RunError{reason: {:unexpected_model_behavior, {:output_retries_exhausted, _}},
+      partial: %{output: nil, status: :failed}}} = ExAgent.run(agent, "even answer")
   end
 
   test "model failure is one rich partial error in sync and stream" do

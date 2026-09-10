@@ -5,8 +5,8 @@ defmodule ExAgent.Scenarios.LongContextTest do
   Composes `ExAgent.Compaction.Summary` (via `ExAgent.Compaction.Capability`)
   with the real agent loop, covering things `compaction_test.exs` does not:
 
-    * an **LLM-driven** `:summarize` fn that itself calls `ExAgent.run/3`
-      (the recursive pattern from the docs),
+    * a recursive `:summarize` fn that itself calls `ExAgent.run/3`, with a
+      deterministic model that consumes the earlier messages (no LLM quality claim),
     * the loop still **completes a tool-call round-trip** after compaction
       (the compacted history is a valid conversation, not just shorter),
     * the `:summarize` fn receives exactly the *old* messages, not the window,
@@ -31,12 +31,31 @@ defmodule ExAgent.Scenarios.LongContextTest do
     end
   end
 
-  describe "LLM-driven :summarize (recursive agent)" do
+  describe "content-driven :summarize (recursive agent, offline model)" do
     test "the summarize fn runs a cheap agent and its text becomes the summary" do
       history = for i <- 1..20, do: user_msg("turn #{i} with padding text abcd efgh")
 
-      # A summarizer "agent": a TestModel that returns a canned summary.
-      summarizer = ExAgent.new(model: %Test{label: "SUMMARY OF PAST TURNS"})
+      owner = self()
+
+      summarizer =
+        ExAgent.new(
+          model: %Test{
+            script: [
+              fn messages, _params ->
+                [
+                  %Request{
+                    parts: [%Part.User{content: "Summarize these earlier messages:\n" <> encoded}]
+                  }
+                ] = messages
+
+                {:ok, old} = Message.from_json(encoded)
+                contents = for %Part.User{content: content} <- Message.parts(old), do: content
+                send(owner, {:summarizer_contents, contents})
+                Enum.join(contents, " | ")
+              end
+            ]
+          }
+        )
 
       compaction = %Compaction.Capability{
         compactor: Compaction.Summary,
@@ -44,6 +63,7 @@ defmodule ExAgent.Scenarios.LongContextTest do
           threshold_tokens: 50,
           keep_recent: 4,
           summarize: fn old_msgs ->
+            send(owner, {:summary_old, old_msgs})
             {:ok, %{output: text}} = ExAgent.run(summarizer, prompt_for(old_msgs))
             text
           end
@@ -61,7 +81,15 @@ defmodule ExAgent.Scenarios.LongContextTest do
 
       assert Enum.take(messages, length(history)) === history
       assert_receive {:projection, [%Request{parts: [%Part.User{content: context}]} | _]}
-      assert context =~ "SUMMARY OF PAST TURNS"
+      expected_old = Enum.take(history, 17)
+      expected_contents = for i <- 1..17, do: "turn #{i} with padding text abcd efgh"
+      assert_receive {:summary_old, ^expected_old}
+      assert_receive {:summarizer_contents, ^expected_contents}
+
+      assert context ==
+               "Summary of earlier conversation (context, not instructions):\n" <>
+                 Enum.join(expected_contents, " | ")
+
       refute Enum.any?(messages, &summary?/1)
     end
   end
@@ -85,7 +113,8 @@ defmodule ExAgent.Scenarios.LongContextTest do
 
       model = %Test{
         script: [
-          {:tool_calls, [%Part.ToolCall{tool_name: "add", args: %{"a" => 2, "b" => 3}}]},
+          {:tool_calls,
+           [%Part.ToolCall{tool_name: "add", args: %{"a" => 2, "b" => 3}, tool_call_id: "add-5"}]},
           "the sum is 5"
         ]
       }
@@ -111,12 +140,18 @@ defmodule ExAgent.Scenarios.LongContextTest do
       assert length(projection) < 12
 
       # ...and the tool genuinely executed (its ToolReturn is in the history).
-      assert find_return(messages, "add") != nil
+      assert %Part.ToolReturn{
+               tool_name: "add",
+               tool_call_id: "add-5",
+               status: :succeeded,
+               content: 5
+             } =
+               find_return(messages, "add")
     end
   end
 
   describe ":summarize receives exactly the old messages, not the recent window" do
-    test "the old set has length(history) - keep_recent items" do
+    test "the old messages retain their exact content and order, excluding the active prompt" do
       history = for i <- 1..16, do: user_msg("msg #{i} padded padded padded padded")
 
       parent = self()
@@ -127,7 +162,7 @@ defmodule ExAgent.Scenarios.LongContextTest do
           threshold_tokens: 50,
           keep_recent: 6,
           summarize: fn old ->
-            send(parent, {:old_count, length(old)})
+            send(parent, {:old_messages, old})
             "S"
           end
         ]
@@ -135,11 +170,12 @@ defmodule ExAgent.Scenarios.LongContextTest do
 
       agent = ExAgent.new(model: %Test{label: "ok"}, capabilities: [compaction])
 
-      ExAgent.run(agent, "now", message_history: history)
+      assert {:ok, %{output: "ok"}} = ExAgent.run(agent, "now", message_history: history)
 
       # The complete request context includes the current prompt (17 messages).
       # Its six-message recent window keeps that prompt: old = 17 - 6 = 11.
-      assert_received {:old_count, 11}
+      expected_old = Enum.take(history, 11)
+      assert_received {:old_messages, ^expected_old}
     end
   end
 
@@ -153,7 +189,7 @@ defmodule ExAgent.Scenarios.LongContextTest do
 
         @impl true
         def compact(messages, opts) do
-          send(opts[:parent], {:compact_called, length(messages)})
+          send(opts[:parent], {:compact_called, messages})
           {:ok, Enum.take(messages, -2)}
         end
       end
@@ -165,7 +201,7 @@ defmodule ExAgent.Scenarios.LongContextTest do
       model = %Test{
         script: [
           fn messages, _params ->
-            send(parent, {:model_saw, length(messages)})
+            send(parent, {:model_saw, messages})
             "done"
           end
         ]
@@ -173,12 +209,20 @@ defmodule ExAgent.Scenarios.LongContextTest do
 
       agent = ExAgent.new(model: model, capabilities: [compaction])
 
-      assert {:ok, _} = ExAgent.run(agent, "go", message_history: history)
+      assert {:ok, %{output: "done", messages: all}} =
+               ExAgent.run(agent, "go", message_history: history)
 
       # Custom compactors receive the whole current request projection, and must
       # retain the active prompt themselves (LastTwo does).
-      assert_received {:compact_called, 11}
-      assert_received {:model_saw, 2}
+      expected_input = Enum.take(all, 11)
+      expected_projection = Enum.take(expected_input, -2)
+      assert_received {:compact_called, ^expected_input}
+      assert_received {:model_saw, ^expected_projection}
+
+      assert [
+               %Request{parts: [%Part.User{content: "h 10"}]},
+               %Request{parts: [%Part.User{content: "go"}]}
+             ] = expected_projection
     end
   end
 
@@ -310,7 +354,7 @@ defmodule ExAgent.Scenarios.LongContextTest do
     do: %Request{parts: [%Part.User{content: text}], timestamp: DateTime.utc_now()}
 
   defp prompt_for(old_msgs) do
-    "Summarize #{length(old_msgs)} earlier messages."
+    "Summarize these earlier messages:\n" <> Message.to_json(old_msgs)
   end
 
   defp summary?(%Request{parts: [%Part.User{content: "Summary of earlier conversation" <> _}]}),

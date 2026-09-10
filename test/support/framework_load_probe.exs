@@ -132,7 +132,8 @@ defmodule ExAgent.FrameworkLoadProbe do
         ]
       }
 
-      %{report | passed: report.passed and report.sources_unchanged}
+      errors = report |> Jason.encode!() |> Jason.decode!() |> ExAgent.TestingAuditHarness.load()
+      Map.merge(report, %{passed: report.passed and errors == [], validation_errors: errors})
     after
       if :opentelemetry in started, do: Application.stop(:opentelemetry)
 
@@ -190,6 +191,7 @@ defmodule ExAgent.FrameworkLoadProbe do
         samples: count,
         warmup: preset.warmup,
         correct: correct,
+        warmup_correct: warm_correct,
         elapsed_us: elapsed,
         latency_us: percentiles(Enum.map(samples, & &1.us)),
         raw_latency_us: Enum.map(samples, & &1.us),
@@ -199,12 +201,15 @@ defmodule ExAgent.FrameworkLoadProbe do
         resources_after: after_resources,
         resources_observed: observed,
         processor_delta: delta,
+        processor_before: counter_delta(%{}, before_stats),
+        processor_after: counter_delta(%{}, after_stats),
         drain_us: drain_us,
         cleanup: cleanup,
         passed:
           warm_correct and correct == count and cleanup.passed and
             (not tracing? or
-               (delta.accepted + delta.dropped_queue_full == count * definition.spans and
+               (delta.dropped_queue_full == 0 and after_stats.dropped_queue_full == 0 and
+                  delta.accepted == count * definition.spans and
                   delta.exported == delta.accepted and
                   cleanup.local_exported == after_stats.exported and delta.export_failed == 0 and
                   delta.export_timed_out == 0))

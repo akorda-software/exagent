@@ -107,15 +107,20 @@ defmodule ExAgent.BeamHardeningTest do
     test "emits run start/stop and tool stop events" do
       parent = self()
       ref = make_ref()
+      name = "beam-telemetry-#{System.unique_integer([:positive])}"
+      handler = "test-#{inspect(ref)}"
 
-      :telemetry.attach_many(
-        "test-#{inspect(ref)}",
-        [[:exagent, :run, :start], [:exagent, :run, :stop], [:exagent, :tool, :stop]],
-        fn event, measurements, metadata, _ ->
-          send(parent, {ref, event, measurements, metadata})
-        end,
-        nil
-      )
+      :ok =
+        :telemetry.attach_many(
+          handler,
+          [[:exagent, :run, :start], [:exagent, :run, :stop], [:exagent, :tool, :stop]],
+          fn event, measurements, metadata, _ ->
+            send(parent, {ref, event, measurements, metadata})
+          end,
+          nil
+        )
+
+      on_exit(fn -> :telemetry.detach(handler) end)
 
       add =
         Tool.new(
@@ -133,16 +138,16 @@ defmodule ExAgent.BeamHardeningTest do
         ]
       }
 
-      agent = ExAgent.new(model: model, tools: [add], name: "t")
+      agent = ExAgent.new(model: model, tools: [add], name: name)
 
       capture_log(fn ->
         {:ok, %{usage: usage}} = ExAgent.run(agent, "go")
 
-        # telemetry is global: keep only THIS run's events (agent == "t") so
+        # telemetry is global: keep only THIS run's unique agent identity so
         # concurrently-running tests' emissions don't pollute the assertions.
         mine =
           receive_all(ref)
-          |> Enum.filter(fn {^ref, _e, _m, meta} -> Map.get(meta, :agent) == "t" end)
+          |> Enum.filter(fn {^ref, _e, _m, meta} -> Map.get(meta, :agent) == name end)
 
         events = Enum.map(mine, fn {^ref, e, _m, _meta} -> e end)
 
@@ -157,8 +162,6 @@ defmodule ExAgent.BeamHardeningTest do
           end)
           |> then(fn {^ref, [:exagent, :run, :stop], _m, meta} -> {:run, meta} end)
       end)
-
-      :telemetry.detach("test-#{inspect(ref)}")
     end
   end
 

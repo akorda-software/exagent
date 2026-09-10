@@ -1,12 +1,13 @@
-# Development diagnostic, deliberately outside the default ExUnit suite.
+# Diagnostic plus explicit 14-invariant gate, outside the default ExUnit suite.
 # EXAGENT_OFFLINE=1 MIX_ENV=test mix run test/support/consolidation_probe.exs --bench
-# A false invariant is a known consolidation gap, not a passing regression test.
+# JSON is preserved even on failed invariants/probe errors; exit 1 rejects them.
 # Benchmarks use TestModel only; worker memory samples are not peak BEAM memory.
 unless Mix.env() == :test and System.get_env("EXAGENT_OFFLINE") == "1" do
   raise "run with EXAGENT_OFFLINE=1 MIX_ENV=test"
 end
 
 ExUnit.start(autorun: false)
+Code.require_file("../../examples/testing_audit_harness.exs", __DIR__)
 
 defmodule ExAgent.ConsolidationProbe.FailingStore do
   @behaviour ExAgent.Store
@@ -31,6 +32,8 @@ defmodule ExAgent.ConsolidationProbe do
   alias ExAgent.Models.Test
 
   def run do
+    {opts, [], []} = OptionParser.parse(System.argv(), strict: [json: :string, bench: :boolean])
+
     probes = [
       {:stream_parity, &stream_parity/0},
       {:sse, &sse/0},
@@ -43,15 +46,22 @@ defmodule ExAgent.ConsolidationProbe do
 
     results =
       Map.new(probes, fn {name, probe} ->
-        result =
+        task =
           Task.async(fn ->
             try do
               probe.()
             rescue
               error -> %{probe_error: Exception.format(:error, error, __STACKTRACE__)}
+            catch
+              kind, reason -> %{probe_error: Exception.format(kind, reason, __STACKTRACE__)}
             end
           end)
-          |> Task.await(15_000)
+
+        result =
+          case Task.yield(task, 15_000) || Task.shutdown(task, :brutal_kill) do
+            {:ok, result} -> result
+            other -> %{probe_error: "probe did not complete: #{inspect(other)}"}
+          end
 
         {name, result}
       end)
@@ -68,7 +78,12 @@ defmodule ExAgent.ConsolidationProbe do
         do: Map.put(report, :benchmarks, benchmarks()),
         else: report
 
-    IO.puts(Jason.encode!(report, pretty: true))
+    errors = report |> Jason.encode!() |> Jason.decode!() |> ExAgent.TestingAuditHarness.c0()
+    report = Map.merge(report, %{passed: errors == [], validation_errors: errors})
+    encoded = Jason.encode!(report, pretty: true)
+    if opts[:json], do: File.write!(opts[:json], encoded <> "\n")
+    IO.puts(encoded)
+    if errors != [], do: System.halt(1)
   end
 
   defp stream_parity do
@@ -188,7 +203,7 @@ defmodule ExAgent.ConsolidationProbe do
             model: %Test{
               script: [
                 count_request(requests, calls("delegate", %{"prompt" => "record"})),
-                "parent done"
+                count_request(requests, "parent done")
               ]
             },
             tools: [Coordination.delegation_tool(child)],
@@ -198,11 +213,23 @@ defmodule ExAgent.ConsolidationProbe do
         permissions = Permissions.new!(default: :deny, rules: [{"delegate", :allow}])
         result = ExAgent.run(parent, "record", permissions: permissions)
         count = Agent.get(requests, & &1)
+        Agent.update(requests, fn _ -> 0 end)
+        # Separate authority from admission: the child must actually reach its
+        # tool request, otherwise the request limit masks broken deny inheritance.
+        authority =
+          ExAgent.run(%{parent | usage_limits: %UsageLimits{}}, "record",
+            permissions: permissions
+          )
+
+        authority_requests = Agent.get(requests, & &1)
 
         %{
-          descendant_authority_restricted: Agent.get(effects, & &1) == 0,
-          tree_within_parent_request_limit: count <= 1,
+          descendant_authority_restricted:
+            authority_requests == 4 and Agent.get(effects, & &1) == 0 and
+              match?({:ok, _}, authority),
+          tree_within_parent_request_limit: count == 1,
           requests_including_child: count,
+          authority_requests_including_child: authority_requests,
           effects: Agent.get(effects, & &1),
           result: inspect(result, limit: 10)
         }
@@ -254,7 +281,17 @@ defmodule ExAgent.ConsolidationProbe do
 
       %{
         save_attempted: received?(:save_attempted),
-        save_error_observable: log != "" or match?({:error, _}, result),
+        save_error_observable:
+          match?(
+            {:error,
+             %ExAgent.CheckpointError{
+               operation: :agent,
+               revision: 1,
+               reason: :probe_store_unavailable,
+               result: {:ok, %{status: :succeeded}}
+             }},
+            result
+          ),
         log: log,
         caller_result: outcome(result)
       }

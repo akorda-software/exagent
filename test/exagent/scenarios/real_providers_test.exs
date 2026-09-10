@@ -20,6 +20,7 @@ defmodule ExAgent.Scenarios.RealProvidersTest do
 
   alias ExAgent.{Tool, Models}
   alias ExAgent.Message.Part
+  alias ExAgent.Test.TestingAuditCore
 
   @moduletag :integration
 
@@ -93,20 +94,22 @@ defmodule ExAgent.Scenarios.RealProvidersTest do
   end
 
   # ---------------------------------------------------------------------------
-  # Streaming — deltas arrive and reassemble (representative subset).
+  # Streaming — provisional deltas followed by successful terminal acceptance.
   # ---------------------------------------------------------------------------
   for slug <- ["openai/gpt-5.4-nano", "anthropic/claude-haiku-4.5", "z-ai/glm-4.7-flash"] do
     @tag :integration
     test "streaming deltas: #{slug}" do
       agent = agent(unquote(slug))
 
-      deltas =
-        ExAgent.run_stream(agent, "Count from one to five in words.")
-        |> Enum.filter(&match?({:delta, _}, &1))
-        |> Enum.map(fn {:delta, d} -> d end)
-        |> Enum.join()
+      events =
+        ExAgent.run_stream(agent, "Reply with exactly: one two three four five")
+        |> Enum.to_list()
 
-      assert deltas != ""
+      TestingAuditCore.assert_successful_text_stream(
+        events,
+        "one two three four five",
+        unquote(slug)
+      )
     end
   end
 

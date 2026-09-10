@@ -12,7 +12,7 @@ defmodule ExAgent.CoordinationTest do
       # The delegate returns a known answer with a known, identifiable usage.
       delegate_response =
         Message.new_response([%Part.Text{content: "delegated answer"}],
-          usage: %Usage{input_tokens: 5, output_tokens: 5},
+          usage: %Usage{input_tokens: 9, output_tokens: 3},
           model_name: "test"
         )
 
@@ -39,33 +39,81 @@ defmodule ExAgent.CoordinationTest do
                ExAgent.run(parent, "please delegate")
 
       # Parent made 2 requests (1 in/1 out each from the TestModel) plus the
-      # delegate's contributed 5/5 — proving usage is shared up the tree.
-      assert usage.input_tokens == 7
-      assert usage.output_tokens == 7
+      # delegate's contributed 9/3 — asymmetric usage detects direction swaps.
+      assert usage.input_tokens == 11
+      assert usage.output_tokens == 5
 
       # The delegate's output flowed back as the tool return.
       assert %Part.ToolReturn{content: "delegated answer"} = find_return(messages, "ask_helper")
     end
 
-    test "a builder delegate receives the parent's context" do
-      # The delegate is built per-call from ctx.deps, so the parent's
-      # dependencies reach the sub-agent.
-      builder = fn _ctx, _args ->
-        ExAgent.new(model: %ExAgent.Models.Test{label: "from builder"})
+    for prompt_arg <- ["prompt", "question"] do
+      test "a builder consumes parent context and forwards #{prompt_arg} to the child model" do
+        owner = self()
+        prompt_arg = unquote(prompt_arg)
+        args = %{prompt_arg => "inspect order 73"}
+        deps = %{tenant: "tenant-19", observer: owner}
+
+        builder = fn ctx, received_args ->
+          send(owner, {:builder_context, ctx, received_args})
+
+          ExAgent.new(
+            instructions: "For #{ctx.deps.tenant}: #{Map.fetch!(received_args, prompt_arg)}",
+            model: %ExAgent.Models.Test{
+              script: [
+                fn messages, _params ->
+                  send(owner, {:child_messages, messages})
+
+                  [
+                    %Message.Request{
+                      parts: [%Part.System{content: rules}, %Part.User{content: prompt}]
+                    }
+                  ] = messages
+
+                  "#{rules}; received #{prompt}"
+                end
+              ]
+            }
+          )
+        end
+
+        parent_model = %ExAgent.Models.Test{
+          script: [
+            {:tool_calls,
+             [%Part.ToolCall{tool_name: "delegate", args: args, tool_call_id: "delegate-73"}]},
+            fn messages, _params -> find_return(messages, "delegate").content end
+          ]
+        }
+
+        parent =
+          ExAgent.new(
+            model: parent_model,
+            tools: [Coordination.delegation_tool(builder, prompt_arg: prompt_arg)]
+          )
+
+        assert {:ok, result} = ExAgent.run(parent, "parent task", deps: deps)
+        assert result.output == "For tenant-19: inspect order 73; received inspect order 73"
+        assert_receive {:builder_context, ctx, ^args}
+        assert ctx.deps == deps
+        assert ctx.run_id == result.run_id
+        assert ctx.tool_call_id == "delegate-73"
+        assert ctx.tool_name == "delegate"
+        assert ctx.run_step == 1
+
+        assert_receive {:child_messages, [%Message.Request{parts: parts}]}
+
+        assert [
+                 %Part.System{content: "For tenant-19: inspect order 73"},
+                 %Part.User{content: "inspect order 73"}
+               ] = parts
+
+        assert %Part.ToolReturn{tool_call_id: "delegate-73", status: :succeeded, content: output} =
+                 find_return(result.messages, "delegate")
+
+        assert output == result.output
+        assert result.request_count == 3
+        assert result.usage == %Usage{input_tokens: 3, output_tokens: 3}
       end
-
-      parent_model = %ExAgent.Models.Test{
-        script: [
-          {:tool_calls, [%Part.ToolCall{tool_name: "delegate", args: %{"prompt" => "x"}}]},
-          "done"
-        ]
-      }
-
-      parent =
-        ExAgent.new(model: parent_model, tools: [Coordination.delegation_tool(builder)])
-
-      assert {:ok, %{messages: messages}} = ExAgent.run(parent, "go")
-      assert %Part.ToolReturn{content: "from builder"} = find_return(messages, "delegate")
     end
   end
 

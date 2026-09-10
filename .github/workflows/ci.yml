@@ -12,10 +12,15 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  EXAGENT_OFFLINE: "1"
+  MIX_ENV: test
+
 jobs:
   test:
     name: Elixir ${{ matrix.elixir }} / OTP ${{ matrix.otp }}
     runs-on: ubuntu-22.04
+    timeout-minutes: 30
 
     strategy:
       fail-fast: false
@@ -41,11 +46,38 @@ jobs:
       - name: Install dependencies
         run: mix deps.get
 
-      - name: Compile (warnings as errors)
-        run: mix compile --warnings-as-errors
+      - name: Compile, format and offline suite (warnings as errors)
+        run: elixir test/support/testing_audit_harness_ci.exs suite "$RUNNER_TEMP/exagent-suite"
 
-      - name: Check formatting
-        run: mix format --check-formatted
+      - name: Preserve command exits, warnings and test totals/exclusions
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: suite-${{ matrix.elixir }}-otp-${{ matrix.otp }}
+          path: ${{ runner.temp }}/exagent-suite
 
-      - name: Run tests
-        run: mix test
+  harness:
+    name: Finite harness / Elixir 1.20 / OTP 29
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: "29"
+          elixir-version: "1.20"
+      - name: Install dependencies
+        run: mix deps.get
+      - name: C0, documentation snippets, isolated R3, evals and load smoke
+        run: elixir test/support/testing_audit_harness_ci.exs harness "$RUNNER_TEMP/exagent-harness"
+      - name: Preserve finite harness evidence even on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: harness-1.20-otp-29
+          path: ${{ runner.temp }}/exagent-harness
+
+  # TAR consumer CI remains pending: package_acceptance.exs currently requires a
+  # new /tmp/opencode/exagent-night-package* directory and isolated Hex/Rebar
+  # bootstrap. Porting that bootstrap needs a separately reviewed scope; root
+  # tests do not certify none/API/SDK/exporter consumer graphs or their warnings.

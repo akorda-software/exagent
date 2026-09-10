@@ -1,7 +1,5 @@
 defmodule ExAgent.ServerTest do
-  # The server spawns tasks and relies on the app-wide ExAgent.TaskSupervisor /
-  # ExAgent.PubSub.Registry, so we can't be fully async against other suites that
-  # touch those, but each test owns its own server.
+  # Each case owns its Server; shared supervisors/Registry only provide services.
   use ExUnit.Case, async: true
 
   alias ExAgent.{Event, Models.Test, PubSub, Server}
@@ -44,25 +42,19 @@ defmodule ExAgent.ServerTest do
     end
 
     test "returns :busy when a run is already in flight" do
-      model = %Test{
-        script: [
-          fn ->
-            Process.sleep(150)
-            "done"
-          end
-        ]
-      }
+      model = blocking_model()
 
       {:ok, server} = start_server(model: model)
 
       runner =
         Task.async(fn -> Server.chat(server, "blocking") end)
 
-      wait_for_status(server, :running)
+      assert_receive {:model_waiting, worker}, 1000
 
       assert {:error, :busy} = Server.chat(server, "meanwhile")
 
-      Task.await(runner)
+      send(worker, :release_model)
+      assert {:ok, %{output: "done"}} = Task.await(runner)
     end
   end
 
@@ -87,38 +79,36 @@ defmodule ExAgent.ServerTest do
 
       assert {:ok, _} = Server.chat(server, "hello")
 
-      events = collect_events(200)
+      events = collect_until_finished()
 
       types = Enum.map(events, & &1.type)
       assert :run_started in types
       assert :run_finished in types
 
       seqs = Enum.map(events, & &1.seq)
-      assert seqs == Enum.sort(seqs) and length(seqs) > 1
+      assert seqs == Enum.to_list(1..length(seqs))
+      assert length(seqs) > 1
       assert Enum.all?(events, &(&1.agent_id == "evt-agent"))
       assert Enum.all?(events, &(&1.version == 1))
+      assert [request_id] = events |> Enum.map(& &1.request_id) |> Enum.uniq()
+      assert is_binary(request_id)
     end
   end
 
   describe "abort/1" do
     test "cancels the in-flight run and emits :server_request_cancelled" do
-      model = %Test{
-        script: [
-          fn ->
-            Process.sleep(2_000)
-            "never"
-          end
-        ]
-      }
+      model = blocking_model()
 
       {:ok, server} = start_server(model: model, pubsub: :local, agent_id: "abort-agent")
 
       :ok = PubSub.subscribe({ExAgent.PubSub.Local, []}, Event.agent_topic("abort-agent"))
 
       {:ok, request_id} = Server.send_message(server, "block")
-      wait_for_status(server, :running)
+      assert_receive {:model_waiting, worker}, 1000
+      monitor = Process.monitor(worker)
 
       assert :ok = Server.abort(server)
+      assert_receive {:DOWN, ^monitor, :process, ^worker, _}, 1000
 
       assert_receive {:exagent_event,
                       %Event{type: :server_request_cancelled, request_id: ^request_id}},
@@ -131,20 +121,13 @@ defmodule ExAgent.ServerTest do
 
   describe "backpressure" do
     test "send_message returns :queue_full past max_pending while busy" do
-      model = %Test{
-        script: [
-          fn ->
-            Process.sleep(500)
-            "done"
-          end
-        ]
-      }
+      model = blocking_model()
 
       {:ok, server} = start_server(model: model, max_pending: 2)
 
       # First starts immediately (idle → running); the rest queue up.
       assert {:ok, _} = Server.send_message(server, "running")
-      wait_for_status(server, :running)
+      assert_receive {:model_waiting, _worker}, 1000
 
       assert {:ok, _} = Server.send_message(server, "q1")
       assert {:ok, _} = Server.send_message(server, "q2")
@@ -154,29 +137,52 @@ defmodule ExAgent.ServerTest do
     end
 
     test "steer/2 enqueues at the front" do
-      model = %Test{
-        script: [
-          fn ->
-            Process.sleep(500)
-            "done"
-          end
-        ]
-      }
+      owner = self()
 
-      {:ok, server} = start_server(model: model, max_pending: 4)
+      observed = fn messages, _ ->
+        %ExAgent.Message.Part.User{content: prompt} =
+          messages
+          |> ExAgent.Message.parts()
+          |> Enum.reverse()
+          |> Enum.find(&match?(%ExAgent.Message.Part.User{}, &1))
 
-      assert {:ok, _} = Server.send_message(server, "rear-1")
-      wait_for_status(server, :running)
+        send(owner, {:executed_prompt, prompt})
+        prompt
+      end
 
-      assert {:ok, _} = Server.send_message(server, "rear-2")
+      blocking = blocking_model()
+      model = %{blocking | script: blocking.script ++ [observed, observed]}
+
+      id = "steer-#{System.unique_integer([:positive])}"
+      {:ok, server} = start_server(model: model, max_pending: 4, pubsub: :local, agent_id: id)
+      :ok = PubSub.subscribe({PubSub.Local, []}, Event.agent_topic(id))
+
+      assert {:ok, first_id} = Server.send_message(server, "rear-1")
+      assert_receive {:model_waiting, worker}, 1000
+
+      assert {:ok, rear_id} = Server.send_message(server, "rear-2")
       assert {:ok, front_id} = Server.steer(server, "front")
 
       health = Server.health(server)
       assert health.pending == 2
-      # The queue depth counts both; order is validated by drain in integration.
       assert is_binary(front_id)
+      send(worker, :release_model)
 
-      Server.abort(server)
+      finished =
+        for _ <- 1..3 do
+          assert_receive {:exagent_event, %Event{type: :run_finished, request_id: request}}, 1000
+          request
+        end
+
+      assert finished == [first_id, front_id, rear_id]
+
+      prompts =
+        for _ <- 1..2 do
+          assert_receive {:executed_prompt, prompt}
+          prompt
+        end
+
+      assert prompts == ["front", "rear-2"]
     end
   end
 
@@ -189,7 +195,7 @@ defmodule ExAgent.ServerTest do
 
       assert {:ok, request_id} = Server.stream(server, "hi")
 
-      events = collect_events(150)
+      events = collect_until_finished()
       deltas = for %Event{type: :text_delta, payload: %{text: t}} <- events, do: t
 
       assert deltas != []
@@ -200,22 +206,16 @@ defmodule ExAgent.ServerTest do
     end
 
     test "returns :busy if a run is in flight" do
-      model = %Test{
-        script: [
-          fn ->
-            Process.sleep(200)
-            "done"
-          end
-        ]
-      }
+      model = blocking_model()
 
       {:ok, server} = start_server(model: model)
 
       runner = Task.async(fn -> Server.chat(server, "blocking") end)
-      wait_for_status(server, :running)
+      assert_receive {:model_waiting, worker}, 1000
 
       assert {:error, :busy} = Server.stream(server, "meanwhile")
-      Task.await(runner)
+      send(worker, :release_model)
+      assert {:ok, %{output: "done"}} = Task.await(runner)
     end
   end
 
@@ -270,38 +270,31 @@ defmodule ExAgent.ServerTest do
       |> maybe_put(:agent_id, Keyword.get(opts, :agent_id))
       |> maybe_put(:max_pending, Keyword.get(opts, :max_pending))
 
-    Server.start_link(start_opts)
+    {:ok, start_supervised!({Server, start_opts})}
   end
 
   defp maybe_put(list, _key, nil), do: list
   defp maybe_put(list, key, value), do: Keyword.put(list, key, value)
 
-  defp wait_for_status(server, status, tries \\ 100) do
-    cond do
-      tries <= 0 ->
-        flunk("server never reached status #{inspect(status)}")
+  defp blocking_model do
+    owner = self()
 
-      Server.health(server).status == status ->
-        :ok
-
-      true ->
-        Process.sleep(5)
-        wait_for_status(server, status, tries - 1)
-    end
+    %Test{
+      script: [
+        fn ->
+          send(owner, {:model_waiting, self()})
+          receive do: (:release_model -> "done")
+        end
+      ]
+    }
   end
 
-  defp collect_events(timeout) do
-    deadline = System.monotonic_time(:millisecond) + timeout
-    do_collect_events([], deadline)
-  end
-
-  defp do_collect_events(acc, deadline) do
-    remaining = max(0, deadline - System.monotonic_time(:millisecond))
-
+  defp collect_until_finished(acc \\ []) do
     receive do
-      {:exagent_event, %Event{} = e} -> do_collect_events([e | acc], deadline)
+      {:exagent_event, %Event{type: :run_finished} = e} -> Enum.reverse([e | acc])
+      {:exagent_event, %Event{} = e} -> collect_until_finished([e | acc])
     after
-      remaining -> Enum.reverse(acc)
+      1000 -> flunk("Server did not publish a terminal event")
     end
   end
 end

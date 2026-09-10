@@ -29,11 +29,13 @@ defmodule ExAgent.StoreTest do
     @tag :capture_log
     test "round-trips a snapshot keyed by agent_id" do
       id = unique_id("rt")
+      on_exit(fn -> Store.delete_agent_snapshot(@store, id) end)
+      history = history()
 
       snap =
         Snapshot.new(
           agent_id: id,
-          history: history(),
+          history: history,
           usage: %Usage{input_tokens: 2, output_tokens: 3},
           metadata: %{scene: "tavern"}
         )
@@ -46,7 +48,8 @@ defmodule ExAgent.StoreTest do
 
       # The stored history round-trips back into Message structs.
       {:ok, messages} = Snapshot.messages(loaded)
-      assert length(messages) == length(history())
+      assert messages == history
+      assert loaded == %{snap | metadata: %{"scene" => "tavern"}}
 
       assert :ok = Store.delete_agent_snapshot(@store, id)
       assert {:error, :not_found} = Store.load_agent_snapshot(@store, id)
@@ -58,6 +61,8 @@ defmodule ExAgent.StoreTest do
 
     test "save overwrites a previous snapshot for the same id" do
       id = unique_id("overwrite")
+      on_exit(fn -> Store.delete_agent_snapshot(@store, id) end)
+      history = history()
 
       Store.save_agent_snapshot(@store, Snapshot.new(agent_id: id, history: [], usage: nil))
 
@@ -65,7 +70,7 @@ defmodule ExAgent.StoreTest do
         @store,
         Snapshot.new(
           agent_id: id,
-          history: history(),
+          history: history,
           usage: %Usage{input_tokens: 9, output_tokens: 0}
         )
       )
@@ -73,7 +78,7 @@ defmodule ExAgent.StoreTest do
       assert {:ok, loaded} = Store.load_agent_snapshot(@store, id)
       assert loaded.usage == %{"input_tokens" => 9, "output_tokens" => 0, "details" => %{}}
       {:ok, messages} = Snapshot.messages(loaded)
-      assert length(messages) == length(history())
+      assert messages == history
 
       Store.delete_agent_snapshot(@store, id)
     end
@@ -83,6 +88,11 @@ defmodule ExAgent.StoreTest do
     test "two agents are stored independently and both appear in list" do
       a = unique_id("iso-a")
       b = unique_id("iso-b")
+
+      on_exit(fn ->
+        Store.delete_agent_snapshot(@store, a)
+        Store.delete_agent_snapshot(@store, b)
+      end)
 
       Store.save_agent_snapshot(@store, Snapshot.new(agent_id: a, history: [], usage: nil))
       Store.save_agent_snapshot(@store, Snapshot.new(agent_id: b, history: [], usage: nil))
@@ -113,22 +123,28 @@ defmodule ExAgent.StoreTest do
       assert {:error, :not_found} = Store.load_agent_snapshot(@store, id)
     end
 
-    test "no api key or pid is ever stored, even if present in agent metadata" do
+    test "string metadata is preserved; a rejected pid cannot replace the prior snapshot" do
       id = unique_id("pid")
+      on_exit(fn -> Store.delete_agent_snapshot(@store, id) end)
+
+      good =
+        Snapshot.new(
+          agent_id: id,
+          history: [],
+          metadata: %{"api_key" => "SYNTHETIC_STORED_STRING"}
+        )
+
+      assert :ok = Store.save_agent_snapshot(@store, good)
+      assert {:ok, ^good} = Store.load_agent_snapshot(@store, id)
 
       bad = Snapshot.new(agent_id: id, history: [], metadata: %{owner: self()})
       assert {:error, {:exception, _}} = Store.save_agent_snapshot(@store, bad)
-      assert {:error, :not_found} = Store.load_agent_snapshot(@store, id)
+      assert {:ok, ^good} = Store.load_agent_snapshot(@store, id)
     end
   end
 
   # ---------------------------------------------------------------------------
-  defp history do
-    {:ok, %{messages: messages}} =
-      ExAgent.run(ExAgent.new(model: "test", instructions: "hi"), "hello")
-
-    messages
-  end
+  defp history, do: ExAgent.Test.TestingAuditRuntime.history()
 
   defp unique_id(prefix), do: "#{prefix}_#{:erlang.unique_integer([:positive])}"
 end

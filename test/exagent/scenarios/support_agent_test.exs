@@ -71,10 +71,10 @@ defmodule ExAgent.Scenarios.SupportAgentTest do
                ticket
 
       # The function tool actually ran (its ToolReturn is in the history).
-      assert find_tool_return(messages, "lookup_user") =~ "pro plan"
+      assert find_tool_return(messages, "lookup_user") == "user 42 is on the pro plan"
 
       # Usage accumulated across the two model requests (TestModel reports 1/1).
-      assert usage.input_tokens > 0 and usage.output_tokens > 0
+      assert usage == %Usage{input_tokens: 2, output_tokens: 2}
     end
 
     test "invalid output args trigger one retry, then a valid call succeeds" do
@@ -132,6 +132,7 @@ defmodule ExAgent.Scenarios.SupportAgentTest do
 
   describe "tools that contribute token usage" do
     test "a tool returning {:ok, value, %Usage{}} merges into the run usage" do
+      owner = self()
       # A tool built by hand that contributes sub-agent-like usage.
       delegate =
         Tool.new(
@@ -140,22 +141,40 @@ defmodule ExAgent.Scenarios.SupportAgentTest do
           parameters_json_schema: %{type: "object", properties: %{}},
           takes_ctx: false,
           call: fn _ ->
-            {:ok, "done", %Usage{input_tokens: 40, output_tokens: 10}}
+            send(owner, :summary_effect)
+            {:ok, "summary: order 42", %Usage{input_tokens: 40, output_tokens: 10}}
           end
         )
 
       model = %Test{
         script: [
-          {:tool_calls, [%Part.ToolCall{tool_name: "summarize", args: %{}}]},
-          "ok"
+          {:tool_calls,
+           [%Part.ToolCall{tool_name: "summarize", args: %{}, tool_call_id: "summary-42"}]},
+          fn messages, _params -> find_tool_return(messages, "summarize") end
         ]
       }
 
       agent = ExAgent.new(model: model, tools: [delegate])
 
-      assert {:ok, %{usage: usage}} = ExAgent.run(agent, "go")
+      assert {:ok,
+              %{output: "summary: order 42", usage: usage, request_count: 2, messages: messages}} =
+               ExAgent.run(agent, "go")
+
       # 2 model requests (1/1 each) + 40/10 contributed by the tool.
-      assert usage.input_tokens >= 42 and usage.output_tokens >= 12
+      assert usage == %Usage{input_tokens: 42, output_tokens: 12}
+
+      assert [
+               %Part.ToolReturn{
+                 tool_call_id: "summary-42",
+                 status: :succeeded,
+                 content: "summary: order 42",
+                 usage: %Usage{input_tokens: 40, output_tokens: 10}
+               }
+             ] =
+               Enum.filter(ExAgent.Message.parts(messages), &match?(%Part.ToolReturn{}, &1))
+
+      assert_receive :summary_effect
+      refute_receive :summary_effect, 0
     end
   end
 
@@ -207,9 +226,9 @@ defmodule ExAgent.Scenarios.SupportAgentTest do
         script: [
           {:tool_calls,
            [
-             %Part.ToolCall{tool_name: "a", args: %{}},
-             %Part.ToolCall{tool_name: "b", args: %{}},
-             %Part.ToolCall{tool_name: "c", args: %{}}
+             %Part.ToolCall{tool_name: "a", args: %{}, tool_call_id: "a1"},
+             %Part.ToolCall{tool_name: "b", args: %{}, tool_call_id: "b1"},
+             %Part.ToolCall{tool_name: "c", args: %{}, tool_call_id: "c1"}
            ]}
         ]
       }
@@ -221,8 +240,23 @@ defmodule ExAgent.Scenarios.SupportAgentTest do
           usage_limits: %UsageLimits{tool_calls_limit: 2}
         )
 
-      assert {:error, %ExAgent.RunError{reason: {:usage_limit_exceeded, :tool_calls, 3}}} =
+      assert {:error,
+              %ExAgent.RunError{reason: {:usage_limit_exceeded, :tool_calls, 3}, partial: partial}} =
                ExAgent.run(agent, "x")
+
+      assert Enum.map(
+               Enum.filter(
+                 ExAgent.Message.parts(partial.messages),
+                 &match?(%Part.ToolReturn{}, &1)
+               ),
+               &{&1.tool_name, &1.tool_call_id, &1.status}
+             ) == [
+               {"a", "a1", :not_executed},
+               {"b", "b1", :not_executed},
+               {"c", "c1", :not_executed}
+             ]
+
+      refute_receive {:tool_effect, _}, 0
     end
   end
 
@@ -250,13 +284,18 @@ defmodule ExAgent.Scenarios.SupportAgentTest do
 
   describe "permission :deny blocks a destructive tool" do
     test "a denied tool returns 'not permitted' and the model still finishes" do
+      owner = self()
+
       delete =
         Tool.new(
           name: "delete_account",
           description: "delete",
           parameters_json_schema: %{type: "object", properties: %{}},
           takes_ctx: false,
-          call: fn _ -> {:ok, "DELETED"} end
+          call: fn _ ->
+            send(owner, :delete_effect)
+            {:ok, "DELETED"}
+          end
         )
 
       model = %Test{
@@ -269,10 +308,15 @@ defmodule ExAgent.Scenarios.SupportAgentTest do
       perms = Permissions.new!(rules: [{"*", :allow}, {"delete_*", :deny}])
       agent = ExAgent.new(model: model, tools: [delete])
 
-      assert {:ok, %{messages: messages}} =
+      assert {:ok, %{output: "could not delete", messages: messages}} =
                ExAgent.run(agent, "delete it", permissions: perms)
 
       assert find_tool_return(messages, "delete_account") =~ "not permitted"
+
+      assert [%Part.ToolReturn{tool_name: "delete_account", status: :denied}] =
+               Enum.filter(ExAgent.Message.parts(messages), &match?(%Part.ToolReturn{}, &1))
+
+      refute_receive :delete_effect, 0
     end
   end
 
@@ -281,12 +325,17 @@ defmodule ExAgent.Scenarios.SupportAgentTest do
   # ---------------------------------------------------------------------------
 
   defp tool(name) do
+    owner = self()
+
     Tool.new(
       name: name,
       description: name,
       parameters_json_schema: %{type: "object", properties: %{}},
       takes_ctx: false,
-      call: fn _ -> {:ok, name} end
+      call: fn _ ->
+        send(owner, {:tool_effect, name})
+        {:ok, name}
+      end
     )
   end
 

@@ -18,7 +18,10 @@ defmodule ExAgent.FrameworkEvals do
       source_sha256: Scenarios.provenance(),
       cases: [Scenarios.reading_eval(), Scenarios.effect_eval(), Scenarios.negative_controls()]
     }
-    |> then(fn report -> Map.put(report, :passed, Enum.all?(report.cases, & &1.passed)) end)
+    |> then(fn report ->
+      errors = report |> Jason.encode!() |> Jason.decode!() |> ExAgent.TestingAuditHarness.evals()
+      Map.merge(report, %{passed: errors == [], validation_errors: errors})
+    end)
   end
 end
 

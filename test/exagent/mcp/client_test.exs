@@ -3,30 +3,24 @@ defmodule ExAgent.MCP.ClientTest do
 
   alias ExAgent.MCP.Client
   alias ExAgent.Tool
+  alias ExAgent.Test.TestingAuditCore
 
   # A deterministic in-process "MCP server". The client's send_fun routes bytes
   # here as {:sent, bin, from}; it replies with {ref, {:data, resp}} to `from`.
   # `respond` is (method, params) -> {:ok, result} | {:error, err} | {:chunks, fun}.
   defp start_mock(ref, respond) do
-    spawn(fn -> loop(ref, respond) end)
-  end
+    TestingAuditCore.start_owned_mock(fn {:sent, bin, from} ->
+      req = bin |> IO.iodata_to_binary() |> String.trim() |> Jason.decode!()
 
-  defp loop(ref, respond) do
-    receive do
-      {:sent, bin, from} ->
-        req = bin |> IO.iodata_to_binary() |> String.trim() |> Jason.decode!()
-
-        unless req["id"] == nil do
-          case respond.(req["method"], Map.get(req, "params", %{})) do
-            {:ok, result} -> send_resp(ref, from, req["id"], result)
-            {:error, err} -> send(ref, from, req["id"], "error", err)
-            :noreply -> :ok
-            {:chunks, fun} -> Enum.each(fun.(req["id"]), &send(from, {ref, {:data, &1}}))
-          end
+      unless req["id"] == nil do
+        case respond.(req["method"], Map.get(req, "params", %{})) do
+          {:ok, result} -> send_resp(ref, from, req["id"], result)
+          {:error, err} -> send(ref, from, req["id"], "error", err)
+          :noreply -> :ok
+          {:chunks, fun} -> Enum.each(fun.(req["id"]), &send(from, {ref, {:data, &1}}))
         end
-
-        loop(ref, respond)
-    end
+      end
+    end)
   end
 
   defp send_resp(ref, from, id, result), do: send(ref, from, id, "result", result)

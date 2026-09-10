@@ -14,23 +14,30 @@ defmodule ExAgent.StreamingTest do
       deltas = for {:delta, text} <- events, do: text
       assert Enum.join(deltas) == "hello streaming world"
 
-      assert {:result, %{output: output, usage: usage}} = List.last(events)
-      assert output == "hello streaming world"
-      assert usage.output_tokens > 0
+      result =
+        ExAgent.Test.TestingAuditCore.assert_successful_text_stream(
+          events,
+          "hello streaming world",
+          "test"
+        )
+
+      assert result.model == model
+      assert result.usage == %ExAgent.Message.Usage{input_tokens: 1, output_tokens: 1}
     end
 
-    test "is consumable incrementally with reduce" do
+    test "a full reduction retains the text and successful terminal" do
       model = %ExAgent.Models.Test{label: "one two three"}
       agent = ExAgent.new(model: model)
 
-      acc =
+      {text, terminals} =
         ExAgent.run_stream(agent, "x")
-        |> Enum.reduce(<<>>, fn
-          {:delta, text}, acc -> acc <> text
-          {:result, _}, acc -> acc
+        |> Enum.reduce({"", []}, fn
+          {:delta, text}, {acc, terminals} -> {acc <> text, terminals}
+          terminal, {acc, terminals} -> {acc, terminals ++ [terminal]}
         end)
 
-      assert acc == "one two three"
+      assert text == "one two three"
+      assert [{:result, %{output: "one two three", status: :succeeded}}] = terminals
     end
 
     test "preserves instructions + user prompt in the streamed history" do
@@ -52,7 +59,7 @@ defmodule ExAgent.StreamingTest do
 
       {:result, %{usage: usage}} = ExAgent.run_stream(agent, "x") |> Enum.to_list() |> List.last()
 
-      assert usage.input_tokens > 0
+      assert usage == %ExAgent.Message.Usage{input_tokens: 1, output_tokens: 1}
     end
   end
 end

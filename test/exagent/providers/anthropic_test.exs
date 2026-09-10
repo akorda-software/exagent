@@ -110,8 +110,15 @@ defmodule ExAgent.Providers.AnthropicTest do
       {_, convo} = Anthropic.encode_messages(msgs)
 
       # Both are user turns -> merged into a single user message with two blocks.
-      assert [%{role: :user, content: blocks}] = convo
-      assert length(blocks) == 2
+      assert convo == [
+               %{
+                 role: :user,
+                 content: [
+                   %{type: "text", text: "a"},
+                   %{type: "text", text: "please retry"}
+                 ]
+               }
+             ]
     end
   end
 
@@ -167,7 +174,7 @@ defmodule ExAgent.Providers.AnthropicTest do
              } = resp
     end
 
-    test "thinking block -> ThinkingPart (BUG 4: round-trip for GLM extended thinking)" do
+    test "parsed thinking content and signature survive projection into the next request" do
       body = %{
         "content" => [
           %{"type" => "thinking", "thinking" => "let me reason", "signature" => "sig123"},
@@ -186,6 +193,25 @@ defmodule ExAgent.Providers.AnthropicTest do
                ]
              } =
                resp
+
+      next_request =
+        Anthropic.build_body(
+          %ExAgent.Models.Anthropic{model: "claude", api_key: "offline"},
+          [resp, Msg.new_request([%Part.User{content: "continue"}])],
+          nil,
+          %ModelRequestParameters{}
+        )
+
+      assert next_request["messages"] == [
+               %{
+                 role: :assistant,
+                 content: [
+                   %{type: "thinking", thinking: "let me reason", signature: "sig123"},
+                   %{type: "text", text: "answer"}
+                 ]
+               },
+               %{role: :user, content: [%{type: "text", text: "continue"}]}
+             ]
     end
 
     test "stop_reason mapping" do
@@ -298,9 +324,15 @@ defmodule ExAgent.Providers.AnthropicTest do
       model = %ExAgent.Models.Anthropic{model: "claude", api_key: "k"}
 
       msgs = [Msg.new_request([%Part.System{content: "sys"}, %Part.User{content: "hi"}])]
-      body = Anthropic.build_body(model, msgs, nil, %ModelRequestParameters{})
+
+      body =
+        Anthropic.build_body(model, msgs, nil, %ModelRequestParameters{
+          function_tools: [tool("read")]
+        })
 
       refute Map.has_key?(List.last(body["system"]), "cache_control")
+      assert [%{name: "read"} = tool] = body["tools"]
+      refute Map.has_key?(tool, "cache_control")
     end
   end
 end
