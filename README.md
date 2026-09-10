@@ -2,8 +2,8 @@
 
 [![Hex Version](https://img.shields.io/hexpm/v/exagent.svg)](https://hex.pm/packages/exagent)
 [![Hex Docs](https://img.shields.io/badge/hex-docs-lightgreen.svg)](https://hexdocs.pm/exagent)
-[![License](https://img.shields.io/hexpm/l/exagent.svg)](https://github.com/kukapu/exagent/blob/main/LICENSE)
-[![CI](https://github.com/kukapu/exagent/actions/workflows/ci.yml/badge.svg)](https://github.com/kukapu/exagent/actions/workflows/ci.yml)
+[![License](https://img.shields.io/hexpm/l/exagent.svg)](https://github.com/akorda-software/exagent/blob/main/LICENSE)
+[![CI](https://github.com/akorda-software/exagent/actions/workflows/ci.yml/badge.svg)](https://github.com/akorda-software/exagent/actions/workflows/ci.yml)
 
 <!-- MDOC -->
 
@@ -111,7 +111,7 @@ agent = ExAgent.new(model: "openai:gpt-4o", instructions: "Be concise.")
 ```
 
 [hexdocs]: https://hexdocs.pm/exagent
-[source]: https://github.com/kukapu/exagent
+[source]: https://github.com/akorda-software/exagent
 [`Mix.install/2`]: https://hexdocs.pm/mix/Mix.html#install/2
 [`ExAgent.Model`]: https://hexdocs.pm/exagent/ExAgent.Model.html
 [`RunContext`]: https://hexdocs.pm/exagent/ExAgent.RunContext.html

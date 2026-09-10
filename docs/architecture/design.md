@@ -159,7 +159,7 @@ las rupturas estructurales a decisiones excepcionales y bien justificadas.
 ### 2.4. Investigación de consolidación (2026-09-08)
 
 La revisión de implementación, frameworks/harnesses y observabilidad está en
-[la investigación archivada](https://github.com/kukapu/exagent/blob/main/docs/archive/2026-09-consolidation/research.md).
+[la investigación archivada](https://github.com/akorda-software/exagent/blob/main/docs/archive/2026-09-consolidation/research.md).
 Distingue evidencia local, fuentes externas,
 limitaciones y propuestas pendientes de decisión con el autor; no introduce
 contratos nuevos ni autoriza una reescritura o migración de consumidores.
@@ -180,7 +180,7 @@ estado de reanudación segura de efectos externos. El mapa usa históricamente
 
 El autor ha pedido concretar el plan antes de implementar. El orden operativo,
 dependencias y criterios de cierre están en
-[el plan histórico de consolidación](https://github.com/kukapu/exagent/blob/main/docs/archive/2026-09-consolidation/action-plan.md)
+[el plan histórico de consolidación](https://github.com/akorda-software/exagent/blob/main/docs/archive/2026-09-consolidation/action-plan.md)
 (2026-09-09). Preparar este plan no fija
 nuevas firmas, el destino de observabilidad ni el alcance final de reanudación;
 esas decisiones se resuelven en las unidades indicadas.

@@ -367,6 +367,6 @@ snapshots; reported maxima can miss peaks and are not simultaneous upper bounds.
 These experiments use an in-memory exporter and do not fix or measure the native
 HTTP ownership limitation in section7. Detailed percentiles, conditions and
 review evidence are in the
-[dated consolidation record](https://github.com/kukapu/exagent/blob/main/docs/archive/2026-09-consolidation/action-plan.md);
+[dated consolidation record](https://github.com/akorda-software/exagent/blob/main/docs/archive/2026-09-consolidation/action-plan.md);
 no new optimization or production SLO is
 inferred from a concurrency comparison alone.

@@ -25,7 +25,7 @@ mantenimiento. Describe el checkout de consolidación, todavía sin publicar com
 Los planes C0–C8, el backlog nocturno N01–N18, la investigación y los registros
 Orca originales se conservan en `docs/archive/2026-09-consolidation/` del checkout.
 Su catálogo está en `docs/archive/README.md`, o en el
-[archivo del repositorio](https://github.com/kukapu/exagent/tree/main/docs/archive).
+[archivo del repositorio](https://github.com/akorda-software/exagent/tree/main/docs/archive).
 Son evidencia fechada, no una segunda hoja de ruta ni instrucciones activas.
 El paquete y la navegación principal de ExDoc incluyen la documentación vigente;
 los registros operativos históricos permanecen en el repositorio.

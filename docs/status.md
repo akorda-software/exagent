@@ -49,7 +49,7 @@ excluidos son proveedores reales y Postgres, no aceptación implícita de esos s
 
 El [procedimiento de verificación](development/verification.md) mantiene los
 comandos actuales. El registro completo está en
-[la evidencia histórica de consolidación](https://github.com/kukapu/exagent/blob/main/docs/archive/2026-09-consolidation/action-plan.md).
+[la evidencia histórica de consolidación](https://github.com/akorda-software/exagent/blob/main/docs/archive/2026-09-consolidation/action-plan.md).
 Los artefactos `/tmp/opencode/exagent-night-final-verification.*` y el TAR
 `exagent-night-final-reviewed-preview.tar` pertenecen a esa aceptación anterior;
 la reorganización documental produce un artefacto local distinto.
