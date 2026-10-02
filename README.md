@@ -602,6 +602,14 @@ maxima are synthetic framework evidence, not LLM latency or production SLOs.
 
 ## Documentation
 
+For development in the source checkout, run `./bin/check` before committing and
+pushing. It checks formatting, strict compilation, finite probes, the complete
+offline suite, documentation and package construction/isolation. Use
+`./bin/check --package-consumers` for clean installed-package graphs when needed.
+Real-provider and PostgreSQL tests are separate opt-in gates. See the
+[verification guide](docs/development/verification.md) for exclusions and tooling.
+The GitHub compatibility matrix is configured for manual execution.
+
 - [Full module reference on hexdocs][hexdocs]
 - [Documentation index](docs/README.md) — guides, current state and maintenance rules.
 - [Project status](docs/status.md) — verified baseline, recap and open gates.

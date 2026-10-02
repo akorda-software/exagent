@@ -5,6 +5,12 @@ con **como máximo una revisión independiente por objetivo**, sin re-review ni
 repetición rutinaria del padre. Esta política sustituye esas cadenas en los
 mandatos anteriores; no cambia contratos, alcance de v2 ni gates de producción.
 
+**Decisión2026-10-02:** la rutina habitual antes de commit/push se ejecuta
+localmente con `bin/check`, según [verificación](verification.md). La matriz de
+GitHub queda manual para cualificaciones elegidas, sin repetir automáticamente
+esas suites en cada push/PR. La nueva rutina se verifica una vez completa al
+prepararla; conserva la revisión máxima única y los gates externos separados.
+
 ## Un solo recorrido
 
 **Objetivo funcional → implementar y probar → una revisión como máximo →

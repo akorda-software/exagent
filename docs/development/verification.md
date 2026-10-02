@@ -57,6 +57,80 @@ y detección de warnings no se han alterado para declarar un verde distinto.
 
 ## Gate habitual del checkout
 
+**Decisión del usuario2026-10-02:** ejecutar la validación habitual en la máquina
+local antes de commit/push. La matriz de GitHub queda manual; no duplicar las
+suites completas en cada push o actualización de PR.
+
+Desde el checkout, con Elixir1.20.0 y su OTP compatible:
+
+```bash
+./bin/check
+```
+
+El script comprueba whitespace de trabajo/index y formato sin modificarlos;
+compila con warnings-as-errors mediante el harness finito, ejecuta C0/snippets/
+observabilidad aislada/evals/load smoke y la suite offline completa con seed37556.
+Después genera ExDoc estricta, construye el TAR y prueba sus fronteras de aislamiento.
+Los logs, exits por fase, runtime, commit y estado del trabajo quedan bajo
+`.exagent-local/checks/`. La configuración de tooling por host puede estar en
+`.exagent-local/check-env.sh`; ambos son privados e ignorados por Git. El script
+usa los recursos del runtime local, sin fijar cuatro schedulers ni prometer una
+aceleración concreta. Consultar [entorno](environment.md) para este host.
+
+La secuencia manual puede encadenarse para que un fallo detenga commit/push:
+
+```bash
+git add <archivos>
+./bin/check && git commit && git push
+```
+
+Comitear/subir los mismos cambios comprobados. La rutina valida el runtime local;
+la compatibilidad con otro par Elixir/OTP se cualifica aparte, al cambiar contratos,
+dependencias/toolchain o preparar una release. Las instalaciones limpias del TAR
+se pueden añadir a la misma rutina explícitamente:
+
+```bash
+./bin/check --package-consumers
+```
+
+Esta opción añade cuatro grafos none/API/SDK/exporter, siete contratos cada uno,
+en el runtime local. Descarga herramientas/dependencias en destinos aislados;
+conserva el diagnóstico estricto upstream y puede salir1 aunque los contratos
+pasen. No repetir toda la matriz ni servicios externos por cada cambio de prosa.
+`bin/check` es tooling del checkout, no una API del paquete instalado.
+
+**Primera ejecución comprobada2026-10-02:** ocho fases exit0; suite2176pases/
+0fallos/28excl,1979.7s, de los cuales1958.3s son sync. Rutina completa2024.1s
+(33m44s), sin acelerar20× frente a CI1.20 (suite2072.4s). Control negativo de
+whitespace sale2 y detiene antes de Mix; opción desconocida sale64. Logs locales
+en `.exagent-local/checks/20261002T153045Z-1068405/`. Consumidores instalados
+opt-in no se repiten en esta invocación; conservan los recibos anteriores.
+
+### Qué son las exclusiones
+
+El helper `test/test_helper.exs` del checkout selecciona etiquetas antes de
+ejecutar los casos. Con `EXAGENT_OFFLINE=1`, se excluyen siempre `integration`
+(proveedores reales) y `postgres` (DB real). La suite actual excluye28:
+
+| Etiqueta | Casos | Motivo |
+|---|---:|---|
+| integration | 22 | 9modelos×texto/tools,3streaming y1Ecto; requieren OpenRouter y consumen llamadas reales |
+| postgres | 6 | 4casos de Store.Postgres,1Session y1portabilidad ETS/Postgres; necesitan DB |
+
+No son fallos ni casos que esperan a agotar un timeout: sus cuerpos no se
+ejecutan. Un caso que excede su timeout produce un fallo de test. Si falta Python,
+el helper también excluye `mcp_e2e`; por tanto28 describe esta ejecución, no un
+contador obligatorio para siempre. ExUnit1.18 imprimió2204tests/0failures/28excluded;
+1.20 imprimió2176passed/28excluded:2176ejecutados y28omitidos en ambos.
+
+Las pruebas con proveedores/DB son opt-in y conservan sus gates externos. La
+matriz histórica22 de nueve slugs no se presenta como pasada por la cualificación
+G2/E2E con GPT-4o-mini. Para repetir esos perfiles reales usar los drivers acotados
+documentados abajo y [E2E consumidor](real-consumer-e2e.md), con presupuesto y
+selección explícitos. Una rutina offline no demuestra aceptación real de servicios.
+
+Los comandos base de la suite, también útiles para focales, siguen siendo:
+
 ```bash
 EXAGENT_OFFLINE=1 MIX_ENV=test mix compile --force --warnings-as-errors
 EXAGENT_OFFLINE=1 MIX_ENV=test mix test --warnings-as-errors
@@ -294,8 +368,15 @@ usa GNU `timeout`, disponible en los runners Ubuntu. `mix check` conserva su ali
 histórico y no equivale a este gate. La ejecución local del driver no prueba que
 la matriz remota de GitHub haya pasado.
 
-La workflow `.github/workflows/ci.yml` se ejecuta al abrir o actualizar un PR y
-al hacer push a `main`. Tiene seis jobs, agrupados en cuatro comprobaciones:
+La workflow `.github/workflows/ci.yml` queda con `workflow_dispatch` por decisión
+del usuario2026-10-02. Se lanza manualmente para cualificar compatibilidad o una
+release; tiene seis jobs, agrupados en cuatro comprobaciones. Esta configuración
+está preparada en la rama del PR; el comportamiento de `main` cambia al integrar
+ese PR. Conservar la evidencia de los runs automáticos anteriores.
+Después de integrarla en la rama principal, Actions→CI→Run workflow permite
+elegir una rama, o usar `gh workflow run ci.yml --ref <rama>`. GitHub requiere
+la workflow en la rama por defecto para habilitar la
+[ejecución manual](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow).
 
 | Comprobación | Qué demuestra | Alcance |
 |---|---|---|

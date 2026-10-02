@@ -19,6 +19,16 @@ contra un entorno heredado para intentar resolverlo silenciosamente.
 
 ## Trabajar sin depender de ese Hex
 
+La rutina actual del checkout es `./bin/check`. Puede cargar un perfil shell
+privado en `.exagent-local/check-env.sh`, ignorado por Git. En este host se ha
+preparado un perfil con paths directos Elixir1.20.0/OTP29 y copias del Hex2.5.1
+verificado y Rebar3 bajo `.exagent-local/tooling/`. Esto evita depender de los
+temporales de sesión y conserva intacto el archive compartido del incidente.
+El perfil configura sólo tooling; no contiene ni carga credenciales.
+En otro host, preparar sus paths/tooling compatible o usar el entorno normal;
+el script no instala herramientas globales. Los logs locales también viven
+bajo `.exagent-local/` y no pertenecen al paquete ni se comitean.
+
 En este host se verificó el siguiente prefijo por comando. El PATH directo evita
 un shim `erl` que puede reactivar mise y sobrescribir los overrides:
 

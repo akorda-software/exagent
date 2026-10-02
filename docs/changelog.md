@@ -8,6 +8,13 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Candidate qualification — 2026-10-02
 
+- Move routine validation to the local checkout with `bin/check`: canonical
+  formatting, strict compilation, finite probes, complete offline tests, ExDoc
+  and package build/isolation. Clean TAR consumers remain explicitly selectable.
+  Keep the GitHub compatibility matrix manually dispatched instead of running it
+  on every push/PR update. Document the22 real-provider and6 PostgreSQL exclusions;
+  they are filtered cases, not timeouts or passing external-service tests.
+
 - Reduce continuation validation overhead without changing canonical JSON bytes,
   digests, error pointers or persisted formats. Materialize diagnostic paths only
   on normalization errors and encode an already normalized, sorted JSON tree

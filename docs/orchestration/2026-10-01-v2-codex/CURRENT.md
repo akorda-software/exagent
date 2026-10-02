@@ -8,7 +8,7 @@ merge ni publicación en Hex. La pipeline de publicación vendrá después.
 ReqLLM oficial stock, R1.2 aceptado, C7 incluido, guards intactos.
 Una revisión máxima por objetivo; sin re-review ni reruns rutinarios del padre.
 
-## Objetivo actual: cerrar recibos CI030; diagnóstico upstream pendiente
+## Rutina local aceptada; CI manual por decisión del usuario
 
 [Run01](https://github.com/akorda-software/exagent/actions/runs/37008908156)
 sobre b709d57: paquete/harness pasan; suite118 falla al compilar Regex de fixture
@@ -54,11 +54,11 @@ lanzado14:27:03UTC sobre esa fuente. Última lectura remota14:33UTC: paquete y
 harness pasan,56contratos consumidores pasan,46comandos exit0; strictdeps rojos.
 TAR eff31a95803c414657333e1344831fcb8b7099460c481a664a3e4b0828fdbd3f:
 153archivos exactos f69aede. Ambas suites:2176pases/0fallos/28excl,exit0 por runtime.
-14:39–14:44UTC: sesión managed sin sockets/red y .git sólo lectura; fallo guardado.
-14:44UTC el usuario restablece acceso; gh funciona y ambas suites siguen en curso.
+Decisión usuario: validar local antes de commit/push; CI sólo workflow_dispatch.
+bin/check: probes/suite/docs/TAR; --package-consumers opt-in.22live+6PG excluidos.
 Resultado final: compile/test ambos y formato1.20 exit0;377fuentes exactas cada uno.
 Duración suite118/120:2706.4s/2072.4s. Run global failure sólo por strictdeps.
-Recibo documental con [skip ci]; fuente runtime f69aede, sin re-review/rerun.
+Rutina local:8fases exit0;2176pases/0fallos/28excl,1979.7s; total2024.1s. Exec cerrado.
 
 ## Aceptaciones anteriores que se conservan
 

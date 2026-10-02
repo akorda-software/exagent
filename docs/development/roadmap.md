@@ -19,6 +19,17 @@ conservan contexto fechado. Su lectura como contexto no amplía un encargo.
 y [flujo simplificado](execution-flow.md). Los siguientes hitos fechados conservan
 evidencia, no reactivan investigaciones, revisiones ni probes del padre ya cerrados.
 
+**Rutina local2026-10-02:** el usuario elige validar antes de commit/push en su
+máquina y evitar suites automáticas por push/PR. `bin/check` reúne formato,
+compile estricto/probes, suite offline, ExDoc y TAR/aislamiento; consumidores
+limpios con `--package-consumers`. CI remota queda manual en la rama del PR,
+con seis jobs conservados; `main` cambia al integrar.22integration+6postgres
+son filtros offline, no timeouts. Ver [verificación](verification.md).
+Rutina comprobada una vez:8fases exit0,2176pases/0fallos/28excl; suite1979.7s
+y total2024.1s. Casi todo el tiempo sync; no se demuestra aceleración20×.
+Control negativo whitespace exit2 antes de Mix y opciones desconocidas exit64.
+Fuente runtime intacta respecto a f69aede; sin re-review ni nuevas llamadas reales.
+
 **Git/CI030 autorizado2026-10-02:** commit inicial `b709d57` en
 `codex/v2-candidate-029`, [PR1 borrador](https://github.com/akorda-software/exagent/pull/1)
 y [run37008908156](https://github.com/akorda-software/exagent/actions/runs/37008908156).

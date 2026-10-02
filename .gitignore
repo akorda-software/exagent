@@ -32,3 +32,6 @@ __pycache__/
 
 # generated docs
 doc/
+
+# Per-host validation tooling, configuration and logs.
+/.exagent-local/
