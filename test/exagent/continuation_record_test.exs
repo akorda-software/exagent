@@ -12,6 +12,53 @@ defmodule ExAgent.ContinuationRecordTest do
     assert {:error, _} = Record.canonical(%{:a => 1, "a" => 2})
   end
 
+  test "canonical JSON preserves extreme numbers, escaped keys and rejects non-JSON terms" do
+    huge = Integer.pow(10, 1000)
+
+    assert Record.canonical([huge, -huge, -0.0, 1.0e-200, 1.0e200]) ==
+             {:ok, Jason.encode!([huge, -huge, -0.0, 1.0e-200, 1.0e200])}
+
+    assert {:ok, ~s({"\\n":[1,1.0],"~/":"ñ中😀"})} =
+             Record.canonical(%{"~/" => "ñ中😀", "\n" => [1, 1.0]})
+
+    for invalid <- [
+          <<255>>,
+          %{<<255>> => 1},
+          %{1 => 1},
+          :bad,
+          [1 | 2],
+          self(),
+          make_ref(),
+          %Jason.OrderedObject{values: [{"a", 1}, {"a", 2}]}
+        ] do
+      assert {:error, _} = Record.canonical(invalid)
+    end
+  end
+
+  test "JSON normalization materializes identical escaped diagnostic pointers" do
+    alias ExAgent.Tool.JSON
+
+    assert {:error, [%{path: "/~0a~1b/0/nested~0~1", keyword: "json"}]} =
+             JSON.normalize(%{"~a/b" => [%{"nested~/" => self()}]})
+
+    assert {:error, [%{path: "/~0a~1b/0/a", keyword: "uniqueKeys"}]} =
+             JSON.normalize(%{"~a/b" => [%{:a => 1, "a" => 2}]})
+
+    assert {:error, [%{path: "/~0a~1b", keyword: "json"}]} =
+             JSON.normalize(%{"~a/b" => [1 | 2]})
+
+    assert {:error, [%{path: "/~0a~1b/0", keyword: "json"}]} =
+             JSON.normalize(%{"~a/b" => [<<255>>]})
+
+    assert {:error, [%{path: "/~0a~1b/0", keyword: "json"}]} =
+             JSON.normalize(%{"~a/b" => [%{<<255>> => 1}]})
+
+    assert JSON.pointer("/root", "~/") == "/root/~0~1"
+
+    assert {:error, [%{path: [:unchanged], keyword: "json", message: "message"}]} =
+             JSON.error([:unchanged], "json", "message")
+  end
+
   test "codec reuses snapshot identity, legacy readers and qualified usage without reinterpretation" do
     record = ready()
     assert {:ok, bytes} = Record.encode(record, key())

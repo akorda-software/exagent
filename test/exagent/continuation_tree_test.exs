@@ -541,12 +541,13 @@ defmodule ExAgent.ContinuationTreeTest do
     refute_receive {:leaf_entered, _, _, _}
   end
 
-  test "a new VM rebuilds depth-two delegation only from disk bytes and trusted definitions" do
-    dir = Path.join("/tmp/opencode", "exagent-tree-vm-#{System.unique_integer([:positive])}")
+  @tag :tmp_dir
+  test "a new VM rebuilds depth-two delegation only from disk bytes and trusted definitions", c do
+    dir = Path.join(c.tmp_dir, "exagent-tree-vm-#{System.unique_integer([:positive])}")
     File.mkdir!(dir)
     on_exit(fn -> File.rm_rf!(dir) end)
     elixir = System.find_executable("elixir")
-    paths = Path.wildcard(Path.join([File.cwd!(), "_build", "test", "lib", "*", "ebin"]))
+    paths = Path.wildcard(Path.join([Mix.Project.build_path(), "lib", "*", "ebin"]))
 
     args =
       [

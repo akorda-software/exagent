@@ -519,10 +519,11 @@ defmodule ExAgent.FlowRuntimeTest do
     end
   end
 
+  @tag :tmp_dir
   test "collect A8 crosses two fresh VMs and an actual crash after D final before parent wrapper",
-       _c do
+       c do
     alias ExAgent.DelegationRuntimeFixture, as: F
-    dir = Path.join("/tmp/opencode", "flow-vm-#{System.unique_integer([:positive])}")
+    dir = Path.join(c.tmp_dir, "flow-vm-#{System.unique_integer([:positive])}")
     File.mkdir_p!(dir)
     on_exit(fn -> File.rm_rf!(dir) end)
     path = Path.join(dir, "record.json")

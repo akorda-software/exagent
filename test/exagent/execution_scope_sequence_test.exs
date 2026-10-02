@@ -80,11 +80,7 @@ defmodule ExAgent.ExecutionScopeSequenceTest do
             ExAgent.run(agent, "go", run_opts ++ [estimate_cost: price(journal, [1])])
           end)
 
-        ready = for _ <- 1..width, do: receive_ready(tag)
-        Enum.each(permute(ready, seed), fn {_, pid} -> send(pid, :launch) end)
-        attempts = for _ <- 1..width, do: receive_attempt(tag)
-        started = for {:started, path, pid} <- attempts, do: {path, pid}
-        rejected = for {:rejected, path, reason} <- attempts, do: {path, reason}
+        {started, rejected} = launch_leaves(width, tag, seed)
         assert length(started) == admitted
         assert length(rejected) == width - admitted
 
@@ -455,5 +451,24 @@ defmodule ExAgent.ExecutionScopeSequenceTest do
     after
       2_000 -> flunk("leaf admission did not settle")
     end
+  end
+
+  defp launch_leaves(remaining, tag, seed, started \\ [], rejected \\ [])
+
+  defp launch_leaves(0, _, _, started, rejected), do: {started, rejected}
+
+  defp launch_leaves(remaining, tag, seed, started, rejected) do
+    # The production tool stream bounds its workers by schedulers_online. A
+    # started provider stays at its release barrier, while rejected leaves free
+    # their worker slots. Waiting for the entire tree before launching any leaf
+    # would deadlock whenever the generated width exceeds the worker bound.
+    available = min(remaining, System.schedulers_online() - length(started))
+    assert available > 0, "held provider leaves exhausted the fixture's tool workers"
+    ready = for _ <- 1..available, do: receive_ready(tag)
+    Enum.each(permute(ready, seed), fn {_, pid} -> send(pid, :launch) end)
+    attempts = for _ <- 1..available, do: receive_attempt(tag)
+    started = started ++ for {:started, path, pid} <- attempts, do: {path, pid}
+    rejected = rejected ++ for {:rejected, path, reason} <- attempts, do: {path, reason}
+    launch_leaves(remaining - available, tag, seed, started, rejected)
   end
 end

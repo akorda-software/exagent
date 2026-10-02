@@ -530,6 +530,7 @@ defmodule ExAgent.SequenceWriterTest do
     assert {:ok, ^record} = Store.load_record(c.store, :agent, "sequence")
   end
 
+  @tag :tmp_dir
   test "another VM validates intermediate and projects completed bytes without callbacks", c do
     assert {:ok, _} = ExAgent.run_composition_step(c.writer, c.definition, "A")
     {:ok, intermediate} = Store.load_record(c.store, :agent, "sequence")
@@ -538,7 +539,7 @@ defmodule ExAgent.SequenceWriterTest do
         do: assert({:ok, _} = ExAgent.run_composition_step(c.writer, c.definition, id))
 
     {:ok, completed} = Store.load_record(c.store, :agent, "sequence")
-    path = Path.join("/tmp/opencode", "sequence9-vm-#{System.unique_integer([:positive])}.json")
+    path = Path.join(c.tmp_dir, "sequence9-vm-#{System.unique_integer([:positive])}.json")
     File.write!(path, Jason.encode!([intermediate, completed]))
     on_exit(fn -> File.rm(path) end)
     paths = Path.wildcard(Path.join([Mix.Project.build_path(), "lib", "*", "ebin"]))

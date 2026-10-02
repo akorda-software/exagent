@@ -132,13 +132,14 @@ defmodule ExAgent.SequenceRunTest do
     refute_receive {:writer, _}
   end
 
+  @tag :tmp_dir
   test "completed public result equals fresh VM inspection from JSON with all callbacks forbidden",
        c do
     assert {:ok, result} = Composition.run(c.definition, "initial", continuation: c.config)
     {:ok, record} = Store.load_record(c.store, :agent, "run")
 
     path =
-      Path.join("/tmp/opencode", "sequence-api-vm-#{System.unique_integer([:positive])}.json")
+      Path.join(c.tmp_dir, "sequence-api-vm-#{System.unique_integer([:positive])}.json")
 
     File.write!(path, Jason.encode!(%{record: record, result: result}))
     on_exit(fn -> File.rm(path) end)

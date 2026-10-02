@@ -842,8 +842,23 @@ defmodule ExAgent.ContinuationRuntimeTest do
 
     # One control byte becomes six bytes in history JSON, seven in envelope JSON.
     input = String.duplicate(<<1>>, div(room, 7) + 1)
-    assert {:error, error} = ExAgent.run(agent(self()), input, continuation: config(store))
-    assert error.reason == {:continuation_checkpoint_failed, :record_limit}
+    # Retain the exact runtime command before Store IO, then exercise the record
+    # gate directly. JSON/EFT representability is independent of the ETS owner's
+    # five-second call timeout when a busy runner processes this large command.
+    Agent.update(fault, fn _ -> {"create", :before} end)
+    assert {:error, error} = ExAgent.run(agent(self()), input, continuation: config(faulty))
+    assert error.reason == {:continuation_checkpoint_failed, :save_failed}
+    assert Agent.get(fault, & &1) == :ok
+
+    assert {:error, :record_limit} =
+             ExAgent.Continuation.Transition.apply(
+               nil,
+               {"runtime", :agent, "conversation"},
+               :absent,
+               error.partial.continuation_checkpoint["command"],
+               System.system_time(:millisecond)
+             )
+
     assert error.partial.retention.checkpoint_bytes <= 8 * 1024 * 1024
     assert error.partial.retention.checkpoint_bytes > 7_000_000
     assert {:error, :not_found} = Store.load_record(store, :agent, "conversation")

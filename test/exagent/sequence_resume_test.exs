@@ -3,6 +3,7 @@ defmodule ExAgent.SequenceResumeTest do
   # sources are authentic CAS/codec-checked 9 records, resumed by the public API.
   # Producer-10 mixed C7, ACK, counters and delegation are tested independently.
   use ExUnit.Case, async: false
+  @moduletag :tmp_dir
   alias ExAgent.{Continuation, ExecutionScope, RunError, Store}
   alias ExAgent.Continuation.Record
   alias ExAgent.Coordination.Composition
@@ -79,11 +80,11 @@ defmodule ExAgent.SequenceResumeTest do
     end
   end
 
-  setup do
+  setup %{tmp_dir: tmp_dir} do
     start_supervised!({Store.ETS, table: __MODULE__})
     control = start_supervised!({Agent, fn -> nil end})
     owner = self()
-    effects = "/tmp/opencode/sequence-resume-effects-#{System.unique_integer([:positive])}"
+    effects = Path.join(tmp_dir, "sequence-resume-effects-#{System.unique_integer([:positive])}")
     File.write!(effects, "")
     on_exit(fn -> File.rm(effects) end)
 

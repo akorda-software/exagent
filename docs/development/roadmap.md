@@ -6,7 +6,8 @@ Candidata común con pruebas locales, SQL, consumidores, frameworks, SDK y carga
 Langfuse G4 aceptado en la sesión autenticada autorizada; la revisión única R9
 está cerrada. El usuario amplió el alcance el2026-10-02: Opik debe tener el mismo
 nivel de validación nativa/API/UI. Ambos pasan nativo/API33/33 y UI12casos/248attrs
-en el perfil A10 finito. CI remoto exacto queda pendiente; los
+en el perfil A10 finito. CI remoto se ha ejecutado y falla en las suites completas;
+las correcciones causales y su siguiente ejecución están pendientes. Los
 diagnósticos estrictos de dependencias permanecen rojos. Guards intactos.
 Fuente única de
 estado y orden de trabajo. El [alcance](release-scope.md) define producto/garantías;
@@ -21,17 +22,26 @@ evidencia, no reactivan investigaciones, revisiones ni probes del padre ya cerra
 **Git/CI030 autorizado2026-10-02:** commit inicial `b709d57` en
 `codex/v2-candidate-029`, [PR1 borrador](https://github.com/akorda-software/exagent/pull/1)
 y [run37008908156](https://github.com/akorda-software/exagent/actions/runs/37008908156).
-Empaquetado/harness pasan; suite1.18 falla por formato entre versiones y una Regex
-de fixture incrustada al compilar. Corrección causal en preparación: formatter
-canónico1.20 y construcción runtime del fixture; no cambia core. Los consumidores
-remotos pasan56contratos/0fallos/0excl en ocho grafos; sus jobs estrictos quedan
-rojos por warnings stock TOML/WebSockex y gproc, con exits de fase0 conservados.
-La suite1.20 sigue en curso. G5 no se declara cerrado. Sin bump/tag/Hex;
-la automatización de publicación es el siguiente trabajo tras observar CI.
-Focales de compatibilidad strict en ambos runtimes:178/178 restauración y4/4
-Stream (26excluidos por selección). La compilación estática118 de165tests detectó
-seis warnings propios en esos cuatro Stream; tags/contexto runtime los corrigen.
-No cambia core/lock; el push causal sustituirá CI inicial, sin aceptar cancelados.
+Run inicial: paquete/harness pasan; suite1.18 falla por Regex compilada y warnings
+de layouts constantes, y suite1.20 se cancela con el siguiente push. Corrección
+`dad90ff`: formato canónico1.20, fixtures runtime,178restore+4stream strict en cada
+runtime y165testfiles118 compilados sin warnings, sin ejecutar sus bodies.
+[Run02](https://github.com/akorda-software/exagent/actions/runs/37010288171) sobre
+ese commit: compile ambos/formato1.20/harness/paquete pasan; consumidores remotos
+56contratos/0fallos/0excl y comandos exit0, strictdeps rojos TOML/WebSockex/gproc.
+Suites118/120 alcanzan timeout3000s con76/72fallos anteriores, sin totales finales:
+54rutas temporales no portables y un build env obligatorio por runtime; fanout
+espera cinco workers con cuatro slots; JSON-cap depende de latencia ETS; otras
+reanudaciones vencen y requieren diagnóstico. No subir deadlines ni contar como
+verde una suite cortada. Correcciones causales en curso: tmp_dir/build real,
+barrier por oleadas, oráculo JSON/EFT independiente de IO y menor coste de
+normalización/canonicalización conservando bytes/errores/guards. Focales cerrados:
+27portables+7fanout+3JSON/EFT por runtime;79casos distintos118/90en120 del frente
+de normalización, incluidos55boundaries y ochoSequence corregidos por nombre.
+Diferencial1015/1020vectores exacto en ambos;81ACK27.205s→18.968s perfilados.
+Una inspección independiente del padre0findings; sin re-review. Nueva CI
+integrada pendiente. G5 permanece abierto. Sin bump/tag/Hex; la pipeline de
+publicación será posterior. Recibos privados en `ci030/run02/` y owners disjuntos.
 
 ## 1. Dirección y condiciones de cierre
 
@@ -65,8 +75,8 @@ están en `docs/archive/2026-09-release-{roadmap,scope}.md`.
 | R5 | Aprobación persistida y recuperación de ejecución | R3 + R4 | C7 ordinario/composición/MCP integrado; G3/FlowA8 y Oban SQL prueban pausa/resume y recuperación explícita sin replay en sus perfiles |
 | R6 | Composición multi-agente coherente | R3; R4/R5 para pausa durable | Implementado y revisado: secuencia9/delegación10/Flow11. Final00973+11; recetas públicas PASS y A8 SQL entreVMs sobre019. FULL2157sin fallos; guards generales no demostrados siguen cerrados |
 | R7 | Observabilidad e integraciones utilizables | R1/R2; cierre sobre R5/R6 | MCP SDK5/5, binding, retrieval/job y LiveView/Oban6/6; Langfuse y Opik A10 nativo/API/UI aceptados con los mismos criterios por mandato2026-10-02 |
-| R8 | Cualificación externa, consumidores, carga y CI | R1–R7 pertinentes | G2mínimo/G3/G6 ejecutados sobre019; ocho grafos56contratos PASS en1.18.4/OTP28 y1.20/OTP29. Strictdiagnostics RED upstream; CI remoto exacto pendiente |
-| R9 | Revisión final, candidata y release2.0.0 | R0–R8 aceptados | Revisión única1/1 cerrada, seisP2 corregidos por focales owner y candidata preparada; CI remoto exacto pendiente. Sin versionar ni publicar |
+| R8 | Cualificación externa, consumidores, carga y CI | R1–R7 pertinentes | G2mínimo/G3/G6 aceptados; ocho grafos56contratos pasan también remotamente. CI030run02: paquete/harness verdes, suites timeout con fallos; corrección causal en curso. Strictdeps RED upstream |
+| R9 | Revisión final, candidata y release2.0.0 | R0–R8 aceptados | Revisión única cerrada y candidata029 preparada; PR1 borrador autorizado. CI030 no aceptado: faltan nueva suite integrada y resolver diagnóstico estricto upstream. Sin versionar ni publicar |
 
 ```text
 R0 → R1 → R2 → R3 ───────→ R6 ──┐

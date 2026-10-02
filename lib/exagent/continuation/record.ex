@@ -980,9 +980,10 @@ defmodule ExAgent.Continuation.Record do
 
   @doc "Canonical JSON v1: sorted UTF-8 object keys; array order and 1 versus 1.0 preserved."
   def canonical(value) do
-    with {:ok, value} <- JSON.normalize(value),
-         {:ok, _} <- JSON.encoded_result(value) do
-      {:ok, value |> ordered() |> Jason.encode!()}
+    # normalize already rejects colliding keys and non-JSON/invalid UTF-8 data.
+    # Ordering that plain JSON tree cannot introduce duplicate object keys.
+    with {:ok, value} <- JSON.normalize(value) do
+      Jason.encode(ordered(value), maps: :strict)
     end
   end
 

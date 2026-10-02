@@ -812,11 +812,12 @@ defmodule ExAgent.ToolEvidenceProducerTest do
              selection.parts
   end
 
-  test "authentic Frame8 accounting and control decode in a fresh VM without execution" do
+  @tag :tmp_dir
+  test "authentic Frame8 accounting and control decode in a fresh VM without execution", c do
     assert {{:ok, _}, record, _} = fixture(%Message.Usage{input_tokens: 7, output_tokens: 11})
 
     path =
-      Path.join("/tmp/opencode", "tool-evidence-vm-#{System.unique_integer([:positive])}.json")
+      Path.join(c.tmp_dir, "tool-evidence-vm-#{System.unique_integer([:positive])}.json")
 
     File.write!(path, Jason.encode!(record))
     on_exit(fn -> File.rm(path) end)

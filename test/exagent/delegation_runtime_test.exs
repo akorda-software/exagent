@@ -325,13 +325,14 @@ defmodule ExAgent.DelegationRuntimeTest do
     assert completed["execution"]["state"] == "completed"
   end
 
+  @tag :tmp_dir
   test "two decisions, fresh VM child completion, crash before wrapper and explicit recovery",
        c do
     alias ExAgent.DelegationRuntimeFixture, as: F
 
     dir =
       Path.join(
-        "/tmp/opencode",
+        c.tmp_dir,
         "delegation-vm-" <> Integer.to_string(System.unique_integer([:positive]))
       )
 
@@ -405,12 +406,13 @@ defmodule ExAgent.DelegationRuntimeTest do
              )
   end
 
+  @tag :tmp_dir
   test "wrapper admission ACK without settlement stays uncertain in a fresh VM", c do
     alias ExAgent.DelegationRuntimeFixture, as: F
 
     dir =
       Path.join(
-        "/tmp/opencode",
+        c.tmp_dir,
         "delegation-uncertain-" <> Integer.to_string(System.unique_integer([:positive]))
       )
 

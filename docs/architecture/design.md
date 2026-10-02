@@ -13,6 +13,36 @@
 > Conserva sus reproducciones y guards como estado runtime, no como aceptación
 > del nuevo contrato. C7 y los contratos de autoridad/recuperación permanecen.
 
+## Coste de normalización JSON y canonicalización (2026-10-02; CI030)
+
+**Problema demostrado:** el CI completo descubre vencimientos durante pruebas
+de continuación. En una reproducción acotada de Frame10, 81 ACK implican unas
+385 mil canonicalizaciones y 15 millones de construcciones de JSON Pointer.
+La normalización construía rutas escapadas para cada valor válido; canonical
+volvía a codificar y decodificar el árbol ya normalizado antes de ordenarlo y
+codificarlo otra vez. El coste afecta cualquier consumidor de estas primitivas.
+
+**Decisión/beneficio:** la normalización conserva segmentos de ruta y construye
+el mismo Pointer sólo al informar un error. Canonical normaliza, ordena las
+claves y usa el encoder estricto de Jason una vez. El árbol normalizado contiene
+sólo escalares JSON, listas propias y mapas con claves UTF-8 únicas: ordenar sus
+pares no introduce duplicados. Se conservan rechazo de colisiones, structs,
+términos opacos y UTF-8 inválido; el validador de objetos ordenados externos
+`JSON.encoded_result` permanece intacto, incluido el gate de argumentos ReqLLM.
+
+**Alternativas/impacto/migración:** subir leases o serializar pruebas ocultaría
+el coste; una caché introduciría identidad e invalidación innecesarias. Esta
+optimización conserva bytes canónicos v1, distinción 1/1.0, orden de arrays,
+errores/Pointers, digests y formatos persistidos. No cambia límites, reservas,
+timeouts, autoridad ni codecs; los registros existentes no necesitan migración.
+
+**Verificación:** comparación diferencial de 1.015 entradas contra la fuente
+anterior, con casos inválidos, Unicode, escapes y números extremos; regresiones
+de codec y argumentos. El mismo escenario perfilado de 81 ACK baja de 27,205 a
+18,968 segundos en la copia privada con dos schedulers y tracing. Esa medición
+no garantiza una latencia de producción ni sustituye la suite remota integrada.
+El estado de CI y sus límites quedan en la hoja de ruta y verificación.
+
 ## Slot portable de tools Frame10 (2026-10-01; implementación)
 
 **Problema demostrado:** los defaults ordinarios asignaban un slot de1MiB a cada

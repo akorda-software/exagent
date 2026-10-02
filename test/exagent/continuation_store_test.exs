@@ -367,9 +367,8 @@ defmodule ExAgent.ContinuationStoreTest do
     File.write!(path, bytes)
 
     paths =
-      :code.get_path()
-      |> Enum.map(&List.to_string/1)
-      |> Enum.filter(&String.starts_with?(&1, System.fetch_env!("MIX_BUILD_PATH")))
+      Path.join([Mix.Project.build_path(), "lib", "*", "ebin"])
+      |> Path.wildcard()
       |> Enum.flat_map(&["-pa", &1])
 
     script = """

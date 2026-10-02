@@ -8,6 +8,21 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Candidate qualification — 2026-10-02
 
+- Reduce continuation validation overhead without changing canonical JSON bytes,
+  digests, error pointers or persisted formats. Materialize diagnostic paths only
+  on normalization errors and encode an already normalized, sorted JSON tree
+  once with Jason's strict encoder. Keep raw ordered-object duplicate detection,
+  argument gates and all retention/authority/time limits. The same profiled
+  81-ACK scenario drops from27.205s to18.968s; differential and regression evidence
+  remain separate from full remote acceptance.
+
+- Make offline fresh-VM tests use per-test temporary directories and the actual
+  Mix build path. Fix the seeded fanout fixture's five-leaf launch barrier on
+  runners with four tool workers, preserving admission pressure and counters.
+  Check the large JSON-record cap directly against the exact dirty runtime
+  command so its oracle is independent of ETS call latency under CPU load.
+  Preserve the original CI failures and strict stock dependency diagnostics.
+
 - Run the authorized draft PR CI against the committed v2 checkout. Use one
   canonical formatter (Elixir1.20.0), while both supported runtimes compile and
   execute the offline suite. Construct regex permission-floor fixtures at setup

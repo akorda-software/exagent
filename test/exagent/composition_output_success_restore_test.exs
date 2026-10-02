@@ -602,8 +602,9 @@ defmodule ExAgent.CompositionOutputSuccessRestoreTest do
     no_effects()
   end
 
+  @tag :tmp_dir
   test "new OS BEAM consumes authentic JSON with schema/model/hook/mapping/tool traps", c do
-    path = Path.join("/tmp/opencode", "output-success-#{System.unique_integer([:positive])}.json")
+    path = Path.join(c.tmp_dir, "output-success-#{System.unique_integer([:positive])}.json")
     File.write!(path, c.bytes)
     on_exit(fn -> File.rm(path) end)
     paths = Path.wildcard(Path.join([Mix.Project.build_path(), "lib", "*", "ebin"]))

@@ -616,10 +616,10 @@ defmodule ExAgent.FlowAdmissionTest do
   end
 
   for phase <- ~w(selecting merging) do
-    @tag phase: phase
+    @tag phase: phase, tmp_dir: true
     test "actual host #{phase} crash survives fresh-VM recovery as uncertainty without replay or refund",
          c do
-      dir = Path.join("/tmp/opencode", "flow-host-#{System.unique_integer([:positive])}")
+      dir = Path.join(c.tmp_dir, "flow-host-#{System.unique_integer([:positive])}")
       File.mkdir_p!(dir)
       on_exit(fn -> File.rm_rf!(dir) end)
       path = Path.join(dir, "record.json")

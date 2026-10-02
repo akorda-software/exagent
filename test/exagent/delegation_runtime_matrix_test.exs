@@ -1,5 +1,6 @@
 defmodule ExAgent.DelegationRuntimeMatrixTest do
   use ExUnit.Case, async: false
+  @moduletag :tmp_dir
   alias ExAgent.Coordination.Composition
   alias ExAgent.Continuation.Record
   alias ExAgent.Message.Part.ToolCall
@@ -65,7 +66,7 @@ defmodule ExAgent.DelegationRuntimeMatrixTest do
   defp call(name, id, args \\ %{}), do: %ToolCall{tool_name: name, tool_call_id: id, args: args}
 
   defp paused(c) do
-    dir = Path.join("/tmp/opencode", "delegation-matrix-#{System.unique_integer([:positive])}")
+    dir = Path.join(c.tmp_dir, "delegation-matrix-#{System.unique_integer([:positive])}")
     File.mkdir_p!(dir)
     on_exit(fn -> File.rm_rf!(dir) end)
     effects = Path.join(dir, "effects.txt")

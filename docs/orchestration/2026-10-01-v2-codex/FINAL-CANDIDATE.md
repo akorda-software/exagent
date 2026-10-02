@@ -3,18 +3,41 @@
 Implementación autorizada, HEAD7f25b336924d97baf1d4aa18898ec8db32385940 y WIP
 preservado; versión nominal1.3.0. Este registro acredita los perfiles probados.
 G4 Langfuse y Opik están aceptados por transporte/API/UI en el perfil A10.
-CI remoto exacto sigue pendiente. El usuario autoriza el2026-10-02 commit/push
+CI remoto se ha ejecutado y no está aceptado. El usuario autoriza el2026-10-02 commit/push
 en rama nueva y PR borrador para ejecutarlo; `codex/v2-candidate-029` es la rama
 activa, commit inicial `b709d571240cc75b6044d4f53ac34ce795347a3c` y PR1 borrador.
 Publicación y bump siguen pendientes; la pipeline Hex será posterior.
 El tablero único de trabajo está en docs/development/roadmap.md.
 
-## Preview actual029: revisión crítica y consumidor real
+## CI030 run02 y correcciones posteriores
+
+Fuente `dad90ff`, [run37010288171](https://github.com/akorda-software/exagent/actions/runs/37010288171):
+compile en ambos runtimes, formato canónico1.20, harness y TAR pasan. Los56contratos
+runtime de consumidores pasan sin fallos/exclusiones, todos los comandos exit0;
+jobs estrictos siguen rojos por warnings stock TOML/WebSockex/gproc.
+Suites118/120 terminan con exit124 a3000s,76/72fallos antes del corte y sin totales.
+Cada runtime registra54fallos de padres temporales no existentes y un build env
+obligatorio; otros fallos exigen reproducción causal. No es una CI verde.
+
+TAR run02 SHA50b1c645627996f9df2f4c677b773ea7b5d93113566b2dadf5b831461a17802a:
+153archivos exactos al commit;90core exactos029, cambian sólo tres docs distribuidos.
+Recibos y clasificación original: `ci030/run02/`. Preparación posterior: fixtures
+portables/build real, lanzamiento fanout por oleadas, prueba JSON/EFT independiente
+de latencia ETS y menor coste de normalización/canonicalización. Focales finales:
+27portables,7fanout y3JSON/EFT en cada runtime; normalización79casos distintos118
+y90en120, con55boundaries y ochoSequence registrados por nombre.1015/1020vectores
+exactos ambos; mismo81ACK27.205s→18.968s. Dos fuentes core cambian; resto/lock
+intactos a dad90ff. Única inspección del padre0findings, sin re-review. Los focales
+no sustituyen la nueva suite integrada; estado resumido en CURRENT/roadmap.
+No subir límites, re-review, nueva aceptación pagada ni publicación por este frente.
+
+## Preview029: revisión crítica y consumidor real
 
 CI030 inicial sobre ese commit: empaquetado y harness verdes; suite1.18 roja por
 formato dependiente de versión y Macro.escape de Regex compilada en un fixture.
 La corrección causal prepara formato canónico1.20 y construcción runtime del
-fixture; el core distribuido no cambia. Suite1.20 aún en curso; consumidores
+fixture; el core distribuido no cambia en dad90ff. Suite1.20 finalmente cancelada
+por ese push; consumidores
 remotos56contratos/0fallos/0excl y comandos exit0, pero jobs estrictos rojos por
 warnings stock TOML/WebSockex y gproc. No presentar CI completa verde.
 Run [37008908156](https://github.com/akorda-software/exagent/actions/runs/37008908156).
@@ -23,8 +46,8 @@ y las153fuentes029 exactas; el orden de empaquetado difiere.
 Correcciones focales offline:178/178 InputRestore/OutputRetryRestore en cada
 runtime, más4/4 Stream (26excluidos por selección) en cada uno, exit0 strict.
 La compilación estática118 de165tests descubre seis warnings propios de cuatro
-layouts constantes; se construyen desde tags/contexto runtime. El nuevo push
-sustituirá la ejecución anterior; no contar una suite cancelada como pase.
+layouts constantes; se construyen desde tags/contexto runtime. Ese push
+sustituyó la ejecución anterior; no contar una suite cancelada como pase.
 
 Artefacto local: `/tmp/opencode/exagent-v2-codex-t6qgpstl/candidate029/exagent-1.3.0.tar`.
 SHA256 `8dd4e80a24ae01bea4e62051cbc15c30113c4bb34142b36623e3cb9bd070c808`.

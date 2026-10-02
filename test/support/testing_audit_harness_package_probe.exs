@@ -15,7 +15,7 @@ defmodule ExAgent.TestingAuditHarness.PackageProbe do
     ebin = Path.expand(Keyword.fetch!(opts, :ebin))
 
     base =
-      Path.join("/tmp/opencode", "testing_audit_harness_package_#{System.os_time(:nanosecond)}")
+      Path.join(System.tmp_dir!(), "testing_audit_harness_package_#{System.os_time(:nanosecond)}")
 
     File.mkdir!(base)
     fixtures = Path.expand("../fixtures/package_acceptance", __DIR__)

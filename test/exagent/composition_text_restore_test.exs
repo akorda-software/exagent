@@ -260,8 +260,9 @@ defmodule ExAgent.CompositionTextRestoreTest do
     end
   end
 
+  @tag :tmp_dir
   test "portable confirmed response closes in a new BEAM using only real JSON bytes", c do
-    path = Path.join("/tmp/opencode", "text-restore-#{System.unique_integer([:positive])}.json")
+    path = Path.join(c.tmp_dir, "text-restore-#{System.unique_integer([:positive])}.json")
     File.write!(path, c.bytes)
     on_exit(fn -> File.rm(path) end)
     paths = Path.wildcard(Path.join([Mix.Project.build_path(), "lib", "*", "ebin"]))

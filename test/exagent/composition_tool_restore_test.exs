@@ -599,7 +599,8 @@ defmodule ExAgent.CompositionToolRestoreTest do
 
   for mode <- ["text", "batch", "success", "retry", "fatal"] do
     @mode mode
-    test "fresh OS BEAM consumes #{@mode} from JSON with no historical callbacks" do
+    @tag :tmp_dir
+    test "fresh OS BEAM consumes #{@mode} from JSON with no historical callbacks", c do
       opts =
         case @mode do
           "text" ->
@@ -634,7 +635,7 @@ defmodule ExAgent.CompositionToolRestoreTest do
       ready = F.recover(record, config)
 
       file =
-        Path.join("/tmp/opencode", "frame8-tool-vm-#{System.unique_integer([:positive])}.json")
+        Path.join(c.tmp_dir, "frame8-tool-vm-#{System.unique_integer([:positive])}.json")
 
       File.write!(file, Jason.encode!(ready))
       on_exit(fn -> File.rm(file) end)

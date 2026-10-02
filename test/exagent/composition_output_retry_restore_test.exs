@@ -700,10 +700,10 @@ defmodule ExAgent.CompositionOutputRetryRestoreTest do
         {true, nil, 5, 1},
         {true, 7, 4, 0}
       ] do
-    @tag chain: chain, first: first
+    @tag chain: chain, first: first, tmp_dir: true
     test "chain=#{chain} first=#{first}: fresh OS BEAM consumes real JSON with historical callbacks zero",
          c do
-      path = Path.join("/tmp/opencode", "output-retry-#{System.unique_integer([:positive])}.json")
+      path = Path.join(c.tmp_dir, "output-retry-#{System.unique_integer([:positive])}.json")
       {:ok, bytes} = Record.encode(c.record, {c.store.namespace, :agent, "sequence"})
       File.write!(path, bytes)
       on_exit(fn -> File.rm(path) end)

@@ -284,9 +284,10 @@ defmodule ExAgent.CompositionInputRestoreTest do
     refute_receive :model_io
   end
 
+  @tag :tmp_dir
   test "portable bytes restore in another BEAM without captures or original processes", c do
     path =
-      Path.join("/tmp/opencode", "exagent-restore-vm-#{System.unique_integer([:positive])}.json")
+      Path.join(c.tmp_dir, "exagent-restore-vm-#{System.unique_integer([:positive])}.json")
 
     File.write!(path, Jason.encode!(c.record))
     on_exit(fn -> File.rm(path) end)

@@ -3,13 +3,14 @@ defmodule ExAgent.SequenceActiveEvidenceTest do
   # sources are authentic CAS/codec-checked 9 records, resumed by the public API.
   # Producer-10 mixed C7, ACK, counters and delegation are tested independently.
   use ExUnit.Case, async: false
+  @moduletag :tmp_dir
   alias ExAgent.{Continuation, Store, SequenceApprovalFixture}
   alias ExAgent.SequenceActiveEvidenceFixture, as: F
   alias ExAgent.Coordination.Composition
   alias ExAgent.Continuation.Record
   alias ExAgent.CompositionToolRestoreFixture, as: T
 
-  setup do
+  setup %{tmp_dir: tmp_dir} do
     start_supervised!({Store.ETS, table: __MODULE__})
     control = start_supervised!({Agent, fn -> nil end})
 
@@ -19,7 +20,7 @@ defmodule ExAgent.SequenceActiveEvidenceTest do
         "sequence-approval"
       )
 
-    path = "/tmp/opencode/sequence-active-#{System.unique_integer([:positive])}"
+    path = Path.join(tmp_dir, "sequence-active-#{System.unique_integer([:positive])}")
     File.write!(path, "")
 
     on_exit(fn ->

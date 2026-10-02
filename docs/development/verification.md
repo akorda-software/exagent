@@ -294,6 +294,23 @@ usa GNU `timeout`, disponible en los runners Ubuntu. `mix check` conserva su ali
 histórico y no equivale a este gate. La ejecución local del driver no prueba que
 la matriz remota de GitHub haya pasado.
 
+La workflow `.github/workflows/ci.yml` se ejecuta al abrir o actualizar un PR y
+al hacer push a `main`. Tiene seis jobs, agrupados en cuatro comprobaciones:
+
+| Comprobación | Qué demuestra | Alcance |
+|---|---|---|
+| Suites en Elixir 1.18.4/OTP 28 y 1.20.0/OTP 29 | Compilación estricta y pruebas offline del runtime, herramientas, límites, streaming, persistencia y recuperación; formato canónico en 1.20 | Dos jobs; los casos de proveedores reales y Postgres quedan excluidos explícitamente |
+| Harness finito en 1.20 | C0, ejemplos documentados, observabilidad aislada, evaluaciones y carga de humo | Dobles deterministas y transporte local, sin aceptación de servicios cloud |
+| Construcción del paquete | Un TAR de Hex con checksum e identidad de los archivos distribuidos | Preview de la versión nominal, sin publicar |
+| Consumidores del TAR en ambos runtimes | Instalación desde esos bytes y siete contratos por combinación sin OTel/API/SDK/exporter | Ocho grafos, 56 contratos; diagnósticos de dependencias registrados aparte |
+
+CI descarga herramientas y dependencias; `EXAGENT_OFFLINE=1` evita las pruebas
+de proveedores y DB externos, no convierte ese bootstrap en una ejecución sin
+red. Tampoco repite la aceptación real de OpenRouter, SQL, Langfuse u Opik.
+Conserva logs, exits, exclusiones y hashes incluso cuando falla. Un contrato
+runtime que pasa no convierte un diagnóstico estricto rojo de dependencias en
+verde. Publicar en Hex será otra workflow y requiere su autorización específica.
+
 C0 ofrece `--json <path>` y devuelve exit1 si falta una invariante requerida o
 hay un error del probe. Evals exige los casos/criterios requeridos; carga exige
 filas/muestras/percentiles coherentes y cero pérdidas normales. La saturación se
