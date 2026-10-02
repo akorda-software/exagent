@@ -8,6 +8,15 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Candidate qualification — 2026-10-02
 
+- Run the authorized draft PR CI against the committed v2 checkout. Use one
+  canonical formatter (Elixir1.20.0), while both supported runtimes compile and
+  execute the offline suite. Construct regex permission-floor fixtures at setup
+  time so Elixir1.18 can compile their full restore matrix without escaping an
+  OTP reference. Bind stream-layout test parameters at runtime to avoid six
+  constant-comparison warnings on1.18. Keep all assertions and strict dependency
+  diagnostics intact; both compatibility fixes pass their focal strict checks
+  on1.18 and1.20 without changing the distributed core.
+
 - Qualify18 real application scenarios in the authorized sibling Phoenix consumer
   through stock ReqLLM/GPT-4o-mini at OpenRouter: chat/stream/tools, text/native/
   image extraction, Server/PubSub/Session, router/parallel/typed Composition,

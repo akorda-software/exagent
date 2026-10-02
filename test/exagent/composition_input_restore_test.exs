@@ -110,7 +110,7 @@ defmodule ExAgent.CompositionInputRestoreTest do
     }
 
     {:ok, definition} = Composition.new(id: "sequence", version: "1", steps: [step])
-    root_options = context[:root_options] || []
+    {root_options, leaf_options, floor_restriction} = restore_options(context)
 
     root_options =
       if context[:logical_ms],
@@ -145,7 +145,7 @@ defmodule ExAgent.CompositionInputRestoreTest do
       )
 
     assert {:error, _} =
-             ExAgent.run_composition_step(writer, definition, "A", context[:leaf_options] || [])
+             ExAgent.run_composition_step(writer, definition, "A", leaf_options)
 
     assert_receive :mapping
     refute_receive :model_io
@@ -165,8 +165,25 @@ defmodule ExAgent.CompositionInputRestoreTest do
       record: record,
       barrier: barrier,
       fault: fault,
-      token: token
+      token: token,
+      floor_restriction: floor_restriction
     }
+  end
+
+  defp restore_options(%{restore_floor: {location, slot, action, timing}}) do
+    policy = %ExAgent.Permissions{
+      default: :allow,
+      rules: [{~r/.*/, :allow}, {~r/^effect$/, action}]
+    }
+
+    restriction = [{slot, if(slot == :permission_floor, do: policy, else: [policy])}]
+    root_options = if timing == :original and location == :root, do: restriction, else: []
+    leaf_options = if timing == :original and location == :leaf, do: restriction, else: []
+    {root_options, leaf_options, restriction}
+  end
+
+  defp restore_options(context) do
+    {context[:root_options] || [], context[:leaf_options] || [], nil}
   end
 
   defp recover(c) do
@@ -344,15 +361,8 @@ defmodule ExAgent.CompositionInputRestoreTest do
       slot <- [:permission_floor, :permission_floors],
       action <- [:deny, :ask],
       timing <- [:current, :original] do
-    policy = %ExAgent.Permissions{
-      default: :allow,
-      rules: [{~r/.*/, :allow}, {~r/^effect$/, action}]
-    }
-
-    restriction = [{slot, if(slot == :permission_floor, do: policy, else: [policy])}]
     @tag tool_loop: true
-    @tag root_options: if(timing == :original and location == :root, do: restriction, else: [])
-    @tag leaf_options: if(timing == :original and location == :leaf, do: restriction, else: [])
+    @tag restore_floor: {location, slot, action, timing}
     test "#{timing} #{location} #{slot} #{action} is conjunctive across integrated restore", c do
       reference = recover(c)
       allow = %ExAgent.Permissions{default: :allow}
@@ -360,7 +370,7 @@ defmodule ExAgent.CompositionInputRestoreTest do
 
       options =
         if unquote(timing) == :current,
-          do: Keyword.merge(options, unquote(Macro.escape(restriction))),
+          do: Keyword.merge(options, c.floor_restriction),
           else: options
 
       opts = if unquote(location) == :root, do: [root_options: options], else: options

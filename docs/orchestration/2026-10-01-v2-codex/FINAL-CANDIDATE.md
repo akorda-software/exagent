@@ -5,10 +5,26 @@ preservado; versión nominal1.3.0. Este registro acredita los perfiles probados.
 G4 Langfuse y Opik están aceptados por transporte/API/UI en el perfil A10.
 CI remoto exacto sigue pendiente. El usuario autoriza el2026-10-02 commit/push
 en rama nueva y PR borrador para ejecutarlo; `codex/v2-candidate-029` es la rama
-prevista. Publicación y bump siguen pendientes; la pipeline Hex será posterior.
+activa, commit inicial `b709d571240cc75b6044d4f53ac34ce795347a3c` y PR1 borrador.
+Publicación y bump siguen pendientes; la pipeline Hex será posterior.
 El tablero único de trabajo está en docs/development/roadmap.md.
 
 ## Preview actual029: revisión crítica y consumidor real
+
+CI030 inicial sobre ese commit: empaquetado y harness verdes; suite1.18 roja por
+formato dependiente de versión y Macro.escape de Regex compilada en un fixture.
+La corrección causal prepara formato canónico1.20 y construcción runtime del
+fixture; el core distribuido no cambia. Suite1.20 aún en curso; consumidores
+remotos56contratos/0fallos/0excl y comandos exit0, pero jobs estrictos rojos por
+warnings stock TOML/WebSockex y gproc. No presentar CI completa verde.
+Run [37008908156](https://github.com/akorda-software/exagent/actions/runs/37008908156).
+El TAR remoto tiene SHA d9a90625965001daef4a1fa52eb89174769401f53a31b22a65cf2911d573478f
+y las153fuentes029 exactas; el orden de empaquetado difiere.
+Correcciones focales offline:178/178 InputRestore/OutputRetryRestore en cada
+runtime, más4/4 Stream (26excluidos por selección) en cada uno, exit0 strict.
+La compilación estática118 de165tests descubre seis warnings propios de cuatro
+layouts constantes; se construyen desde tags/contexto runtime. El nuevo push
+sustituirá la ejecución anterior; no contar una suite cancelada como pase.
 
 Artefacto local: `/tmp/opencode/exagent-v2-codex-t6qgpstl/candidate029/exagent-1.3.0.tar`.
 SHA256 `8dd4e80a24ae01bea4e62051cbc15c30113c4bb34142b36623e3cb9bd070c808`.

@@ -18,6 +18,21 @@ conservan contexto fechado. Su lectura como contexto no amplía un encargo.
 y [flujo simplificado](execution-flow.md). Los siguientes hitos fechados conservan
 evidencia, no reactivan investigaciones, revisiones ni probes del padre ya cerrados.
 
+**Git/CI030 autorizado2026-10-02:** commit inicial `b709d57` en
+`codex/v2-candidate-029`, [PR1 borrador](https://github.com/akorda-software/exagent/pull/1)
+y [run37008908156](https://github.com/akorda-software/exagent/actions/runs/37008908156).
+Empaquetado/harness pasan; suite1.18 falla por formato entre versiones y una Regex
+de fixture incrustada al compilar. Corrección causal en preparación: formatter
+canónico1.20 y construcción runtime del fixture; no cambia core. Los consumidores
+remotos pasan56contratos/0fallos/0excl en ocho grafos; sus jobs estrictos quedan
+rojos por warnings stock TOML/WebSockex y gproc, con exits de fase0 conservados.
+La suite1.20 sigue en curso. G5 no se declara cerrado. Sin bump/tag/Hex;
+la automatización de publicación es el siguiente trabajo tras observar CI.
+Focales de compatibilidad strict en ambos runtimes:178/178 restauración y4/4
+Stream (26excluidos por selección). La compilación estática118 de165tests detectó
+seis warnings propios en esos cuatro Stream; tags/contexto runtime los corrigen.
+No cambia core/lock; el push causal sustituirá CI inicial, sin aceptar cancelados.
+
 ## 1. Dirección y condiciones de cierre
 
 - ExAgent conserva runtime/Model pequeños; **ReqLLM oficial stock será el backend

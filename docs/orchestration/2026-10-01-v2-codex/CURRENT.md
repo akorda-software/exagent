@@ -4,10 +4,30 @@ Usuario pide completar v2; implementación activa en
 /home/kukapu/dev/projects/exAgent, HEAD7f25b33, WIP preservado. ReqLLM oficial
 stock, R1.2 aceptado, C7 incluido y guards no demostrados intactos.
 El usuario autoriza expresamente el2026-10-02 commit/push en rama nueva y PR
-borrador para ejecutar CI remota. Rama prevista `codex/v2-candidate-029`;
+borrador para ejecutar CI remota. Rama `codex/v2-candidate-029`, commit inicial
+`b709d571240cc75b6044d4f53ac34ce795347a3c`, PR1 en GitHub;
 sin bump/tag/Hex. La pipeline de publicación se preparará después de observar CI.
 Una revisión máxima por objetivo, dueño corrige/regresa; sin re-review ni reruns
 rutinarios del padre. Paralelo autorizado en la transcripción recibida.
+
+CI030 inicial: [run37008908156](https://github.com/akorda-software/exagent/actions/runs/37008908156),
+fuente exacta b709d57. Empaquetado y harness pasan; suite1.18 roja por formato
+entre versiones y fixture Regex compilada que Macro.escape no admite en1.18.
+Corrección causal en preparación: formato canónico1.20 y Regex en setup runtime,
+sin cambiar core ni relajar oráculos. Suite1.20 sigue en curso; consumidores
+56contratos/0fallos/0excl con todos los comandos exit0, strictjobs rojos por
+warnings stock TOML/WebSockex y gproc. No ocultar ese diagnóstico.
+TAR remoto d9a90625965001daef4a1fa52eb89174769401f53a31b22a65cf2911d573478f:
+153fuentes exactas029, distinto orden de empaquetado. Evidencia privada en
+`/tmp/opencode/exagent-v2-codex-t6qgpstl/ci030/run01/`.029 queda inmutable.
+
+Focales de la corrección: InputRestore/OutputRetryRestore178/178 en ambos
+runtimes, exit0 strict; compilación estática118 de165tests detecta seis warnings
+propios en cuatro casos Stream de layout constante. Tags/contexto runtime
+corrigen esos cuatro sin cambiar assertions:4/4 strict en ambos runtimes,
+26excluidos por selección. Logs/rojo original en `ci030/fixture-owner/`.
+El nuevo push sustituirá la ejecución previa mediante la concurrencia del PR;
+una suite cancelada no cuenta como pase. Los gates estrictos stock se conservan.
 
 Mandato posterior del usuario2026-10-02: pide expresamente una pasada adicional
 de código crítico y pruebas con subagentes antes de Git. Objetivo027 cerrado sobre

@@ -548,10 +548,11 @@ defmodule ExAgent.ReqLLMStreamTest do
   end
 
   for layout <- [:name, :empty, :prefix, :full] do
-    @layout layout
-    test "final admission #{layout}: public Model preserves final logical arguments and diagnostics" do
+    @tag layout: layout
+    test "final admission #{layout}: public Model preserves final logical arguments and diagnostics",
+         %{layout: layout} do
       {url, peer} =
-        scripted([Map.put(reply([call(~s({"arguments":{"value":7}}))]), :layout, @layout)])
+        scripted([Map.put(reply([call(~s({"arguments":{"value":7}}))]), :layout, layout)])
 
       params = %ModelRequestParameters{function_tools: [tool()]}
       assert [{:response, response, _}] = stream(model(url), params) |> Enum.to_list()
@@ -566,10 +567,10 @@ defmodule ExAgent.ReqLLMStreamTest do
 
       assert metadata["arguments_codec"] == "exagent.arguments/1"
 
-      if @layout in [:empty, :prefix] do
+      if layout in [:empty, :prefix] do
         assert metadata["invalid_arguments"] == true
         assert metadata["unparseable_arguments"] == true
-        assert metadata["raw_arguments"] == if(@layout == :empty, do: "", else: "{")
+        assert metadata["raw_arguments"] == if(layout == :empty, do: "", else: "{")
       end
 
       assert_receive {:script_request, ^peer, 0, %{"stream" => true}}

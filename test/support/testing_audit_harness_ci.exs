@@ -9,14 +9,16 @@ true = mode in ["suite", "harness"]
 evidence = Path.expand(evidence)
 File.mkdir_p!(evidence)
 beam = Path.expand("_build/test/lib")
+check_format = System.get_env("EXAGENT_CI_CHECK_FORMAT", "true")
+true = check_format in ["true", "false"]
 
 commands =
   if mode == "suite" do
-    [
-      {"compile", "mix", ["compile", "--force", "--warnings-as-errors"]},
-      {"format", "mix", ["format", "--check-formatted"]},
-      {"test", "mix", ["test", "--warnings-as-errors", "--seed", "37556"]}
-    ]
+    [{"compile", "mix", ["compile", "--force", "--warnings-as-errors"]}] ++
+      if(check_format == "true",
+        do: [{"format", "mix", ["format", "--check-formatted"]}],
+        else: []
+      ) ++ [{"test", "mix", ["test", "--warnings-as-errors", "--seed", "37556"]}]
   else
     [
       {"compile", "mix", ["compile", "--force", "--warnings-as-errors"]},
@@ -95,6 +97,7 @@ report = %{
   build_path: beam,
   offline: System.get_env("EXAGENT_OFFLINE"),
   mix_env: System.get_env("MIX_ENV"),
+  check_format: check_format,
   results: results,
   source_sha256: Map.new(sources),
   beam_sha256: Map.new(beams)

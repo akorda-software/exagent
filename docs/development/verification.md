@@ -283,7 +283,12 @@ EXAGENT_OFFLINE=1 MIX_ENV=test elixir test/support/testing_audit_harness_ci.exs 
 EXAGENT_OFFLINE=1 MIX_ENV=test elixir test/support/testing_audit_harness_ci.exs harness /tmp/opencode/exagent-harness-check
 ```
 
-`suite` ejecuta compile forzado, formato sin escritura y tests con warnings-as-errors;
+`suite` ejecuta compile forzado y tests con warnings-as-errors en ambos runtimes.
+El formato sin escritura tiene una única versión canónica, Elixir1.20.0: la CI
+fija `EXAGENT_CI_CHECK_FORMAT=false` sólo en1.18.4 y registra esa selección en el
+recibo. Los formatters1.18/1.20 producen diferencias sobre la misma fuente;
+no se reformatea el core por runtime. La invocación local conserva formato por
+defecto y debe usar la versión canónica para ese check.
 `harness` ejecuta compile, C0, snippets, R3 aislado, evals y load smoke. El driver
 usa GNU `timeout`, disponible en los runners Ubuntu. `mix check` conserva su alias
 histórico y no equivale a este gate. La ejecución local del driver no prueba que
