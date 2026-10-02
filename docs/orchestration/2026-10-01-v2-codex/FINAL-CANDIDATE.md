@@ -1,13 +1,54 @@
 # Candidata v2 — evidencia y límites, 2026-10-02
 
-Implementación autorizada, HEAD7f25b336924d97baf1d4aa18898ec8db32385940 y WIP
-preservado; versión nominal1.3.0. Este registro acredita los perfiles probados.
+Implementación autorizada, fuente CI `f69aedea1a2f7c94c546fa95b631a71664110b4d`;
+versión nominal1.3.0. Este registro acredita los perfiles probados.
 G4 Langfuse y Opik están aceptados por transporte/API/UI en el perfil A10.
 CI remoto se ha ejecutado y no está aceptado. El usuario autoriza el2026-10-02 commit/push
 en rama nueva y PR borrador para ejecutarlo; `codex/v2-candidate-029` es la rama
 activa, commit inicial `b709d571240cc75b6044d4f53ac34ce795347a3c` y PR1 borrador.
 Publicación y bump siguen pendientes; la pipeline Hex será posterior.
 El tablero único de trabajo está en docs/development/roadmap.md.
+
+## CI030 run03 — suites completas verdes; diagnóstico upstream rojo
+
+Correcciones comiteadas y subidas: `f69aedea1a2f7c94c546fa95b631a71664110b4d`.
+[Run37019949320](https://github.com/akorda-software/exagent/actions/runs/37019949320)
+lanzado14:27:03UTC. En la última lectura remota14:33UTC pasan paquete/harness;
+56contratos consumidores sin fallos, skips o exclusiones;46comandos exit0.
+Los jobs estrictos siguen rojos por warnings de dependencias stock, sin suprimir.
+Ambas suites completas pasan con warnings-as-errors, cero compilerwarnings y
+377fuentes exactas al commit en cada artifact. Compile ambos/formato1.20 exit0.
+
+| Runtime | Pases | Fallos | Excluidos | Duración suite |
+|---|---:|---:|---:|---:|
+| Elixir1.18.4 / OTP28.0 | 2176 | 0 | 28 | 2706.4s |
+| Elixir1.20.0 / OTP29.0.5 | 2176 | 0 | 28 | 2072.4s |
+
+ExUnit1.18 imprime2204tests incluyendo28excl;1.20 imprime2176passed. Son el
+mismo conjunto2204, no2204pases. Jobs remotos completos46m20s y35m33s.
+SummarySHA118359110073e697f53078c5ee13bcfc4d6c177803805b4b78a34eee105b9767765;
+summarySHA120
+f2ca85c3e2a00b647b441177aafa7051588d668c1da71ec8d16e58a6fd25c8fb.
+Run global **failure** sólo por diagnóstico strictdeps en los dos jobs consumidores.
+TOML15en118; TOML19/WebSockex19en120 y gproc9adicionales en exporter120.
+Las46órdenes salen0 y56contratos pasan; no warnings ExAgent, supresión ni fork.
+CI funcional aceptado; G5strict upstream abierto. No afirmar CI global verde.
+Seguimiento: mantenedores TOML/WebSockex y grpcbox/gproc; reevaluar al disponer
+de releases stock compatibles que resuelvan estos avisos. No override transitorio.
+
+TAR SHAeff31a95803c414657333e1344831fcb8b7099460c481a664a3e4b0828fdbd3f:
+153archivos leídos de vuelta exactos al commit, nominal1.3.0. Respecto a run02
+cambian dos fuentes core y cuatro documentos distribuidos; lock intacto.
+Recibos privados en `ci030/run03/`: package-readback, harness-readback,
+consumer-runtime-readback y consumer-diagnostics-readback. No publicación.
+
+La sesión reanudada14:39UTC restringe red de terminal y escritura en .git;
+gh no conecta y web no obtiene el run. El usuario restablece acceso14:44UTC;
+gh confirma ambas suites aún en curso. Los artifacts finales se descargan y leen
+de vuelta al completar el run. Recibos `suite-readback.json`, `jobs-final.json`
+y `run-final.json`; no repetir aceptación externa ni focales por este registro.
+El cierre documental usa [skip ci]; estos resultados pertenecen a f69aede,
+no a un nuevo artefacto construido desde el commit documental.
 
 ## CI030 run02 y correcciones posteriores
 

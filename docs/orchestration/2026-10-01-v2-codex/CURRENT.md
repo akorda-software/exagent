@@ -1,14 +1,14 @@
 # ExAgent v2 — estado vigente, 2026-10-02
 
 Implementación activa y autorizada en /home/kukapu/dev/projects/exAgent.
-Rama: `codex/v2-candidate-029`. Base de los fallos CI run02: `dad90ff`.
+Rama: `codex/v2-candidate-029`. Fuente CI: `f69aede`. Base run02: `dad90ff`.
 Commit inicial: `b709d57`. [PR1 borrador](https://github.com/akorda-software/exagent/pull/1).
 El usuario autorizó commit/push/PR y observación del CI; sin bump, tag,
 merge ni publicación en Hex. La pipeline de publicación vendrá después.
 ReqLLM oficial stock, R1.2 aceptado, C7 incluido, guards intactos.
 Una revisión máxima por objetivo; sin re-review ni reruns rutinarios del padre.
 
-## Objetivo actual: corregir causas demostradas en CI030
+## Objetivo actual: cerrar recibos CI030; diagnóstico upstream pendiente
 
 [Run01](https://github.com/akorda-software/exagent/actions/runs/37008908156)
 sobre b709d57: paquete/harness pasan; suite118 falla al compilar Regex de fixture
@@ -26,6 +26,7 @@ Suites118/120: exit124 tras3000s,76/72fallos anteriores al corte, sin totales.
 en cada runtime; otros requieren diagnóstico causal, no aumento de timeout.
 
 Correcciones causales probadas, fuentes/builds físicos separados:
+
 - ci118_fixture_owner: cerrado. tmp_dir portable y ebins desde build real;
   controles originales rojos reproducidos;27/27 strict en cada runtime.
 - ci_fanout_owner: cerrado. Fixture esperaba cinco hojas con cuatro workers;
@@ -47,13 +48,23 @@ Core cambia sólo Record.canonical y JSON.normalize; rawencoded_result intacto.
 RecordSHA6222e4c727e47fd67769dcbb421aeeeee50fc20ac308395f1cd052de1d46cad2.
 JSONSHA7cbe704cd3263c8356fc5f0cb50ab8ae841ad76e2c007b5e7fc0b78a27ac13c4.
 Fuente/recibos leídos de vuelta; formato completo1.20 exit0, lock intacto.
-Siguiente: commit/push causal autorizado y una CI integrada de la vertical estable.
+Commit/push causal completado: `f69aedea1a2f7c94c546fa95b631a71664110b4d`.
+[Run03](https://github.com/akorda-software/exagent/actions/runs/37019949320)
+lanzado14:27:03UTC sobre esa fuente. Última lectura remota14:33UTC: paquete y
+harness pasan,56contratos consumidores pasan,46comandos exit0; strictdeps rojos.
+TAR eff31a95803c414657333e1344831fcb8b7099460c481a664a3e4b0828fdbd3f:
+153archivos exactos f69aede. Ambas suites:2176pases/0fallos/28excl,exit0 por runtime.
+14:39–14:44UTC: sesión managed sin sockets/red y .git sólo lectura; fallo guardado.
+14:44UTC el usuario restablece acceso; gh funciona y ambas suites siguen en curso.
+Resultado final: compile/test ambos y formato1.20 exit0;377fuentes exactas cada uno.
+Duración suite118/120:2706.4s/2072.4s. Run global failure sólo por strictdeps.
+Recibo documental con [skip ci]; fuente runtime f69aede, sin re-review/rerun.
 
 ## Aceptaciones anteriores que se conservan
 
 | Gate | Evidencia y límites |
 |---|---|
-| G1 FULL019 |2157pases/28excl/0fallos,2276s,exit1 por warnings propios;136focales correctivos strict; no suite exacta actual verde |
+| G1 FULL019 |2157pases/28excl/0fallos,2276s,exit1 por warnings propios;136focales correctivos strict; FULLactual ambos verde arriba |
 | G1 ExDoc029 |exit0/0warnings,105HTML/2643targets/0links propios rotos |
 | G2 real |GPT-4o-mini/OpenRouter14/14,17admisiones/3efectos,USD0.425reserva; fase cerrada |
 | E2E consumidor028 |18escenarios reales aceptados,40admisiones/USD1.00reserva,7grupos cerrados; factura null; initial13/18 preservado |

@@ -6,9 +6,9 @@ Candidata común con pruebas locales, SQL, consumidores, frameworks, SDK y carga
 Langfuse G4 aceptado en la sesión autenticada autorizada; la revisión única R9
 está cerrada. El usuario amplió el alcance el2026-10-02: Opik debe tener el mismo
 nivel de validación nativa/API/UI. Ambos pasan nativo/API33/33 y UI12casos/248attrs
-en el perfil A10 finito. CI remoto se ha ejecutado y falla en las suites completas;
-las correcciones causales y su siguiente ejecución están pendientes. Los
-diagnósticos estrictos de dependencias permanecen rojos. Guards intactos.
+en el perfil A10 finito. CI run02 falla en las suites completas; las correcciones
+causales están comiteadas. Run03 pasa ambas suites completas:2176pases/0fallos/
+28excl por runtime, exit0; diagnóstico strictdeps rojo upstream. Guards intactos.
 Fuente única de
 estado y orden de trabajo. El [alcance](release-scope.md) define producto/garantías;
 la [matriz de aceptación](production-acceptance.md) define cómo se demuestran.
@@ -33,14 +33,28 @@ Suites118/120 alcanzan timeout3000s con76/72fallos anteriores, sin totales final
 54rutas temporales no portables y un build env obligatorio por runtime; fanout
 espera cinco workers con cuatro slots; JSON-cap depende de latencia ETS; otras
 reanudaciones vencen y requieren diagnóstico. No subir deadlines ni contar como
-verde una suite cortada. Correcciones causales en curso: tmp_dir/build real,
+verde una suite cortada. Correcciones causales cerradas: tmp_dir/build real,
 barrier por oleadas, oráculo JSON/EFT independiente de IO y menor coste de
 normalización/canonicalización conservando bytes/errores/guards. Focales cerrados:
 27portables+7fanout+3JSON/EFT por runtime;79casos distintos118/90en120 del frente
 de normalización, incluidos55boundaries y ochoSequence corregidos por nombre.
 Diferencial1015/1020vectores exacto en ambos;81ACK27.205s→18.968s perfilados.
-Una inspección independiente del padre0findings; sin re-review. Nueva CI
-integrada pendiente. G5 permanece abierto. Sin bump/tag/Hex; la pipeline de
+Una inspección independiente del padre0findings; sin re-review. Correcciones
+comiteadas y subidas en `f69aedea1a2f7c94c546fa95b631a71664110b4d`.
+[Run03](https://github.com/akorda-software/exagent/actions/runs/37019949320), lanzado
+14:27:03UTC, pasa paquete/harness y56contratos consumidores,46comandos exit0;
+strictdeps rojos. Ambas suites completas pasan con warnings-as-errors:
+2176pases/0fallos/28excl por runtime;1.18 en2706.4s,1.20 en2072.4s. Compile
+ambos y formato1.20 exit0; cero compilerwarnings en tests. Las377fuentes de
+cada artifact coinciden con el commit. Jobs completos46m20s y35m33s.
+TAR SHAeff31a95803c414657333e1344831fcb8b7099460c481a664a3e4b0828fdbd3f:
+153archivos exactos al commit. Restricción temporal14:39–14:44UTC impide lecturas;
+el usuario restablece acceso14:44UTC y gh confirma ambas suites aún en curso.
+Run final **failure** exclusivamente por warnings stock en jobs consumidores:
+TOML15(1.18); TOML19/WebSockex19 y gproc9(exporter) en1.20. Sin warnings
+ExAgent, supresión, fork ni actualización forzada. Conservar seguimiento upstream
+y G5strict abierto; no afirmar CI global verde. Recibos: `ci030/run03/`.
+Sin bump/tag/Hex; la pipeline de
 publicación será posterior. Recibos privados en `ci030/run02/` y owners disjuntos.
 
 ## 1. Dirección y condiciones de cierre
@@ -75,8 +89,8 @@ están en `docs/archive/2026-09-release-{roadmap,scope}.md`.
 | R5 | Aprobación persistida y recuperación de ejecución | R3 + R4 | C7 ordinario/composición/MCP integrado; G3/FlowA8 y Oban SQL prueban pausa/resume y recuperación explícita sin replay en sus perfiles |
 | R6 | Composición multi-agente coherente | R3; R4/R5 para pausa durable | Implementado y revisado: secuencia9/delegación10/Flow11. Final00973+11; recetas públicas PASS y A8 SQL entreVMs sobre019. FULL2157sin fallos; guards generales no demostrados siguen cerrados |
 | R7 | Observabilidad e integraciones utilizables | R1/R2; cierre sobre R5/R6 | MCP SDK5/5, binding, retrieval/job y LiveView/Oban6/6; Langfuse y Opik A10 nativo/API/UI aceptados con los mismos criterios por mandato2026-10-02 |
-| R8 | Cualificación externa, consumidores, carga y CI | R1–R7 pertinentes | G2mínimo/G3/G6 aceptados; ocho grafos56contratos pasan también remotamente. CI030run02: paquete/harness verdes, suites timeout con fallos; corrección causal en curso. Strictdeps RED upstream |
-| R9 | Revisión final, candidata y release2.0.0 | R0–R8 aceptados | Revisión única cerrada y candidata029 preparada; PR1 borrador autorizado. CI030 no aceptado: faltan nueva suite integrada y resolver diagnóstico estricto upstream. Sin versionar ni publicar |
+| R8 | Cualificación externa, consumidores, carga y CI | R1–R7 pertinentes | G2mínimo/G3/G6 aceptados; ocho grafos56contratos pasan también remotamente. CI030run03: paquete/harness y ambas suites completas verdes;2176pases/0fallos/28excl por runtime. Strictdeps RED upstream |
+| R9 | Revisión final, candidata y release2.0.0 | R0–R8 aceptados | Revisión única cerrada y candidata029 preparada; PR1 borrador autorizado. CI030 funcional aceptado; run global failure sólo por diagnóstico strictdeps upstream. G5strict abierto, sin versionar ni publicar |
 
 ```text
 R0 → R1 → R2 → R3 ───────→ R6 ──┐
