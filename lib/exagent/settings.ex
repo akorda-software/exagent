@@ -13,6 +13,14 @@ defmodule ExAgent.ModelSettings do
   the default tool choice (`"required"` for structured output, `"auto"` for
   function tools). Provider support and validation of extra values remain the
   caller's responsibility. Other providers may interpret `extra` differently.
+
+  `ExAgent.Models.ReqLLM` currently rejects nonempty `extra` rather than merging
+  arbitrary wire fields. Its `timeout` is receive inactivity: non-nil request
+  settings override the instance HTTP default, then 60 seconds. This struct does
+  not expose a total-call deadline or pool-checkout timeout; those are distinct
+  transport budgets, not aliases for `timeout`. Stock ReqLLM nevertheless derives
+  its pool default from the receive value. The adapter's separate per-instance
+  `total_timeout` bounds a single buffered operation, not the whole agent run.
   """
   @enforce_keys []
   defstruct max_tokens: nil,

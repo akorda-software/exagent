@@ -50,8 +50,12 @@ results =
   Enum.map(commands, fn {name, executable, args} ->
     IO.puts("GATE #{name}: #{executable} #{Enum.join(args, " ")}")
 
+    # The integrated suite previously took 2482.5s. Give that finite workload
+    # its own 50-minute runner deadline; runtime/test deadlines remain unchanged.
+    timeout_seconds = if name == "test", do: 3000, else: 300
+
     {output, status} =
-      System.cmd("timeout", ["--kill-after=10s", "300s", executable | args],
+      System.cmd("timeout", ["--kill-after=10s", "#{timeout_seconds}s", executable | args],
         stderr_to_stdout: true
       )
 
@@ -61,6 +65,7 @@ results =
     result = %{
       gate: name,
       command: [executable | args],
+      timeout_seconds: timeout_seconds,
       exit_code: status,
       warning_lines:
         output |> String.split("\n") |> Enum.filter(&Regex.match?(~r/\bwarning:/i, &1))

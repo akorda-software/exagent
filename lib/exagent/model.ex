@@ -17,6 +17,7 @@ defmodule ExAgent.ModelRequestParameters do
             output_mode: :text,
             allow_text_output: true,
             output_object: nil,
+            idempotency_key: nil,
             instructions: []
 
   @type t :: %__MODULE__{
@@ -25,6 +26,7 @@ defmodule ExAgent.ModelRequestParameters do
           output_mode: output_mode(),
           allow_text_output: boolean(),
           output_object: output_object() | nil,
+          idempotency_key: String.t() | nil,
           instructions: [Message.Part.System.t()]
         }
 end
@@ -84,20 +86,86 @@ defmodule ExAgent.Model do
   @callback system(model()) :: String.t()
 
   @doc """
-  Declares capabilities (optional; defaults are permissive). The core rejects
+  Declares capabilities (optional; extra capabilities default to false). The core rejects
   function tools and tool-based structured output when `supports_tools` is false.
-  Native JSON/thinking flags do not describe the current tool-output mode and
+   Explicit native output requires `supports_json_schema_output: true` before
+   request admission. Native JSON/thinking flags do not describe tool-output mode and
   are not used to silently downgrade it. Streaming requires its own callback.
   """
   @callback profile(model()) :: ExAgent.ModelProfile.t()
 
-  @optional_callbacks [request_stream: 4, profile: 1]
+  @doc """
+  Optional no-IO preflight required by persisted continuation. Validate restored
+  logical history, provider/endpoint binding and codec/settings using the trusted
+  current model and tool inventory. Never dispatch a request from this callback.
+  Ordinary run/request consumers do not require it.
+  """
+  @callback validate_resume(model(), messages, ModelSettings.t(), ModelRequestParameters.t()) ::
+              :ok | {:error, term()}
+
+  @doc """
+  Optional static configuration binding for persisted continuation, without IO.
+
+  Return `{:ok, json_data}` (at most 4096 encoded JSON bytes) or `{:error, reason}`.
+  Exclude credentials, transient state and runtime counters. The normalized value
+  must be deterministic across equivalent configurations. Absent callbacks return
+  `{:ok, nil}`. Frame restore checks both the trusted template and app-codec result;
+  a changed binding rejects before resuming effects, including a first uncertain
+  Model request with no response history. Callback errors are normalized, not echoed.
+  """
+  @callback continuation_binding(model()) :: {:ok, term()} | {:error, term()}
+
+  @optional_callbacks [request_stream: 4, profile: 1, validate_resume: 4, continuation_binding: 1]
+
+  @doc "Returns the bounded, portable static continuation binding; no Model IO."
+  def continuation_binding(%mod{} = model) do
+    _ = Code.ensure_loaded(mod)
+
+    result =
+      if function_exported?(mod, :continuation_binding, 1),
+        do: mod.continuation_binding(model),
+        else: {:ok, nil}
+
+    with {:ok, data} <- result,
+         {:ok, data} <- ExAgent.Tool.JSON.normalize(data) do
+      if byte_size(Jason.encode!(data)) <= 4096,
+        do: {:ok, data},
+        else: {:error, :model_continuation_binding_too_large}
+    else
+      _ -> {:error, :invalid_model_continuation_binding}
+    end
+  rescue
+    _ -> {:error, :invalid_model_continuation_binding}
+  catch
+    _, _ -> {:error, :invalid_model_continuation_binding}
+  end
+
+  @doc false
+  def validate_resume(%mod{} = model, messages, settings, params) do
+    _ = Code.ensure_loaded(mod)
+
+    if function_exported?(mod, :validate_resume, 4) do
+      case mod.validate_resume(model, messages, settings, params) do
+        :ok -> :ok
+        {:error, _} = error -> error
+        _ -> {:error, :invalid_model_continuation_preflight}
+      end
+    else
+      {:error, :model_continuation_preflight_required}
+    end
+  rescue
+    _ -> {:error, :invalid_model_continuation_preflight}
+  catch
+    _, _ -> {:error, :invalid_model_continuation_preflight}
+  end
 
   # --- dispatch ------------------------------------------------------------
   @spec request(model(), messages, ModelSettings.t() | nil, ModelRequestParameters.t()) ::
           {:ok, Message.Response.t(), model()} | {:error, term()}
   def request(%mod{} = model, messages, settings, params) do
-    mod.request(model, messages, settings, params)
+    if ExAgent.Retention.executable?(messages),
+      do: mod.request(model, messages, settings, params),
+      else: {:error, :omitted_payload_history}
   end
 
   @spec request_stream(model(), messages, ModelSettings.t() | nil, ModelRequestParameters.t()) ::
@@ -109,13 +177,17 @@ defmodule ExAgent.Model do
          fn ->
            Code.ensure_loaded(mod)
 
-           if function_exported?(mod, :request_stream, 4) do
-             case mod.request_stream(model, messages, settings, params) do
-               {:error, _} = error -> [error]
-               stream -> stream
-             end
+           if not ExAgent.Retention.executable?(messages) do
+             [{:error, :omitted_payload_history}]
            else
-             [{:error, {:unsupported, :streaming}}]
+             if function_exported?(mod, :request_stream, 4) do
+               case mod.request_stream(model, messages, settings, params) do
+                 {:error, _} = error -> [error]
+                 stream -> stream
+               end
+             else
+               [{:error, {:unsupported, :streaming}}]
+             end
            end
          end}
       end,
@@ -186,42 +258,55 @@ defmodule ExAgent.Model do
   end
 
   @doc """
-  Resolve a model from a spec. A struct is returned as-is; a string like
-  `"openai:gpt-4o"` is resolved via the provider registry (only a few providers
-  are wired up for now).
+  Resolve a custom Model struct, Test label, or stock ReqLLM model spec.
+
+  Custom structs are returned unchanged. Catalogue strings, explicit maps, stock
+  tuples and `LLMDB.Model` specs resolve through public `ReqLLM.model/1` and use
+  `ExAgent.Models.ReqLLM`. Catalogue membership does not enable tools or streaming.
+  Pass instance credentials and an explicitly qualified profile with `resolve/2`,
+  or construct `ExAgent.Models.ReqLLM` directly. No credentials are read from the
+  environment by this resolver. `opencode:` and `zai:` shortcuts require explicit
+  spec/endpoint/auth migration; they never silently choose another provider.
   """
-  @spec resolve(model() | String.t()) :: {:ok, model()} | {:error, term()}
-  def resolve(%_{} = model), do: {:ok, model}
+  @spec resolve(model() | String.t() | map() | tuple(), keyword()) ::
+          {:ok, model()} | {:error, term()}
+  def resolve(spec, opts \\ [])
+  def resolve(%LLMDB.Model{} = spec, opts), do: resolve_backend(spec, opts)
+  def resolve(%_{} = model, []), do: {:ok, model}
+  def resolve(%_{}, _), do: {:error, :custom_model_options}
+  def resolve("test:" <> rest, []), do: {:ok, %ExAgent.Models.Test{label: rest}}
+  def resolve("test", []), do: {:ok, %ExAgent.Models.Test{}}
+  def resolve("opencode:" <> _ = spec, opts), do: resolve_shortcut(spec, opts, :opencode)
+  def resolve("zai:" <> _ = spec, opts), do: resolve_shortcut(spec, opts, :zai)
+  def resolve(spec, opts), do: resolve_backend(spec, opts)
 
-  def resolve("test:" <> rest), do: {:ok, %ExAgent.Models.Test{label: rest}}
-  def resolve("test"), do: {:ok, %ExAgent.Models.Test{}}
-
-  def resolve("openai:" <> name),
-    do: {:ok, ExAgent.Models.OpenAI.new(model: name)}
-
-  def resolve("openrouter:" <> name),
-    do: {:ok, ExAgent.Models.OpenRouter.new(model: name)}
-
-  def resolve("opencode:" <> name),
-    do: {:ok, ExAgent.Models.OpenCode.new(model: name)}
-
-  def resolve("anthropic:" <> name),
-    do: {:ok, ExAgent.Models.Anthropic.new(model: name)}
-
-  # Z.AI (Zhipu) GLM models via their Anthropic-compatible endpoint.
-  # Cheap pick: "glm-4.5-air". Needs ZAI_API_KEY (or ANTHROPIC_AUTH_TOKEN).
-  def resolve("zai:" <> name) do
-    token = System.get_env("ZAI_API_KEY") || System.get_env("ANTHROPIC_AUTH_TOKEN")
-
-    {:ok,
-     ExAgent.Models.Anthropic.new(
-       model: name,
-       auth_token: token,
-       base_url: "https://api.z.ai/api/anthropic"
-     )}
+  defp resolve_shortcut(spec, opts, provider) do
+    case ReqLLM.model(spec) do
+      {:ok, resolved} -> resolve_backend(resolved, opts)
+      {:error, _} -> {:error, {:explicit_model_required, provider}}
+    end
   end
 
-  def resolve(other) do
-    {:error, {:unknown_model, other}}
+  defp resolve_backend(spec, opts) do
+    with true <- valid_spec_shape?(spec),
+         true <-
+           Keyword.keyword?(opts) and not Keyword.has_key?(opts, :model) and
+             length(Keyword.keys(opts)) == length(Enum.uniq(Keyword.keys(opts))),
+         {:ok, resolved} <- ReqLLM.model(spec) do
+      {:ok, ExAgent.Models.ReqLLM.new(Keyword.put(opts, :model, resolved))}
+    else
+      _ -> {:error, :invalid_model_spec_or_options}
+    end
+  rescue
+    _ in [ArgumentError, KeyError] -> {:error, :invalid_model_spec_or_options}
   end
+
+  defp valid_spec_shape?({provider, id, []}), do: is_atom(provider) and is_binary(id)
+  defp valid_spec_shape?({_, _, _}), do: false
+
+  defp valid_spec_shape?({provider, [{key, id}]}),
+    do: is_atom(provider) and key in [:id, :model] and is_binary(id)
+
+  defp valid_spec_shape?({_, _}), do: false
+  defp valid_spec_shape?(_), do: true
 end

@@ -29,7 +29,14 @@ defmodule ExAgent.Store.PostgresTest do
       assert :ok = Store.save_agent_snapshot(@store, snap)
       assert {:ok, loaded} = Store.load_agent_snapshot(@store, id)
       assert loaded.agent_id == id
-      assert loaded.usage == %{"input_tokens" => 2, "output_tokens" => 3, "details" => %{}}
+
+      assert %{
+               "input_tokens" => 2,
+               "output_tokens" => 3,
+               "details" => %{},
+               "accounting" => %{"quality" => "reported"}
+             } = loaded.usage
+
       assert loaded.metadata == %{"scene" => "tavern"}
 
       {:ok, messages} = Snapshot.messages(loaded)
@@ -64,7 +71,13 @@ defmodule ExAgent.Store.PostgresTest do
       )
 
       assert {:ok, loaded} = Store.load_agent_snapshot(@store, a)
-      assert loaded.usage == %{"input_tokens" => 9, "output_tokens" => 0, "details" => %{}}
+
+      assert %{
+               "input_tokens" => 9,
+               "output_tokens" => 0,
+               "details" => %{},
+               "accounting" => %{"quality" => "reported"}
+             } = loaded.usage
 
       Store.delete_agent_snapshot(@store, a)
       Store.delete_agent_snapshot(@store, b)

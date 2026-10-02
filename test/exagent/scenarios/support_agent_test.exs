@@ -74,7 +74,8 @@ defmodule ExAgent.Scenarios.SupportAgentTest do
       assert find_tool_return(messages, "lookup_user") == "user 42 is on the pro plan"
 
       # Usage accumulated across the two model requests (TestModel reports 1/1).
-      assert usage == %Usage{input_tokens: 2, output_tokens: 2}
+      assert %Usage{input_tokens: 2, output_tokens: 2, accounting: %{"quality" => "reported"}} =
+               usage
     end
 
     test "invalid output args trigger one retry, then a valid call succeeds" do
@@ -161,7 +162,8 @@ defmodule ExAgent.Scenarios.SupportAgentTest do
                ExAgent.run(agent, "go")
 
       # 2 model requests (1/1 each) + 40/10 contributed by the tool.
-      assert usage == %Usage{input_tokens: 42, output_tokens: 12}
+      assert %Usage{input_tokens: 42, output_tokens: 12, accounting: %{"quality" => "reported"}} =
+               usage
 
       assert [
                %Part.ToolReturn{

@@ -15,11 +15,13 @@ defmodule ExAgent.FrameworkEvalsTest do
     assert report.evidence.snapshot.final_call_id == "final_result"
     assert report.evidence.snapshot.revision == 1
 
-    assert report.evidence.snapshot.usage == %{
+    assert Map.drop(report.evidence.snapshot.usage, ["accounting"]) == %{
              "input_tokens" => 15,
              "output_tokens" => 10,
              "details" => %{}
            }
+
+    assert report.evidence.snapshot.usage["accounting"]["quality"] == "reported"
 
     assert report.evidence.snapshot.restored_without_replay
     assert report.evidence.snapshot.history != []
@@ -32,6 +34,12 @@ defmodule ExAgent.FrameworkEvalsTest do
     assert report.evidence.observed.requests == 6
     assert report.evidence.save_attempts == 2
     assert report.evidence.ledger.cost_cents == nil
+    assert report.evidence.expected_pricing_calls == 8
+
+    assert Enum.all?(
+             report.evidence.pricing_inputs,
+             &(&1.input_tokens == 3 and &1.output_tokens == 2)
+           )
   end
 
   test "negative fixtures exercise live effect wiring, inherited deny, JSV and Ecto" do

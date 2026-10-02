@@ -5,18 +5,42 @@ defmodule ExAgent.Capability do
   behaviour whose callbacks default to no-ops via `use ExAgent.Capability`, so
   a capability overrides only the hooks it cares about.
 
-  A capability is any module. It is passed as the first argument to its own
-  callbacks (so it can carry config as module state or read its own attributes).
+  A capability is a module or a configured struct. That value is passed as the
+  first argument to its callbacks, keeping configuration explicit without global
+  state. Hooks compose in list order.
 
   ## Hooks (all optional)
 
     * `before_model_request(cap, state)` — return (possibly modified) `state`.
       Set `state.request_messages` to alter what's sent to the model without
       touching the canonical history (e.g. keep a sliding window, redact PII).
+      Select `state.model`, `state.settings` and `state.params.function_tools`
+      here. Selected tools are prepared and become this request's executable set;
+      the wider agent inventory does not authorize omitted tools.
     * `after_model_request(cap, state)` — observe/modify state after the model
       responded (state already includes the new response + merged usage).
-    * `before_tool_execute(cap, ctx, tool_call)` — observe/replace a tool call.
+    * `before_tool_execute(cap, ctx, tool_call)` — observe or transform arguments,
+      revalidated before authority. ID, name, kind and metadata are immutable for
+      every Model; context includes call identity/retry fields.
     * `after_tool_execute(cap, ctx, tool_call, result)` — observe a tool result.
+
+  Model after-hooks transform the effective response before tool admission;
+  their output still passes validation, limits and ancestor authority.
+  Before-tool exceptions report `:not_executed`; after-tool failures retain
+  confirmed effects. Hooks are trusted host code, not a sandbox. Run identity,
+  scope handles, prepared validators and accounting fields are internal and must
+  not be replaced.
+
+  In Model hooks, `tool_retries`, `output_retries_used`, `run_step`, `tool_calls`,
+  `max_steps` and `agent.output_retries` are observable, runtime-owned values.
+  Writes to these six fields are ignored: each callback's result restores the
+  confirmed values before the next capability and before admission/persistence/IO.
+  Configure limits before starting the run; callbacks cannot replenish budgets.
+  Other valid agent/model/settings/tool selections and response/projection
+  transformations remain supported, including selected tools' `max_retries`.
+  This applies to actual runs, not generic maps passed to <code>ExAgent.Capabilities</code>.
+  It is a behavioral change for the pending major; invalid callback results are
+  not repaired into valid runs, and historical persisted counters are not migrated.
 
   ## Example
 
@@ -30,7 +54,7 @@ defmodule ExAgent.Capability do
         end
       end
 
-      ExAgent.new(model: "openai:gpt-4o", capabilities: [MyApp.RedactPII])
+      ExAgent.new(model: "test", capabilities: [MyApp.RedactPII])
   """
 
   @type state :: map()
@@ -73,6 +97,7 @@ defmodule ExAgent.Capabilities do
   def before_model_request(caps, state) do
     Enum.reduce(caps, state, fn cap, acc ->
       call_if(cap, :before_model_request, [cap, acc], acc)
+      |> runtime_counters(state)
     end)
   end
 
@@ -80,8 +105,25 @@ defmodule ExAgent.Capabilities do
   def after_model_request(caps, state) do
     Enum.reduce(caps, state, fn cap, acc ->
       call_if(cap, :after_model_request, [cap, acc], acc)
+      |> runtime_counters(state)
     end)
   end
+
+  # Restore only existing fields: malformed callback results must not acquire
+  # defaults or be rebuilt as valid runs. Generic map pipelines remain generic.
+  defp runtime_counters(transformed, %ExAgent.Run{} = confirmed) do
+    %{
+      transformed
+      | tool_retries: confirmed.tool_retries,
+        output_retries_used: confirmed.output_retries_used,
+        run_step: confirmed.run_step,
+        tool_calls: confirmed.tool_calls,
+        max_steps: confirmed.max_steps,
+        agent: %{transformed.agent | output_retries: confirmed.agent.output_retries}
+    }
+  end
+
+  defp runtime_counters(transformed, _confirmed), do: transformed
 
   @spec before_tool_execute([module()], map(), struct()) :: struct()
   def before_tool_execute(caps, ctx, tool_call) do

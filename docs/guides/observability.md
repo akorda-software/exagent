@@ -7,8 +7,9 @@ No tracing service is required for the ordinary core, Server or Session.
 This guide describes the current optional tracing implementation. The
 [verification guide](../development/verification.md) provides runnable checks;
 [project status](../status.md) records accepted evidence and remaining limits.
-Langfuse and Opik are candidates; neither is a selected or verified reference
-backend yet. The next comparison is defined in the
+Langfuse is a provisional reference for further evaluation, not a final platform
+selection or an accepted deployment. Opik remains a comparison candidate. G4 and
+backend API/UI acceptance remain open, as defined in the
 [backend acceptance plan](../development/backend-evaluation.md).
 
 ## 1. Application setup
@@ -18,7 +19,7 @@ An application choosing OTLP can add these dependencies to its own `mix.exs`:
 ```elixir
 {:opentelemetry_api, "~> 1.5.0"},
 {:opentelemetry, "~> 1.7.0"},
-{:opentelemetry_exporter, "~> 1.10.0"}
+{:opentelemetry_exporter, "~> 1.11.0"}
 ```
 
 ExAgent declares API and SDK as optional consumer dependencies; the SDK is marked
@@ -30,11 +31,20 @@ host application. API present without an SDK uses the native no-op tracer.
 Configure one processor route before starting the SDK, for example in the host's
 `config/runtime.exs`:
 
-**Native HTTP exporter qualification:** the recipe below is verified for local
-wire transport with exporter1.10.0, but its long-lived HTTP lifecycle is not
-accepted. Timeout/shutdown can leave native profiles, atoms and outstanding TCP
-requests after ExAgent's own processes close. Read section7 before choosing this
-route for an application; a callback deadline is not a network cancellation.
+**Transport qualification:** the direct stock HTTP configuration below is an
+installation example. Its historical exporter1.10 wire checks do not accept a
+long-lived HTTP lifecycle; choosing release1.11 does not itself close that gate.
+Timeout/shutdown can leave native profiles, atoms and outstanding TCP requests
+after ExAgent's own processes close. Read section7 before choosing this route;
+a callback deadline is not a network cancellation.
+
+The optional [isolated callback](../development/otlp-isolated-transport.md) and
+[application-owned Collector route](../development/otlp-collector-transport.md)
+qualify a different finite profile with official exporter1.11/Collector0.162:
+owned process groups, deadlines, partial loss evidence and repeated cleanup.
+Those recipes ship in `examples/otlp_transport`; the application supplies the
+binary/configuration and owns their startup. Their synthetic acceptance does not
+substitute for backend API/UI or guarantee high-throughput operation.
 
 ```elixir
 import Config
@@ -123,6 +133,23 @@ context and instrumentation configuration, excluding arbitrary context/baggage.
 Handles are ephemeral runtime values, not snapshot or JSON data. Attachment
 restores prior trace context and owned Logger trace keys.
 
+### Durable pause and attempt identity
+
+A confirmed durable pause closes the run span and its watcher with
+`exagent.status=paused`, without an OTel error. Resume creates another attempt/span
+under the same lifetime `run_id` and continuation `record_id`. Use
+`exagent.attempt_id` to distinguish attempts; a paused attempt is not a completed
+durable run. Approve/deny/recover administrative operations do not gain invented
+spans from this result projection.
+
+`exagent.continuation.*` exports only `version`, `id`, `record_id`, `run_id`,
+`revision` and optional `attempt_id` from a validated public reference. It must be
+a plain map without a `__struct__` marker and with integer version exactly1.
+IDs must satisfy existing label validation (UTF-8, permitted alphabet, at most256
+bytes); version/revision are integers. Invalid references are omitted completely,
+without losing independently valid run/attempt IDs. Actors, tokens, stored records,
+payloads and extra fields are not traversed or exported.
+
 ## 3. Privacy before export
 
 Content is **off by default**, including prompts, responses and tool arguments or
@@ -167,21 +194,34 @@ It is an explicit subset, not full semantic/UI compatibility. That revision has
 no published schema URL; ExAgent does not invent one.
 
 - `gen_ai.usage.*` is emitted only for model requests. Cache read/write and
-  reasoning tokens are subsets of input/output, not additional billable totals.
+  reasoning dimensions are not added to totals without declared semantics.
   Reasoning detail in this profile is `exagent.usage.reasoning_tokens`.
 - Native Anthropic input excludes cache: the generation projection adds cache
   read/write to obtain GenAI's inclusive input. OpenAI-compatible/Test inputs are
   already inclusive. Run aggregates retain the ledger's provider-native semantics.
   For custom models with unknown input semantics, the GenAI input total is omitted;
-  `exagent.usage.reported_input_tokens` preserves the observed value and
+  `exagent.usage.reported_input_tokens` preserves the Model-reported value and
   `exagent.usage.input_tokens_semantics` is `provider_reported`.
 - The current cache-write key is `gen_ai.usage.cache_write.input_tokens`.
   Older backends may expect a different mapping; verify their actual interpretation.
 - Run usage is an inclusive subtree aggregate under `exagent.usage.*`. Do not add
   root, child and generation totals together. Keeping run aggregates out of the
   GenAI namespace is a deliberate profile choice to avoid that ambiguity.
+- Run request/tool counts and usage are cumulative lifetime snapshots, not deltas
+  per attempt. Do not sum snapshots across pause/resume. Host counts measure
+  admissions, not successful effects: the tested pause has1 request/1 tool admission
+  and zero effects; after resume it has2/1 and one effect. Keep these exact host
+  counters distinct from normalized/reported tokens and estimated costs.
 - Estimated costs reuse execution accounting in cents, including fractions and
   known/unknown status. Instrumentation does not call a second pricing function.
+- R1.5 adds allowlisted `exagent.usage.accounting_source`, `quality`,
+  `provider_presence` and input/output/cache_read/cache_write/reasoning availability
+  labels. ReqLLM public numbers use normalized quality even at zero, with unknown
+  provider presence. Their input value is `exagent.usage.normalized_input_tokens`,
+  not reported_input_tokens; GenAI inclusive input requires known semantics and
+  available cache dimensions when exclusive. Output does not add a reasoning subset.
+  `exagent.cost.quality` is estimated, with source/availability and a partial
+  known_subtotal_cents when present. Complete coverage never implies an audited bill.
 - Missing usage is not zero; cancellation cannot reconstruct unreported usage.
   A sampled or lossy trace is not an authoritative cost ledger.
 
@@ -334,7 +374,8 @@ comparison and production-like acceptance remain open.
 scenarios with68 spans in11 loopback POSTs. They compose parallel tools/delegation,
 corrective retry, five stream deltas, compaction, failed checkpoint and save-only
 retry; compare identical tracing-off/on ledgers (4 requests,43/8 tokens,0.51 cents,
-10 estimator invocations); and inspect generation usage as protobuf integer tags.
+5 actual-report estimator invocations, with synthetic-zero preflight probes removed
+in R1.5); and inspect generation usage as protobuf integer tags.
 Parent/subtree totals remain separate from generation sums.
 
 Two queued callers retain separate trace IDs and parent contexts. Cancellation

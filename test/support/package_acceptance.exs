@@ -1,6 +1,6 @@
 # Run with plain elixir, never mix run in the library checkout:
 #   elixir test/support/package_acceptance.exs --tar /tmp/preview.tar \
-#     --work-dir /tmp/opencode/exagent-night-package-fresh --mode all
+#     --work-dir /absolute/new-package-consumers --mode all
 # Optional: --lock /absolute/path/mix.lock --seed 771506 --checksum TAR_SHA256
 # --prepare-only verifies package bytes and effective tooling destinations without
 # downloading/compiling anything; useful with deliberately hostile inherited env.
@@ -347,11 +347,22 @@ defmodule PackageAcceptance.Runner do
   end
 
   defp create_work_dir!(base) do
-    unless Path.dirname(base) == "/tmp/opencode" and
-             String.starts_with?(Path.basename(base), "exagent-night-package"),
-           do: raise("work-dir must be a new direct child /tmp/opencode/exagent-night-package*")
+    # CI and other hosts supply their own disposable destination. Inspect every
+    # parent with lstat: a new leaf beneath a symlink must not escape isolation.
+    ancestors =
+      base
+      |> Path.dirname()
+      |> Stream.unfold(fn
+        nil ->
+          nil
 
-    for ancestor <- ["/tmp", "/tmp/opencode"] do
+        path ->
+          parent = Path.dirname(path)
+          {path, if(parent == path, do: nil, else: parent)}
+      end)
+      |> Enum.reverse()
+
+    for ancestor <- ancestors do
       unless match?({:ok, %File.Stat{type: :directory}}, File.lstat(ancestor)),
         do: raise("work-dir ancestor must be a real directory: #{ancestor}")
     end

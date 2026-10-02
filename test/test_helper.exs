@@ -38,3 +38,5 @@ exclude =
   if System.find_executable("python3") == nil, do: [:mcp_e2e | exclude], else: exclude
 
 ExUnit.start(exclude: exclude)
+
+{:ok, _} = Registry.start_link(keys: :unique, name: ExAgent.Test.ReqTransport.Registry)

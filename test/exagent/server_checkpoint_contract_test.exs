@@ -351,12 +351,44 @@ defmodule ExAgent.ServerCheckpointContractTest do
       assert_receive {:working, worker}
       worker_ref = Process.monitor(worker)
       tag = make_ref()
-      :sys.suspend(server)
-      if unquote(winner == :abort), do: send(server, {:"$gen_call", {self(), tag}, :abort})
-      send(worker, :release)
-      assert_receive {:DOWN, ^worker_ref, :process, ^worker, :normal}
-      if unquote(winner == :completion), do: send(server, {:"$gen_call", {self(), tag}, :abort})
-      :sys.resume(server)
+
+      if unquote(winner == :completion) do
+        # Pause on receipt of the decisive terminal, before handle_info publishes
+        # it. Progress/event ACKs have already been consumed normally. The abort
+        # competes while the terminal is still unpublished, not after completion.
+        :ok =
+          :sys.install(
+            server,
+            {fn
+               state, {:in, {ref, {:ok, %{output: "complete"}}}}, _ when is_reference(ref) ->
+                 send(parent, :terminal_received)
+
+                 receive do
+                   :release_terminal -> state
+                 end
+
+               state, _, _ ->
+                 state
+             end, nil}
+          )
+
+        send(worker, :release)
+        assert_receive :terminal_received
+        assert_receive {:DOWN, ^worker_ref, :process, ^worker, :normal}
+        refute_receive {:exagent_event, %Event{type: :run_finished}}, 0
+        send(server, {:"$gen_call", {self(), tag}, :abort})
+        send(server, :release_terminal)
+      else
+        :sys.suspend(server)
+        send(server, {:"$gen_call", {self(), tag}, :abort})
+        send(worker, :release)
+        # ACK backpressure deliberately keeps the worker alive while its owner
+        # cannot consume progress; a terminal cannot overtake queued cancellation.
+        refute_receive {:DOWN, ^worker_ref, :process, ^worker, _}, 20
+        assert Process.alive?(worker)
+        :sys.resume(server)
+      end
+
       assert_receive {^tag, :ok}
 
       expected =
@@ -459,7 +491,7 @@ defmodule ExAgent.ServerCheckpointContractTest do
     request_error = %ExAgent.RequestError{
       provider: :openai,
       reason: :timeout,
-      model: struct(ExAgent.Models.OpenAI, api_key: secret)
+      model: struct(ExAgent.Models.ReqLLM, api_key: secret)
     }
 
     partial = %{

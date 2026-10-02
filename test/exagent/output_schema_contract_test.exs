@@ -5,11 +5,11 @@ defmodule ExAgent.OutputSchemaContractTest do
   alias ExAgent.OutputSchema
   alias ExAgent.Test.{NestedOptionalOutput, OptionalOutput, ReceiptItem}
 
-  test "original schema API is preserved without schema-specific agent modes" do
+  test "original schema API and default tool mode are preserved with explicit native selection" do
     assert OutputSchema.__info__(:functions) == [json_schema: 1, validate: 2]
     assert %ExAgent{output_type: :text, observability: nil} = ExAgent.new(model: "test")
 
-    assert %ExAgent{output_type: OptionalOutput} =
+    assert %ExAgent{output_type: OptionalOutput, output_mode: :tool} =
              ExAgent.new(model: "test", output: OptionalOutput)
 
     assert %ExAgent{output_type: OptionalOutput} =
@@ -19,10 +19,13 @@ defmodule ExAgent.OutputSchemaContractTest do
              [
                :capabilities,
                :instructions,
+               :max_history_bytes,
+               :max_payload_bytes,
                :max_steps,
                :model,
                :name,
                :observability,
+               :output_mode,
                :output_retries,
                :output_type,
                :settings,
@@ -49,40 +52,41 @@ defmodule ExAgent.OutputSchemaContractTest do
     assert Enum.any?(errors, &(&1.field == :score))
   end
 
-  describe "agent emits final_result to OpenAIChat (offline adapter)" do
+  describe "agent emits enveloped final_result through stock ReqLLM (offline adapter)" do
     setup context do
       previous = Req.default_options()
       parent = self()
 
       Req.default_options(
-        adapter: fn request ->
-          send(parent, {:body, Jason.decode!(request.body)})
+        adapter:
+          ExAgent.Test.ReqTransport.bind(fn request ->
+            send(parent, {:body, Jason.decode!(request.body)})
 
-          response = %{
-            "model" => "offline",
-            "choices" => [
-              %{
-                "finish_reason" => "tool_calls",
-                "message" => %{
-                  "role" => "assistant",
-                  "content" => nil,
-                  "tool_calls" => [
-                    %{
-                      "id" => "out1",
-                      "type" => "function",
-                      "function" => %{
-                        "name" => "final_result",
-                        "arguments" => Jason.encode!(context.output_args)
+            response = %{
+              "model" => "offline",
+              "choices" => [
+                %{
+                  "finish_reason" => "tool_calls",
+                  "message" => %{
+                    "role" => "assistant",
+                    "content" => nil,
+                    "tool_calls" => [
+                      %{
+                        "id" => "out1",
+                        "type" => "function",
+                        "function" => %{
+                          "name" => "final_result",
+                          "arguments" => Jason.encode!(%{"arguments" => context.output_args})
+                        }
                       }
-                    }
-                  ]
+                    ]
+                  }
                 }
-              }
-            ]
-          }
+              ]
+            }
 
-          {request, Req.Response.new(status: 200, body: response)}
-        end
+            {request, Req.Response.new(status: 200, body: response)}
+          end)
       )
 
       on_exit(fn -> Req.default_options(previous) end)
@@ -96,7 +100,18 @@ defmodule ExAgent.OutputSchemaContractTest do
       @tag output_args: args
       test "#{inspect(schema_module)}: emitted tool reflects Ecto and preserves run results",
            context do
-        model = %ExAgent.Models.OpenAI{model: "offline", api_key: "offline"}
+        model =
+          ExAgent.Models.ReqLLM.new(
+            model: %{
+              provider: :openai,
+              id: "offline",
+              capabilities: %{tools: %{enabled: true}, reasoning: %{enabled: false}},
+              extra: %{wire: %{protocol: "openai_chat"}}
+            },
+            api_key: "offline",
+            tool_profile: :chat_tools_v1
+          )
+
         agent = ExAgent.new(model: model, output: unquote(schema_module))
 
         assert {:ok, result} = ExAgent.run(agent, "return structured data")
@@ -128,7 +143,10 @@ defmodule ExAgent.OutputSchemaContractTest do
         assert tool["type"] == "function"
         assert tool["function"]["name"] == "final_result"
 
-        schema = tool["function"]["parameters"]
+        envelope = tool["function"]["parameters"]
+        assert envelope["required"] == ["arguments"]
+        assert envelope["additionalProperties"] == false
+        schema = envelope["properties"]["arguments"]
 
         assert schema ==
                  OutputSchema.json_schema(unquote(schema_module))

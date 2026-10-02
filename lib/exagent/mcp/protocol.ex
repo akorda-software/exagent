@@ -68,9 +68,19 @@ defmodule ExAgent.MCP.Protocol do
   `inputSchema` takes precedence over `input_schema` by key presence. Explicit
   false or invalid values are preserved for the common Tool validation boundary;
   only an absent schema uses the default object schema.
+
+  The optional third argument is a validated private execution descriptor built
+  by Client from trusted host options, never from server tool metadata. Without
+  it the tool is marked `:unbound`: ordinary calls work, but durable fingerprints
+  reject. Identity never changes the model-facing schema or description.
   """
   @spec to_tool(map(), (String.t(), map() -> {:ok, String.t()} | {:error, term()})) :: Tool.t()
-  def to_tool(spec, call_fun) when is_function(call_fun, 2) do
+  @spec to_tool(
+          map(),
+          (String.t(), map() -> {:ok, String.t()} | {:error, term()}),
+          map() | :unbound
+        ) :: Tool.t()
+  def to_tool(spec, call_fun, execution_binding \\ :unbound) when is_function(call_fun, 2) do
     name = spec["name"]
 
     schema =
@@ -85,6 +95,7 @@ defmodule ExAgent.MCP.Protocol do
       description: spec["description"] || "MCP tool #{name}",
       parameters_json_schema: schema,
       takes_ctx: false,
+      execution_binding: if(is_nil(execution_binding), do: :unbound, else: execution_binding),
       call: fn args -> call_fun.(name, args) end
     )
   end

@@ -104,31 +104,83 @@ defmodule ExAgent.ConsolidationProbe do
   end
 
   defp sse do
-    ref = make_ref()
     control = {:unrelated_control, make_ref()}
+    {:ok, listener} = :gen_tcp.listen(0, [:binary, active: false, ip: {127, 0, 0, 1}])
+    {:ok, {_, port}} = :inet.sockname(listener)
 
-    # The consolidated helper consumes byte chunks rather than an already-open
-    # Req.Response.Async. Keep the same two CRLF frames and unrelated message;
-    # clean HTTP EOF is now distinct from an OpenAI [DONE] sentinel.
-    chunks =
-      Stream.resource(
-        fn -> ["data: {\"n\":1}\r\n\r\ndata: {\"n\":2}\r\n\r\n"] end,
-        fn
-          [] -> {:halt, []}
-          [chunk | rest] -> {[chunk], rest}
-        end,
-        fn _ -> send(self(), {:closed, ref}) end
-      )
+    body =
+      Enum.map_join([{"1", nil}, {"2", "stop"}], fn {text, finish} ->
+        "data: " <>
+          Jason.encode!(%{
+            "id" => "probe",
+            "model" => "probe",
+            "choices" => [
+              %{"index" => 0, "delta" => %{"content" => text}, "finish_reason" => finish}
+            ]
+          }) <> "\r\n\r\n"
+      end) <> "data: [DONE]\r\n\r\n"
 
-    send(self(), control)
-    events = ExAgent.Providers.SSE.stream(chunks, timeout: 100) |> Enum.to_list()
+    {peer, monitor} =
+      spawn_monitor(fn ->
+        {:ok, socket} = :gen_tcp.accept(listener, 3000)
+        {:ok, _} = :gen_tcp.recv(socket, 0, 3000)
 
-    %{
-      preserves_unrelated_message: received?(control),
-      decodes_crlf_frames: events == [%{"n" => 1}, %{"n" => 2}, :eof],
-      closes_source_resource: received?({:closed, ref}),
-      events: inspect(events)
-    }
+        :ok =
+          :gen_tcp.send(
+            socket,
+            "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nContent-Length: #{byte_size(body)}\r\nConnection: close\r\n\r\n"
+          )
+
+        for <<byte <- body>>, do: :gen_tcp.send(socket, <<byte>>)
+        :gen_tcp.close(socket)
+      end)
+
+    try do
+      model =
+        ExAgent.Models.ReqLLM.new(
+          model: %{
+            provider: :openai,
+            id: "probe",
+            capabilities: %{tools: %{enabled: true}, reasoning: %{enabled: false}},
+            extra: %{wire: %{protocol: "openai_chat"}}
+          },
+          api_key: "synthetic",
+          base_url: "http://127.0.0.1:#{port}/v1",
+          tool_profile: :chat_tools_v1
+        )
+
+      send(self(), control)
+
+      events =
+        ExAgent.Model.request_stream(
+          model,
+          [Message.new_request([%Part.User{content: "probe"}])],
+          nil,
+          %ExAgent.ModelRequestParameters{}
+        )
+        |> Enum.to_list()
+
+      closed =
+        receive do
+          {:DOWN, ^monitor, :process, ^peer, :normal} -> true
+        after
+          1000 -> false
+        end
+
+      %{
+        preserves_unrelated_message: received?(control),
+        decodes_crlf_frames:
+          Enum.any?(events, fn
+            {:response, response, _} -> Message.Response.text(response) == "12"
+            _ -> false
+          end),
+        closes_source_resource: closed,
+        events: inspect(events)
+      }
+    after
+      :gen_tcp.close(listener)
+      if Process.alive?(peer), do: Process.exit(peer, :kill)
+    end
   end
 
   defp tool_arguments do

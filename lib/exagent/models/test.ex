@@ -80,7 +80,10 @@ defmodule ExAgent.Models.Test do
   @impl true
   def system(_), do: "test"
   @impl true
-  def profile(_), do: %ExAgent.ModelProfile{}
+  def profile(_), do: %ExAgent.ModelProfile{supports_tools: true}
+
+  @impl true
+  def validate_resume(_, _, _, _), do: :ok
 
   # ---------------------------------------------------------------------------
   defp pick(%__MODULE__{script: [], label: nil} = m, _messages, _params) do

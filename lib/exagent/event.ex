@@ -21,7 +21,9 @@ defmodule ExAgent.Event do
     * `source`      — `:run`, `:server`, `:session`, `:coordination`, …
     * `occurred_at` — `DateTime.utc_now/0` at emission.
     * correlation   — `run_id`, `request_id`, `agent_id`, `session_id`,
-                      `participant_id` (any may be `nil`).
+                       `participant_id` (any may be `nil`).
+    * `namespace`   — trusted application consumer scope; nil for legacy.
+                      Logical conversation/participant IDs are local to it.
     * `payload`     — JSON-encodable map with event-specific data.
     * `metadata`    — free-form, JSON-encodable map.
 
@@ -54,6 +56,7 @@ defmodule ExAgent.Event do
            only: [
              :version,
              :emitter_id,
+             :namespace,
              :id,
              :seq,
              :type,
@@ -70,6 +73,7 @@ defmodule ExAgent.Event do
 
   @enforce_keys [:id, :seq, :type, :occurred_at]
   defstruct version: 1,
+            namespace: nil,
             emitter_id: nil,
             id: nil,
             seq: nil,
@@ -87,6 +91,7 @@ defmodule ExAgent.Event do
   @type source :: :run | :server | :session | :coordination | atom()
   @type t :: %__MODULE__{
           version: pos_integer(),
+          namespace: String.t() | nil,
           emitter_id: String.t() | nil,
           id: String.t(),
           seq: non_neg_integer(),
@@ -126,10 +131,23 @@ defmodule ExAgent.Event do
   def agent_topic(nil), do: "exagent:agent"
   def agent_topic(agent_id), do: "exagent:agent:#{agent_id}"
 
+  @doc "Agent topic scoped by a trusted application namespace; nil preserves the legacy topic."
+  def agent_topic(agent_id, namespace), do: scoped_topic(:agent, agent_id, namespace)
+
   @doc "Recommended PubSub topic for a session (`\"exagent:session:<id>\"`)."
   @spec session_topic(String.t() | nil) :: String.t()
   def session_topic(nil), do: "exagent:session"
   def session_topic(session_id), do: "exagent:session:#{session_id}"
+
+  @doc "Session topic scoped by a trusted application namespace; nil preserves the legacy topic."
+  def session_topic(session_id, namespace), do: scoped_topic(:session, session_id, namespace)
+
+  defp scoped_topic(kind, id, namespace) do
+    case ExAgent.RuntimeIdentity.key(namespace, kind, id) do
+      {:ok, key} -> "exagent:#{kind}:#{key}"
+      {:error, reason} -> raise ArgumentError, "invalid topic identity: #{reason}"
+    end
+  end
 
   @doc "JSON projection of a result; deliberately excludes the live model."
   def result_payload(result) when is_map(result) do
@@ -148,6 +166,46 @@ defmodule ExAgent.Event do
       steps: Map.get(result, :run_step)
     }
     |> Map.merge(result_metadata(result))
+    |> continuation_payload(result)
+    |> retention_payload(result)
+  end
+
+  defp retention_payload(payload, %{
+         retention: %{version: 1, measurement: :erlang_external_term} = retention
+       }) do
+    keys = [
+      :data_bytes,
+      :history_bytes,
+      :max_history_bytes,
+      :max_payload_bytes,
+      :control_reserve_bytes
+    ]
+
+    if Enum.all?(keys, &(is_integer(retention[&1]) and retention[&1] >= 0)),
+      do: Map.put(payload, :retention, Map.take(retention, [:version, :measurement | keys])),
+      else: payload
+  end
+
+  defp retention_payload(payload, _), do: payload
+
+  @doc false
+  def continuation_reference(ref) when is_map(ref) do
+    required = [:id, :record_id, :run_id]
+
+    if ref[:version] == 1 and is_integer(ref[:revision]) and ref.revision > 0 and
+         Enum.all?(required, &ExAgent.Continuation.Record.text?(ref[&1])) and
+         (is_nil(ref[:attempt_id]) or ExAgent.Continuation.Record.text?(ref[:attempt_id])) do
+      Map.take(ref, [:version, :id, :record_id, :run_id, :revision, :attempt_id])
+    end
+  end
+
+  def continuation_reference(_), do: nil
+
+  defp continuation_payload(payload, result) do
+    case continuation_reference(result[:continuation]) do
+      nil -> payload
+      ref -> Map.put(payload, :continuation, ref)
+    end
   end
 
   # Explicit C4 scalar allowlist: scope/model and arbitrary runtime terms stay out.
@@ -157,6 +215,7 @@ defmodule ExAgent.Event do
         :root_run_id,
         :parent_run_id,
         :model_request_id,
+        :attempt_id,
         :request_count,
         :tool_calls,
         :cost_cents,
@@ -176,6 +235,7 @@ defmodule ExAgent.Event do
   end
 
   defp valid_result_metadata?(:root_run_id, value), do: is_binary(value)
+  defp valid_result_metadata?(:attempt_id, value), do: is_binary(value)
 
   defp valid_result_metadata?(key, value)
        when key in [:parent_run_id, :model_request_id],

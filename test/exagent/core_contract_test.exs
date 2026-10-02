@@ -171,7 +171,11 @@ defmodule ExAgent.CoreContractTest do
       assert partial.model.index == 1
       assert partial.run_step == 2
       assert partial.usage.input_tokens == 5
-      assert partial.usage.details == %{cache: %{read: 2}}
+      assert partial.usage.details == %{}
+
+      assert [%Response{usage: %{details: %{cache: %{read: 2}}}}] =
+               Enum.filter(partial.messages, &is_struct(&1, Response))
+
       assert [%Part.ToolReturn{status: :succeeded, content: "recorded"}] = returns(partial)
       assert partial.new_messages == partial.messages
       assert is_binary(partial.run_id)
@@ -304,7 +308,10 @@ defmodule ExAgent.CoreContractTest do
 
       assert result.output == "receipt: 73 (reviewed)"
       assert result.status == :succeeded
-      assert result.usage == %Usage{input_tokens: 9, output_tokens: 4}
+
+      assert %Usage{input_tokens: 9, output_tokens: 4, accounting: %{"quality" => "reported"}} =
+               result.usage
+
       assert result.request_count == 2
       assert result.model.index == 2
       assert [effective] = returns(result)
@@ -328,7 +335,10 @@ defmodule ExAgent.CoreContractTest do
 
       assert partial.status == :failed
       assert partial.output == nil
-      assert partial.usage == %Usage{input_tokens: 8, output_tokens: 3}
+
+      assert %Usage{input_tokens: 8, output_tokens: 3, accounting: %{"quality" => "reported"}} =
+               partial.usage
+
       assert partial.request_count == 1
       assert partial.model.index == 1
       assert returns(partial) == [confirmed]
@@ -398,13 +408,13 @@ defmodule ExAgent.CoreContractTest do
     }
 
     original = tool("original", fn _ -> flunk("wrong tool executed") end)
-    model = %TestModel{script: [{:tool_calls, [call("original", %{}, "fixed")]}, "done"]}
+    model = %TestModel{script: [{:tool_calls, [call("protected", %{}, "fixed")]}, "done"]}
     perms = ExAgent.Permissions.new!(rules: [{"protected", :deny}])
     base = ExAgent.new(model: model, tools: [original, protected])
 
     assert {:ok, denied} =
              ExAgent.run(
-               %{base | capabilities: [%Rewrite{name: "protected", args: %{"n" => 1}}]},
+               %{base | capabilities: [%Rewrite{args: %{"n" => 1}}]},
                "go",
                permissions: perms
              )
@@ -414,7 +424,7 @@ defmodule ExAgent.CoreContractTest do
 
     assert {:ok, invalid} =
              ExAgent.run(
-               %{base | capabilities: [%Rewrite{name: "protected", args: %{"n" => "bad"}}]},
+               %{base | capabilities: [%Rewrite{args: %{"n" => "bad"}}]},
                "go"
              )
 
@@ -719,7 +729,7 @@ defmodule ExAgent.CoreContractTest do
              |> Enum.to_list()
 
     assert result.output == "answer"
-    assert List.last(result.messages) == final
+    assert List.last(result.messages) == %{final | usage: Usage.qualify(final.usage)}
     assert_receive {:text, "answer"}
     refute_receive {:text, "thought"}
   end

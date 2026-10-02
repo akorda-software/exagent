@@ -1,0 +1,934 @@
+{
+  "actor_id": "exagent-runtime",
+  "operation": "output_resolution",
+  "operation_id": "operation-RZxCKUmxkx9jplb6PeGDYA",
+  "payload": {
+    "attempt_id": "attempt-zkY5CpYQy0MotDLPOFRusQ",
+    "fence": 1,
+    "node_id": "run_c435VHemvxg1Ehee2s0vWg",
+    "owner_id": "owner-smoyaOWBNiHC4lwtqV3tlA",
+    "progress": {
+      "active_budget": {
+        "limit_ms": null,
+        "refund_at": null,
+        "remaining_ms": null,
+        "reserved_ms": null
+      },
+      "runtime": {
+        "authority": {
+          "root": {
+            "checkpoint_limit": 8388608,
+            "deadline_at": null,
+            "max_concurrent_requests": null,
+            "policies": [
+              {
+                "default": "allow",
+                "rules": []
+              },
+              {
+                "default": "allow",
+                "rules": []
+              }
+            ],
+            "usage": {
+              "accounting": "strict",
+              "input_tokens_limit": null,
+              "max_budget_cents": null,
+              "output_tokens_limit": null,
+              "request_limit": null,
+              "tool_calls_limit": null,
+              "total_tokens_limit": null
+            }
+          },
+          "run_c435VHemvxg1Ehee2s0vWg": {
+            "deadline_at": null,
+            "max_concurrent_requests": null,
+            "policies": [
+              {
+                "default": "allow",
+                "rules": []
+              },
+              {
+                "default": "allow",
+                "rules": []
+              }
+            ]
+          }
+        },
+        "binding": {
+          "composition_definition_version": 1,
+          "fingerprint": "e7e9aa122dcac0770d154d0b59a0016f349d7f5467855c8dfdc3c5f7fd657f38",
+          "id": "output-_intact",
+          "kind": "sequence",
+          "steps": [
+            {
+              "definition": {
+                "id": "leaf",
+                "version": "1"
+              },
+              "id": "A",
+              "input_kind": "initial",
+              "input_version": null,
+              "model_ref": {
+                "id": "model",
+                "version": "1"
+              },
+              "output_ref": {
+                "id": "output",
+                "version": "1"
+              },
+              "policy": {
+                "id": "policy",
+                "version": "1"
+              }
+            }
+          ],
+          "version": "1"
+        },
+        "children": {
+          "run_c435VHemvxg1Ehee2s0vWg": {
+            "definition": {
+              "id": "leaf",
+              "version": "1"
+            },
+            "frame": {
+              "cursor": "response",
+              "first_new_message_index": 0,
+              "frame_version": 3,
+              "limits": {
+                "max_history_bytes": 8388608,
+                "max_payload_bytes": 1048576,
+                "max_steps": 50,
+                "output_retries": 1,
+                "tool_timeout": 30000,
+                "usage": {
+                  "accounting": "strict",
+                  "input_tokens_limit": null,
+                  "max_budget_cents": null,
+                  "output_tokens_limit": null,
+                  "request_limit": null,
+                  "tool_calls_limit": null,
+                  "total_tokens_limit": null
+                }
+              },
+              "model_binding": null,
+              "model_data": {
+                "index": 2
+              },
+              "model_request_id": "model_request_ACGsTLaQ15g19ZDUNI4Iyg",
+              "outcomes": {},
+              "output_fingerprint": "e7a57563059a7ed5c9b94506ba55ce529b6e692b4b457ebe4bffa19525ed4706",
+              "output_retries_used": 0,
+              "permissions": {
+                "default": "allow",
+                "rules": []
+              },
+              "run_id": "run_c435VHemvxg1Ehee2s0vWg",
+              "run_step": 2,
+              "scope": {
+                "batches": {
+                  "model_request_IPt9zsHUDC-DD11QDZoPcw": 2
+                },
+                "operations": [
+                  {
+                    "complete": true,
+                    "id": [
+                      "tool",
+                      "model_request_IPt9zsHUDC-DD11QDZoPcw",
+                      "one"
+                    ],
+                    "usage": {
+                      "accounting": {
+                        "availability": {
+                          "cache_read": "unavailable",
+                          "cache_write": "unavailable",
+                          "input": "available",
+                          "output": "available",
+                          "reasoning": "unavailable"
+                        },
+                        "cost": {
+                          "availability": "unavailable",
+                          "cents": null,
+                          "quality": "estimated",
+                          "source": "unknown",
+                          "subtotal_cents": null
+                        },
+                        "input_semantics": "unknown",
+                        "provider_presence": "unknown",
+                        "quality": "reported",
+                        "reasoning_semantics": "unknown",
+                        "source": "model",
+                        "version": 1
+                      },
+                      "details": {},
+                      "input_tokens": 7,
+                      "output_tokens": 11
+                    }
+                  },
+                  {
+                    "complete": true,
+                    "id": [
+                      "tool",
+                      "model_request_IPt9zsHUDC-DD11QDZoPcw",
+                      "two"
+                    ],
+                    "usage": {
+                      "accounting": {
+                        "availability": {
+                          "cache_read": "unavailable",
+                          "cache_write": "unavailable",
+                          "input": "available",
+                          "output": "available",
+                          "reasoning": "unavailable"
+                        },
+                        "cost": {
+                          "availability": "unavailable",
+                          "cents": null,
+                          "quality": "estimated",
+                          "source": "unknown",
+                          "subtotal_cents": null
+                        },
+                        "input_semantics": "unknown",
+                        "provider_presence": "unknown",
+                        "quality": "reported",
+                        "reasoning_semantics": "unknown",
+                        "source": "model",
+                        "version": 1
+                      },
+                      "details": {},
+                      "input_tokens": 7,
+                      "output_tokens": 11
+                    }
+                  },
+                  {
+                    "complete": true,
+                    "id": [
+                      "model",
+                      "model_request_ACGsTLaQ15g19ZDUNI4Iyg"
+                    ],
+                    "usage": {
+                      "accounting": {
+                        "availability": {
+                          "cache_read": "unavailable",
+                          "cache_write": "unavailable",
+                          "input": "available",
+                          "output": "available",
+                          "reasoning": "unavailable"
+                        },
+                        "cost": {
+                          "availability": "unavailable",
+                          "cents": null,
+                          "quality": "estimated",
+                          "source": "unknown",
+                          "subtotal_cents": null
+                        },
+                        "input_semantics": "unknown",
+                        "provider_presence": "unknown",
+                        "quality": "reported",
+                        "reasoning_semantics": "unknown",
+                        "source": "model",
+                        "version": 1
+                      },
+                      "details": {},
+                      "input_tokens": 3,
+                      "output_tokens": 2
+                    }
+                  },
+                  {
+                    "complete": true,
+                    "id": [
+                      "model",
+                      "model_request_IPt9zsHUDC-DD11QDZoPcw"
+                    ],
+                    "usage": {
+                      "accounting": {
+                        "availability": {
+                          "cache_read": "unavailable",
+                          "cache_write": "unavailable",
+                          "input": "available",
+                          "output": "available",
+                          "reasoning": "unavailable"
+                        },
+                        "cost": {
+                          "availability": "unavailable",
+                          "cents": null,
+                          "quality": "estimated",
+                          "source": "unknown",
+                          "subtotal_cents": null
+                        },
+                        "input_semantics": "unknown",
+                        "provider_presence": "unknown",
+                        "quality": "reported",
+                        "reasoning_semantics": "unknown",
+                        "source": "model",
+                        "version": 1
+                      },
+                      "details": {},
+                      "input_tokens": 3,
+                      "output_tokens": 2
+                    }
+                  }
+                ],
+                "requests": 2,
+                "run_id": "run_c435VHemvxg1Ehee2s0vWg",
+                "scope_version": 1,
+                "tools": 2
+              },
+              "selected_tools": {
+                "effect": "a2237b766cd1586073cd70f9c2df157404ffc386a78ff2cd45ae2c0a6845dcc0"
+              },
+              "settings": {
+                "extra": {},
+                "frequency_penalty": null,
+                "max_tokens": null,
+                "presence_penalty": null,
+                "temperature": null,
+                "timeout": 59789,
+                "top_p": null
+              },
+              "tool_retries": {},
+              "tool_return_bytes": 1048576
+            },
+            "link": {
+              "index": 0,
+              "input": "probe",
+              "kind": "step",
+              "step_id": "A"
+            },
+            "model_ref": {
+              "id": "model",
+              "version": "1"
+            },
+            "output_ref": {
+              "id": "output",
+              "version": "1"
+            },
+            "parent_run_id": "root",
+            "policy": {
+              "id": "policy",
+              "version": "1"
+            },
+            "result": null,
+            "result_omitted": null,
+            "snapshot": {
+              "agent_id": "output-_intact",
+              "message_history": "[{\"__type__\":\"request\",\"conversation_id\":null,\"instructions\":null,\"parts\":[{\"__type__\":\"user\",\"content\":\"probe\",\"timestamp\":\"2026-09-28T11:00:01.424686Z\"}],\"run_id\":\"run_c435VHemvxg1Ehee2s0vWg\",\"timestamp\":\"2026-09-28T11:00:01.424690Z\"},{\"__type__\":\"response\",\"finish_reason\":\"tool_calls\",\"model_name\":null,\"parts\":[{\"__type__\":\"tool_call\",\"args\":{\"mode\":\"ok\"},\"kind\":\"function\",\"tool_call_id\":\"one\",\"tool_name\":\"effect\"},{\"__type__\":\"tool_call\",\"args\":{\"mode\":\"ok\"},\"kind\":\"function\",\"tool_call_id\":\"two\",\"tool_name\":\"effect\"}],\"timestamp\":\"2026-09-28T11:00:01.418255Z\",\"usage\":{\"accounting\":{\"availability\":{\"cache_read\":\"unavailable\",\"cache_write\":\"unavailable\",\"input\":\"available\",\"output\":\"available\",\"reasoning\":\"unavailable\"},\"cost\":{\"availability\":\"unavailable\",\"cents\":null,\"quality\":\"estimated\",\"source\":\"unknown\",\"subtotal_cents\":null},\"input_semantics\":\"unknown\",\"provider_presence\":\"unknown\",\"quality\":\"reported\",\"reasoning_semantics\":\"unknown\",\"source\":\"model\",\"version\":1},\"details\":{},\"input_tokens\":3,\"output_tokens\":2}},{\"__type__\":\"request\",\"conversation_id\":null,\"instructions\":null,\"parts\":[{\"__type__\":\"tool_return\",\"content\":\"real usage\",\"status\":\"succeeded\",\"tool_call_id\":\"one\",\"tool_name\":\"effect\"},{\"__type__\":\"tool_return\",\"content\":\"real usage\",\"status\":\"succeeded\",\"tool_call_id\":\"two\",\"tool_name\":\"effect\"}],\"run_id\":\"run_c435VHemvxg1Ehee2s0vWg\",\"timestamp\":\"2026-09-28T11:00:01.633572Z\"},{\"__type__\":\"response\",\"finish_reason\":\"tool_calls\",\"model_name\":null,\"parts\":[{\"__type__\":\"tool_call\",\"args\":{\"count\":7},\"kind\":\"function\",\"tool_call_id\":\"output\",\"tool_name\":\"final_result\"}],\"timestamp\":\"2026-09-28T11:00:01.418249Z\",\"usage\":{\"accounting\":{\"availability\":{\"cache_read\":\"unavailable\",\"cache_write\":\"unavailable\",\"input\":\"available\",\"output\":\"available\",\"reasoning\":\"unavailable\"},\"cost\":{\"availability\":\"unavailable\",\"cents\":null,\"quality\":\"estimated\",\"source\":\"unknown\",\"subtotal_cents\":null},\"input_semantics\":\"unknown\",\"provider_presence\":\"unknown\",\"quality\":\"reported\",\"reasoning_semantics\":\"unknown\",\"source\":\"model\",\"version\":1},\"details\":{},\"input_tokens\":3,\"output_tokens\":2}}]",
+              "metadata": {},
+              "provider_state": null,
+              "revision": 2,
+              "saved_at": "2026-09-28T11:00:01.686972Z",
+              "usage": {
+                "accounting": {
+                  "availability": {
+                    "cache_read": "unavailable",
+                    "cache_write": "unavailable",
+                    "input": "available",
+                    "output": "available",
+                    "reasoning": "unavailable"
+                  },
+                  "cost": {
+                    "availability": "unavailable",
+                    "cents": null,
+                    "quality": "estimated",
+                    "source": "unknown",
+                    "subtotal_cents": null
+                  },
+                  "input_semantics": "unknown",
+                  "provider_presence": "unknown",
+                  "quality": "reported",
+                  "reasoning_semantics": "unknown",
+                  "source": "aggregate",
+                  "version": 1
+                },
+                "details": {},
+                "input_tokens": 20,
+                "output_tokens": 26
+              },
+              "version": 4
+            },
+            "status": "running"
+          }
+        },
+        "cursor": "running",
+        "frame_version": 7,
+        "input": "probe",
+        "kind": "sequence",
+        "output_resolutions": {
+          "model_request_ACGsTLaQ15g19ZDUNI4Iyg": {
+            "call_id": "output",
+            "decision": "succeeded",
+            "descriptor": {
+              "allow_text": false,
+              "mode": "tool",
+              "object": null,
+              "tools": [
+                {
+                  "description": "Return the final answer as structured data.",
+                  "name": "final_result",
+                  "parameters": {
+                    "properties": {
+                      "count": {
+                        "type": "integer"
+                      }
+                    },
+                    "required": [
+                      "count"
+                    ],
+                    "type": "object"
+                  }
+                }
+              ]
+            },
+            "output_resolution_version": 1,
+            "parts": "[{\"__type__\":\"request\",\"conversation_id\":null,\"instructions\":null,\"parts\":[{\"__type__\":\"tool_return\",\"content\":\"ok\",\"status\":\"succeeded\",\"tool_call_id\":\"output\",\"tool_name\":\"final_result\"}],\"run_id\":null}]",
+            "parts_hash": "d403c5e4cf0c3419e6d7d532374a97ee2326ee09ae871425d1d36d43c64469c8",
+            "request_id": "model_request_ACGsTLaQ15g19ZDUNI4Iyg",
+            "result": {
+              "count": 7
+            },
+            "result_omitted": null,
+            "run_id": "run_c435VHemvxg1Ehee2s0vWg"
+          }
+        },
+        "run_id": "root",
+        "scope": {
+          "batches": [
+            {
+              "count": 2,
+              "id": "model_request_IPt9zsHUDC-DD11QDZoPcw",
+              "run_id": "run_c435VHemvxg1Ehee2s0vWg"
+            }
+          ],
+          "nodes": {
+            "root": {
+              "parent_run_id": null,
+              "requests": 2,
+              "tools": 2
+            },
+            "run_c435VHemvxg1Ehee2s0vWg": {
+              "parent_run_id": "root",
+              "requests": 2,
+              "tools": 2
+            }
+          },
+          "operations": [
+            {
+              "ancestors": {
+                "root": {
+                  "accounting": {
+                    "availability": {
+                      "cache_read": "unavailable",
+                      "cache_write": "unavailable",
+                      "input": "available",
+                      "output": "available",
+                      "reasoning": "unavailable"
+                    },
+                    "cost": {
+                      "availability": "unavailable",
+                      "cents": null,
+                      "quality": "estimated",
+                      "source": "unknown",
+                      "subtotal_cents": null
+                    },
+                    "input_semantics": "unknown",
+                    "provider_presence": "unknown",
+                    "quality": "reported",
+                    "reasoning_semantics": "unknown",
+                    "source": "model",
+                    "version": 1
+                  },
+                  "details": {},
+                  "input_tokens": 7,
+                  "output_tokens": 11
+                },
+                "run_c435VHemvxg1Ehee2s0vWg": {
+                  "accounting": {
+                    "availability": {
+                      "cache_read": "unavailable",
+                      "cache_write": "unavailable",
+                      "input": "available",
+                      "output": "available",
+                      "reasoning": "unavailable"
+                    },
+                    "cost": {
+                      "availability": "unavailable",
+                      "cents": null,
+                      "quality": "estimated",
+                      "source": "unknown",
+                      "subtotal_cents": null
+                    },
+                    "input_semantics": "unknown",
+                    "provider_presence": "unknown",
+                    "quality": "reported",
+                    "reasoning_semantics": "unknown",
+                    "source": "model",
+                    "version": 1
+                  },
+                  "details": {},
+                  "input_tokens": 7,
+                  "output_tokens": 11
+                }
+              },
+              "complete": true,
+              "id": [
+                "tool",
+                "model_request_IPt9zsHUDC-DD11QDZoPcw",
+                "one"
+              ],
+              "run_id": "run_c435VHemvxg1Ehee2s0vWg",
+              "terminal_usage": {
+                "accounting": {
+                  "availability": {
+                    "cache_read": "unavailable",
+                    "cache_write": "unavailable",
+                    "input": "available",
+                    "output": "available",
+                    "reasoning": "unavailable"
+                  },
+                  "cost": {
+                    "availability": "unavailable",
+                    "cents": null,
+                    "quality": "estimated",
+                    "source": "unknown",
+                    "subtotal_cents": null
+                  },
+                  "input_semantics": "unknown",
+                  "provider_presence": "unknown",
+                  "quality": "reported",
+                  "reasoning_semantics": "unknown",
+                  "source": "model",
+                  "version": 1
+                },
+                "details": {},
+                "input_tokens": 7,
+                "output_tokens": 11
+              },
+              "usage": {
+                "accounting": {
+                  "availability": {
+                    "cache_read": "unavailable",
+                    "cache_write": "unavailable",
+                    "input": "available",
+                    "output": "available",
+                    "reasoning": "unavailable"
+                  },
+                  "cost": {
+                    "availability": "unavailable",
+                    "cents": null,
+                    "quality": "estimated",
+                    "source": "unknown",
+                    "subtotal_cents": null
+                  },
+                  "input_semantics": "unknown",
+                  "provider_presence": "unknown",
+                  "quality": "reported",
+                  "reasoning_semantics": "unknown",
+                  "source": "model",
+                  "version": 1
+                },
+                "details": {},
+                "input_tokens": 7,
+                "output_tokens": 11
+              }
+            },
+            {
+              "ancestors": {
+                "root": {
+                  "accounting": {
+                    "availability": {
+                      "cache_read": "unavailable",
+                      "cache_write": "unavailable",
+                      "input": "available",
+                      "output": "available",
+                      "reasoning": "unavailable"
+                    },
+                    "cost": {
+                      "availability": "unavailable",
+                      "cents": null,
+                      "quality": "estimated",
+                      "source": "unknown",
+                      "subtotal_cents": null
+                    },
+                    "input_semantics": "unknown",
+                    "provider_presence": "unknown",
+                    "quality": "reported",
+                    "reasoning_semantics": "unknown",
+                    "source": "model",
+                    "version": 1
+                  },
+                  "details": {},
+                  "input_tokens": 7,
+                  "output_tokens": 11
+                },
+                "run_c435VHemvxg1Ehee2s0vWg": {
+                  "accounting": {
+                    "availability": {
+                      "cache_read": "unavailable",
+                      "cache_write": "unavailable",
+                      "input": "available",
+                      "output": "available",
+                      "reasoning": "unavailable"
+                    },
+                    "cost": {
+                      "availability": "unavailable",
+                      "cents": null,
+                      "quality": "estimated",
+                      "source": "unknown",
+                      "subtotal_cents": null
+                    },
+                    "input_semantics": "unknown",
+                    "provider_presence": "unknown",
+                    "quality": "reported",
+                    "reasoning_semantics": "unknown",
+                    "source": "model",
+                    "version": 1
+                  },
+                  "details": {},
+                  "input_tokens": 7,
+                  "output_tokens": 11
+                }
+              },
+              "complete": true,
+              "id": [
+                "tool",
+                "model_request_IPt9zsHUDC-DD11QDZoPcw",
+                "two"
+              ],
+              "run_id": "run_c435VHemvxg1Ehee2s0vWg",
+              "terminal_usage": {
+                "accounting": {
+                  "availability": {
+                    "cache_read": "unavailable",
+                    "cache_write": "unavailable",
+                    "input": "available",
+                    "output": "available",
+                    "reasoning": "unavailable"
+                  },
+                  "cost": {
+                    "availability": "unavailable",
+                    "cents": null,
+                    "quality": "estimated",
+                    "source": "unknown",
+                    "subtotal_cents": null
+                  },
+                  "input_semantics": "unknown",
+                  "provider_presence": "unknown",
+                  "quality": "reported",
+                  "reasoning_semantics": "unknown",
+                  "source": "model",
+                  "version": 1
+                },
+                "details": {},
+                "input_tokens": 7,
+                "output_tokens": 11
+              },
+              "usage": {
+                "accounting": {
+                  "availability": {
+                    "cache_read": "unavailable",
+                    "cache_write": "unavailable",
+                    "input": "available",
+                    "output": "available",
+                    "reasoning": "unavailable"
+                  },
+                  "cost": {
+                    "availability": "unavailable",
+                    "cents": null,
+                    "quality": "estimated",
+                    "source": "unknown",
+                    "subtotal_cents": null
+                  },
+                  "input_semantics": "unknown",
+                  "provider_presence": "unknown",
+                  "quality": "reported",
+                  "reasoning_semantics": "unknown",
+                  "source": "model",
+                  "version": 1
+                },
+                "details": {},
+                "input_tokens": 7,
+                "output_tokens": 11
+              }
+            },
+            {
+              "ancestors": {
+                "root": {
+                  "accounting": {
+                    "availability": {
+                      "cache_read": "unavailable",
+                      "cache_write": "unavailable",
+                      "input": "available",
+                      "output": "available",
+                      "reasoning": "unavailable"
+                    },
+                    "cost": {
+                      "availability": "unavailable",
+                      "cents": null,
+                      "quality": "estimated",
+                      "source": "unknown",
+                      "subtotal_cents": null
+                    },
+                    "input_semantics": "unknown",
+                    "provider_presence": "unknown",
+                    "quality": "reported",
+                    "reasoning_semantics": "unknown",
+                    "source": "model",
+                    "version": 1
+                  },
+                  "details": {},
+                  "input_tokens": 3,
+                  "output_tokens": 2
+                },
+                "run_c435VHemvxg1Ehee2s0vWg": {
+                  "accounting": {
+                    "availability": {
+                      "cache_read": "unavailable",
+                      "cache_write": "unavailable",
+                      "input": "available",
+                      "output": "available",
+                      "reasoning": "unavailable"
+                    },
+                    "cost": {
+                      "availability": "unavailable",
+                      "cents": null,
+                      "quality": "estimated",
+                      "source": "unknown",
+                      "subtotal_cents": null
+                    },
+                    "input_semantics": "unknown",
+                    "provider_presence": "unknown",
+                    "quality": "reported",
+                    "reasoning_semantics": "unknown",
+                    "source": "model",
+                    "version": 1
+                  },
+                  "details": {},
+                  "input_tokens": 3,
+                  "output_tokens": 2
+                }
+              },
+              "complete": true,
+              "id": [
+                "model",
+                "model_request_ACGsTLaQ15g19ZDUNI4Iyg"
+              ],
+              "run_id": "run_c435VHemvxg1Ehee2s0vWg",
+              "terminal_usage": {
+                "accounting": {
+                  "availability": {
+                    "cache_read": "unavailable",
+                    "cache_write": "unavailable",
+                    "input": "available",
+                    "output": "available",
+                    "reasoning": "unavailable"
+                  },
+                  "cost": {
+                    "availability": "unavailable",
+                    "cents": null,
+                    "quality": "estimated",
+                    "source": "unknown",
+                    "subtotal_cents": null
+                  },
+                  "input_semantics": "unknown",
+                  "provider_presence": "unknown",
+                  "quality": "reported",
+                  "reasoning_semantics": "unknown",
+                  "source": "model",
+                  "version": 1
+                },
+                "details": {},
+                "input_tokens": 3,
+                "output_tokens": 2
+              },
+              "usage": {
+                "accounting": {
+                  "availability": {
+                    "cache_read": "unavailable",
+                    "cache_write": "unavailable",
+                    "input": "available",
+                    "output": "available",
+                    "reasoning": "unavailable"
+                  },
+                  "cost": {
+                    "availability": "unavailable",
+                    "cents": null,
+                    "quality": "estimated",
+                    "source": "unknown",
+                    "subtotal_cents": null
+                  },
+                  "input_semantics": "unknown",
+                  "provider_presence": "unknown",
+                  "quality": "reported",
+                  "reasoning_semantics": "unknown",
+                  "source": "model",
+                  "version": 1
+                },
+                "details": {},
+                "input_tokens": 3,
+                "output_tokens": 2
+              }
+            },
+            {
+              "ancestors": {
+                "root": {
+                  "accounting": {
+                    "availability": {
+                      "cache_read": "unavailable",
+                      "cache_write": "unavailable",
+                      "input": "available",
+                      "output": "available",
+                      "reasoning": "unavailable"
+                    },
+                    "cost": {
+                      "availability": "unavailable",
+                      "cents": null,
+                      "quality": "estimated",
+                      "source": "unknown",
+                      "subtotal_cents": null
+                    },
+                    "input_semantics": "unknown",
+                    "provider_presence": "unknown",
+                    "quality": "reported",
+                    "reasoning_semantics": "unknown",
+                    "source": "model",
+                    "version": 1
+                  },
+                  "details": {},
+                  "input_tokens": 3,
+                  "output_tokens": 2
+                },
+                "run_c435VHemvxg1Ehee2s0vWg": {
+                  "accounting": {
+                    "availability": {
+                      "cache_read": "unavailable",
+                      "cache_write": "unavailable",
+                      "input": "available",
+                      "output": "available",
+                      "reasoning": "unavailable"
+                    },
+                    "cost": {
+                      "availability": "unavailable",
+                      "cents": null,
+                      "quality": "estimated",
+                      "source": "unknown",
+                      "subtotal_cents": null
+                    },
+                    "input_semantics": "unknown",
+                    "provider_presence": "unknown",
+                    "quality": "reported",
+                    "reasoning_semantics": "unknown",
+                    "source": "model",
+                    "version": 1
+                  },
+                  "details": {},
+                  "input_tokens": 3,
+                  "output_tokens": 2
+                }
+              },
+              "complete": true,
+              "id": [
+                "model",
+                "model_request_IPt9zsHUDC-DD11QDZoPcw"
+              ],
+              "run_id": "run_c435VHemvxg1Ehee2s0vWg",
+              "terminal_usage": {
+                "accounting": {
+                  "availability": {
+                    "cache_read": "unavailable",
+                    "cache_write": "unavailable",
+                    "input": "available",
+                    "output": "available",
+                    "reasoning": "unavailable"
+                  },
+                  "cost": {
+                    "availability": "unavailable",
+                    "cents": null,
+                    "quality": "estimated",
+                    "source": "unknown",
+                    "subtotal_cents": null
+                  },
+                  "input_semantics": "unknown",
+                  "provider_presence": "unknown",
+                  "quality": "reported",
+                  "reasoning_semantics": "unknown",
+                  "source": "model",
+                  "version": 1
+                },
+                "details": {},
+                "input_tokens": 3,
+                "output_tokens": 2
+              },
+              "usage": {
+                "accounting": {
+                  "availability": {
+                    "cache_read": "unavailable",
+                    "cache_write": "unavailable",
+                    "input": "available",
+                    "output": "available",
+                    "reasoning": "unavailable"
+                  },
+                  "cost": {
+                    "availability": "unavailable",
+                    "cents": null,
+                    "quality": "estimated",
+                    "source": "unknown",
+                    "subtotal_cents": null
+                  },
+                  "input_semantics": "unknown",
+                  "provider_presence": "unknown",
+                  "quality": "reported",
+                  "reasoning_semantics": "unknown",
+                  "source": "model",
+                  "version": 1
+                },
+                "details": {},
+                "input_tokens": 3,
+                "output_tokens": 2
+              }
+            }
+          ],
+          "retry_batches": [],
+          "root_run_id": "root",
+          "scope_version": 2
+        }
+      }
+    },
+    "snapshot": {
+      "binding": {
+        "composition_definition_version": 1,
+        "fingerprint": "e7e9aa122dcac0770d154d0b59a0016f349d7f5467855c8dfdc3c5f7fd657f38",
+        "id": "output-_intact",
+        "kind": "sequence",
+        "steps": [
+          {
+            "definition": {
+              "id": "leaf",
+              "version": "1"
+            },
+            "id": "A",
+            "input_kind": "initial",
+            "input_version": null,
+            "model_ref": {
+              "id": "model",
+              "version": "1"
+            },
+            "output_ref": {
+              "id": "output",
+              "version": "1"
+            },
+            "policy": {
+              "id": "policy",
+              "version": "1"
+            }
+          }
+        ],
+        "version": "1"
+      },
+      "composition_id": "output-_intact",
+      "composition_snapshot_version": 1,
+      "revision": 0,
+      "run_id": "root"
+    }
+  },
+  "record_id": "record-dPtNMYZzzI4Hsg7klu9BjA"
+}

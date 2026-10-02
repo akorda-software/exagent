@@ -1,6 +1,6 @@
 defmodule ExAgent.Server.Snapshot do
   @moduledoc """
-  Version 2 checkpoint of conversational data, with a bounded reader for v1.
+  Version 4 checkpoint of conversational data, with bounded readers for v1/v2/v3.
 
   Restores confirmed history and usage, not live models, tasks or external effects.
   The app supplies the live template. JSON rejects non-encodable values but does
@@ -11,10 +11,10 @@ defmodule ExAgent.Server.Snapshot do
 
   @derive Jason.Encoder
   @enforce_keys [:agent_id]
-  defstruct version: 2,
+  defstruct version: 4,
             agent_id: nil,
             message_history: nil,
-            usage: %{},
+            usage: SnapshotData.usage_map(nil),
             metadata: %{},
             provider_state: nil,
             saved_at: nil,
@@ -94,16 +94,26 @@ defmodule ExAgent.Server.Snapshot do
   defp from_map(map) do
     version = Map.get(map, "version", 1)
     usage = Map.get(map, "usage", %{})
+
+    usage =
+      if version in [1, 2] and is_map(usage), do: Map.delete(usage, "accounting"), else: usage
+
     revision = Map.get(map, "revision", 0)
 
     cond do
-      version not in [1, 2] ->
+      version not in [1, 2, 3, 4] ->
         {:error, {:unsupported_snapshot_version, version}}
+
+      version != 4 and is_map(usage) and Map.has_key?(usage, "payload_omitted") ->
+        {:error, :omission_requires_snapshot_v4}
 
       not is_binary(map["agent_id"]) ->
         {:error, :invalid_agent_id}
 
       not SnapshotData.usage_valid?(usage) ->
+        {:error, :invalid_usage}
+
+      version in [3, 4] and not is_map(usage["accounting"]) ->
         {:error, :invalid_usage}
 
       not SnapshotData.counter?(revision) ->
@@ -120,7 +130,7 @@ defmodule ExAgent.Server.Snapshot do
           snapshot = %__MODULE__{
             agent_id: map["agent_id"],
             message_history: map["message_history"],
-            usage: usage,
+            usage: usage |> SnapshotData.usage_struct() |> SnapshotData.usage_map(),
             metadata: Map.get(map, "metadata", %{}),
             provider_state: map["provider_state"],
             saved_at: saved_at,

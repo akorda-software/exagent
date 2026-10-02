@@ -25,51 +25,52 @@ The host app depends on exagent (it starts its own supervised `Finch`, `Registry
 ```elixir
 # mix.exs
 def deps do
-  [{:exagent, "~> 1.0"}]
+  [{:exagent, path: "../exAgent"}]
 end
 ```
 
-For real providers set the relevant env var (`OPENAI_API_KEY`, `ANTHROPIC_AUTH_TOKEN`,
-`OPENROUTER_API_KEY`, `ZAI_API_KEY`). For offline/dev use `model: "test"` — no key.
+This skill describes the unreleased major checkout, not published1.x. ReqLLM stock
+is the sole general backend; pass credentials explicitly per instance. Disable
+upstream dotenv with `config :req_llm, load_dotenv: false` if the app owns env loading.
+For offline/dev use `model: "test"` — no key.
 
 ## Workflow
 
 ### 1. Build the agent, run it once
 
 ```elixir
-agent = ExAgent.new(model: "openai:gpt-4o", instructions: "Be concise.")
+{:ok, model} = ExAgent.Model.resolve("openai:gpt-4o", api_key: System.fetch_env!("OPENAI_API_KEY"))
+agent = ExAgent.new(model: model, instructions: "Be concise.")
 {:ok, %{output: text}} = ExAgent.run(agent, "Hello!")
 ```
 
-`run/3` returns `{:ok, result} | {:error, reason}` and **never raises**.
+Operational failures return `{:error, %ExAgent.RunError{reason: cause, partial: result}}`.
+Construction errors can raise.
 `result` is a map: `:output`, `:messages`, `:new_messages`, `:usage`
 (`%{input_tokens:, output_tokens:}`), `:run_step`, `:model`.
 `run!/3` returns `output` directly and raises on error.
 
 ### 2. Choose a model
 
-Resolve from a string `"provider:model"` or pass a struct:
+Resolve stock strings/maps/tuples through `Model.resolve/2` with instance options,
+or pass a custom Model struct. Strings alone resolve identity, not auth or tools.
+For tools/Ecto-tool/stream select the actual Chat-compatible non-reasoning profile:
 
 ```elixir
-ExAgent.new(model: "openai:gpt-4o")
-ExAgent.new(model: "openrouter:deepseek/deepseek-v4-flash")  # one gateway, many backends
-ExAgent.new(model: "anthropic:claude-3-5-haiku-20241022")
-ExAgent.new(model: "zai:glm-4.5-air")                        # Z.AI's Anthropic-compatible endpoint
-ExAgent.new(model: "test")                                   # offline TestModel, no key
+chat_model = ExAgent.Models.ReqLLM.new(
+  model: %{provider: :openai, id: "gpt-4o-mini",
+    capabilities: %{tools: %{enabled: true}, reasoning: %{enabled: false}},
+    extra: %{wire: %{protocol: "openai_chat"}}},
+  api_key: System.fetch_env!("OPENAI_API_KEY"), tool_profile: :chat_tools_v1)
+ExAgent.new(model: chat_model)
+ExAgent.new(model: "test")
 ```
 
-Custom endpoint? Build the struct explicitly:
-
-```elixir
-ExAgent.new(
-  model:
-    ExAgent.Models.Anthropic.new(
-      model: "glm-4.5-air",
-      auth_token: key,
-      base_url: "https://api.z.ai/api/anthropic"
-    )
-)
-```
+Custom gateways require explicit `base_url`, exact model ID and actual capabilities.
+OpenCode Go/Zen have distinct URLs; `zai:` now resolves stock ZAI, not the old
+Anthropic alias. Anthropic `auth_token` maps to stock Bearer auth, but affected
+reasoning/continuation/tools remain closed. See `docs/guides/migration.md` for
+recipes and limits. No profile is certified live merely by catalogue membership.
 
 ### 3. Structured output (any Ecto `embedded_schema`)
 
@@ -96,8 +97,8 @@ defmodule MyApp.Extract do
   end
 end
 
-agent = ExAgent.new(model: "anthropic:claude-3-5-haiku", output: MyApp.Extract,
-  instructions: "Extract structured data.", model_settings: [max_tokens: 512, temperature: 0])
+agent = ExAgent.new(model: chat_model, output: MyApp.Extract,
+  instructions: "Extract structured data.", model_settings: [max_tokens: 512, temperature: 0.0])
 
 {:ok, %{output: %MyApp.Extract{name: "Mara", age: 30, mood: :happy}}} =
   ExAgent.run(agent, "Hi! I'm Mara, I'm 30 and happy.")
@@ -110,8 +111,8 @@ args match the schema; exAgent validates with the changeset and retries on failu
 ### 4. Streaming text deltas
 
 `run_stream/3` returns a lazy stream. Best for chat/typewriter UIs. It yields
-`{:delta, binary}` per chunk then `{:result, map}`. **Note:** it does not re-execute
-tool calls mid-stream — use `run/3` for the full agentic tool loop.
+`{:delta, binary}` per chunk then `{:result, map}` or an error. It uses the full
+agentic loop; provisional deltas never authorize effects before a valid terminal.
 
 ```elixir
 ExAgent.run_stream(agent, "count to five")
@@ -133,8 +134,8 @@ json = ExAgent.Message.to_json(result.messages)       # persist this
 ExAgent.run(agent, "follow up", message_history: history)
 ```
 
-For crash-safe resumable runs, wrap `run/3` in an **Oban** job (the repo ships a
-recipe at `examples/durable_oban.exs`) — or use the built-in store (see `exagent-store`).
+History/checkpoints are not mid-run recovery; replaying an Oban job can repeat
+effects. Persisted approval/continuation C7 remains pending.
 
 ## `ExAgent.new/1` options
 
@@ -156,17 +157,16 @@ recipe at `examples/durable_oban.exs`) — or use the built-in store (see `exage
 
 ## Gotchas
 
-- `run/3` **always returns `{:ok, _} | {:error, _}`** — never raises. Match both.
-  Errors are tagged tuples: `{:error, {:max_steps_exceeded, n}}`,
-  `{:error, {:model_request_failed, %ExAgent.RequestError{}}}`,
-  `{:error, {:usage_limit_exceeded, which, value}}`, etc.
+- Match operational `RunError.reason` and preserve its partial result; do not
+  serialize live results containing credentials into logs/events.
 - `model: "test"` is the offline TestModel — perfect for dev/demos with no API
   key and no network (see `exagent-test`).
 - With `output: Module`, the model is **forced** to call the `final_result` tool;
   free-text answers are rejected and retried.
 - `instructions` can be a string **or** a list of strings (each becomes a system part).
-- The parsers tolerate malformed provider responses (empty `choices`,
-  `content: null`, partial `usage`) — don't pre-sanitize.
+- Invalid envelopes/history/terminals reject before effects. Stock usage is
+  normalized with unknown presence; strict metric limits reject, estimated mode
+  requires a finite request bound and never promises an invoice cap.
 - ExAgent's own `Agent` does **not** shadow OTP's `Agent` unless you `alias Agent`.
 
 ## Troubleshooting

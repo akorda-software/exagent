@@ -21,6 +21,8 @@ defmodule PackageAcceptanceTest do
     Scenario.typed(tracing, false)
     Scenario.typed(tracing, true)
     Scenario.checkpoint(tracing)
+    PackageAcceptance.ReqLLMProbe.custom()
+    PackageAcceptance.ReqLLMProbe.buffered()
   end
 
   test "typed invalid input has zero effects and is not coerced" do

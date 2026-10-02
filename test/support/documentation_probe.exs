@@ -1,6 +1,6 @@
 # Explicit documentation acceptance, using already compiled checkout BEAMs only:
 #   EXAGENT_OFFLINE=1 elixir -pa '_build/test/lib/*/ebin' test/support/documentation_probe.exs
-# Run in a disposable VM. No Mix/install, application config writes, external
+# Run in a disposable VM. No Mix/install, host config writes, external
 # models, Repo, MCP process or network exporter. Source blocks are selected by
 # exact heading and ordinal; missing/ambiguous selections fail, never skip.
 # Provider strings alone become deterministic fixture variables. Application
@@ -8,6 +8,8 @@
 # not executed; their external gates remain separate. Diagnostics fail acceptance.
 
 unless System.get_env("EXAGENT_OFFLINE") == "1", do: raise("set EXAGENT_OFFLINE=1")
+# Plain elixir does not load config/test.exs. Keep the disposable VM off .env.
+Application.put_env(:req_llm, :load_dotenv, false)
 {:ok, _} = Application.ensure_all_started(:exagent)
 
 IO.inspect(%{elixir: System.version(), otp: to_string(:erlang.system_info(:otp_release))},
@@ -94,14 +96,13 @@ defmodule DocumentationProbe do
   end
 
   test "README deftool preserves city/days schema and executes valid input" do
-    snippet = block("README.md", "### Tools with derived schemas")
-    snippet = replace!(snippet, ~s("openai:gpt-4o"), "fixture_model")
+    snippet = block("README.md", "### Define a tool")
 
     model = %TestModel{
       script: [{:tool_calls, [call("get_weather", %{"city" => "Madrid", "days" => 2})]}, "done"]
     }
 
-    {agent, _, warnings} = evaluate(snippet, fixture_model: model)
+    {agent, _, warnings} = evaluate(snippet, chat_model: model)
     [tool] = agent.tools
     schema = tool.parameters_json_schema |> Jason.encode!() |> Jason.decode!()
     assert schema["required"] == ["city", "days"]
@@ -118,9 +119,43 @@ defmodule DocumentationProbe do
     clean!(warnings)
   end
 
+  test "runtime recipe scopes public events and supports idempotent cancellation" do
+    recipe = block("docs/guides/migration.md", "### Minimal runtime integration recipe")
+    agent = ExAgent.new(model: %TestModel{label: "hello"})
+    {handles, _, warnings} = evaluate(recipe, agent: agent)
+    clean!(warnings)
+    %{server: server, namespace: namespace, request_id: request_id, cancel: cancel} = handles
+
+    assert_receive {:exagent_event,
+                    %ExAgent.Event{
+                      namespace: ^namespace,
+                      request_id: ^request_id,
+                      type: :run_finished,
+                      payload: %{output: "hello"}
+                    }},
+                   1000
+
+    assert :ok = cancel.()
+    assert %{pending: 0, pending_bytes: 0, namespace: ^namespace} = ExAgent.Server.health(server)
+    GenServer.stop(server)
+
+    :ok =
+      ExAgent.Store.delete_agent_snapshot(ExAgent.Store.scoped(:ets, namespace), "conversation-1")
+  end
+
+  test "README explicit Chat constructor resolves and admits the documented profile without IO" do
+    snippet = block("README.md", "### Tools with derived schemas")
+    snippet = replace!(snippet, ~s|System.fetch_env!("OPENAI_API_KEY")|, ~s("synthetic-doc-key"))
+    {model, _, diagnostics} = evaluate(snippet)
+    assert %ExAgent.Models.ReqLLM{tool_profile: :chat_tools_v1} = model
+    assert ExAgent.Model.model_name(model) == "gpt-4o-mini"
+    assert ExAgent.Model.profile(model).supports_tools
+    assert {:ok, ^model} = ExAgent.Model.resolve(model)
+    clean!(diagnostics)
+  end
+
   test "README Ecto block compiles in a fresh context and validates its real schema" do
     snippet = block("README.md", "### Structured output")
-    snippet = replace!(snippet, ~s("anthropic:claude-3-5-haiku"), "fixture_model")
     owner = self()
 
     model = %TestModel{
@@ -134,7 +169,7 @@ defmodule DocumentationProbe do
       ]
     }
 
-    {{:ok, result}, bindings, warnings} = evaluate(snippet, fixture_model: model)
+    {{:ok, result}, bindings, warnings} = evaluate(snippet, chat_model: model)
     assert result.output.__struct__ == WeatherReport
 
     assert Map.take(result.output, [:city, :temp_c, :condition]) == %{
@@ -183,8 +218,15 @@ defmodule DocumentationProbe do
       assert ExAgent.Session.read_state(game) == world
       clean!(warnings)
       coordination = block("README.md", "## Coordination")
-      coordination = replace!(coordination, ~s("openai:gpt-4o-mini"), "helper_model")
-      coordination = replace!(coordination, ~s("openai:gpt-4o"), "parent_model")
+
+      coordination =
+        replace!(
+          coordination,
+          "helper = ExAgent.new(model: chat_model",
+          "helper = ExAgent.new(model: helper_model"
+        )
+
+      coordination = replace!(coordination, "model: chat_model", "model: parent_model")
 
       parent_model = %TestModel{
         script: [{:tool_calls, [call("summarize", %{"prompt" => "subtask"})]}, "parent done"]
@@ -362,6 +404,7 @@ defmodule DocumentationProbe do
   test "external setup recipes have explicit syntax-only gates, never execute their side effects" do
     recipes = [
       {"README.md", "## Quick start", 1, "Mix.install: package consumer gate"},
+      {"README.md", "## Quick start", 2, "stock tuple with explicit auth: resolution TCP gate"},
       {"README.md", "## Layer 2 — snapshots & resume", 2, "Postgres: authorized Repo/DB gate"},
       {"README.md", "## External tools (MCP)", 1, "npx/MCP: separate authorized backend gate"},
       {"docs/guides/observability.md", "## 1. Application setup", 2,

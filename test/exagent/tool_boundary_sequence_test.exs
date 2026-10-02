@@ -22,8 +22,8 @@ defmodule ExAgent.ToolBoundarySequenceTest do
     defstruct [:targets]
 
     def before_tool_execute(cap, _, call) do
-      {name, args} = Map.fetch!(cap.targets, call.tool_call_id)
-      %{call | tool_name: name, args: args}
+      {_name, args} = Map.fetch!(cap.targets, call.tool_call_id)
+      %{call | args: args}
     end
 
     def after_tool_execute(_, _, %{tool_name: "after"}, _), do: raise("after completed effect")
@@ -191,7 +191,9 @@ defmodule ExAgent.ToolBoundarySequenceTest do
         tool("after", %{}, callback.("after", {:ok, "saved before hook", usage(4, 2)}))
       ]
 
-      calls = for id <- permute(Enum.sort(Map.keys(targets)), seed), do: call("dispatch", id)
+      calls =
+        for id <- permute(Enum.sort(Map.keys(targets)), seed),
+            do: call(elem(Map.fetch!(targets, id), 0), id)
 
       model = %TestModel{
         script: [
@@ -213,7 +215,10 @@ defmodule ExAgent.ToolBoundarySequenceTest do
       assert Enum.map(outcomes, & &1.tool_call_id) == Enum.map(calls, & &1.tool_call_id)
       assert Map.new(outcomes, &{&1.tool_call_id, &1.status}) == expected
       assert Enum.all?(outcomes, &(&1.tool_name == elem(Map.fetch!(targets, &1.tool_call_id), 0)))
-      assert result.usage == usage(10, 5)
+
+      assert %Usage{input_tokens: 10, output_tokens: 5, accounting: %{"quality" => "reported"}} =
+               result.usage
+
       assert result.request_count == 1
       assert result.tool_calls == 6
       assert_paired(result)

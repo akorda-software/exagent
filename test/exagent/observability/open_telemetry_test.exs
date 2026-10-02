@@ -1,3 +1,5 @@
+Code.require_file("../../../examples/flow_pipeline.exs", __DIR__)
+
 defmodule ExAgent.Observability.OpenTelemetryTest do
   use ExUnit.Case, async: false
   require Record
@@ -207,7 +209,8 @@ defmodule ExAgent.Observability.OpenTelemetryTest do
       end)
 
     assert {:ok, %{output: "done", request_count: 4, tool_calls: 3} = result} = result
-    assert :atomics.get(estimator_calls, 1) == 10
+    # Only actual reports are priced; preflight no longer probes synthetic zero usage.
+    assert :atomics.get(estimator_calls, 1) == 5
     assert Agent.get(calls, & &1) == 2
     spans = collect(11)
     assert length(Enum.uniq_by(spans, & &1.id)) == 11
@@ -657,6 +660,49 @@ defmodule ExAgent.Observability.OpenTelemetryTest do
     refute Map.has_key?(run.attrs, "exagent.usage.source")
   end
 
+  test "normalized cache semantics and estimated cents are qualified without duplicate generation or metadata",
+       %{tracing: tracing} do
+    for {input, includes_cache} <- [{100, true}, {60, false}] do
+      usage =
+        Usage.normalized(%{
+          input_tokens: input,
+          output_tokens: 20,
+          cached_tokens: 40,
+          cache_creation_tokens: 0,
+          reasoning_tokens: 5,
+          input_includes_cached: includes_cache,
+          add_reasoning_to_cost: false,
+          total_cost: 0.001,
+          cost: %{total: 42},
+          secret: @secret
+        })
+
+      response = %Response{parts: [%Part.Text{content: "done"}], usage: usage}
+
+      assert {:ok, result} =
+               ExAgent.run(
+                 ExAgent.new(model: %TestModel{script: [response]}, observability: tracing),
+                 "go"
+               )
+
+      spans = collect(2)
+      [model] = kind(spans, :model)
+      [run] = kind(spans, :run)
+      assert model.attrs["gen_ai.usage.input_tokens"] == 100
+      assert model.attrs["gen_ai.usage.output_tokens"] == 20
+      assert model.attrs["gen_ai.usage.cache_read.input_tokens"] == 40
+      assert model.attrs["exagent.usage.reasoning_tokens"] == 5
+      assert model.attrs["exagent.usage.quality"] == "normalized"
+      assert model.attrs["exagent.usage.provider_presence"] == "unknown"
+      assert model.attrs["exagent.cost.quality"] == "estimated"
+      assert model.attrs["exagent.cost.cents"] == 0.1
+      assert result.cost_cents == 0.1
+      refute Map.has_key?(model.attrs, "exagent.usage.reported_input_tokens")
+      refute Map.has_key?(run.attrs, "gen_ai.usage.input_tokens")
+      refute inspect(spans) =~ @secret
+    end
+  end
+
   @tag :c6_review
   test "empty context clears owned Logger keys inside attachment and restores enclosing span", %{
     tracer: tracer
@@ -768,17 +814,23 @@ defmodule ExAgent.Observability.OpenTelemetryTest do
     assert clean_process_context?(session)
   end
 
-  test "Anthropic exclusive cache and OpenAI inclusive cache map without changing reported usage",
+  test "qualified exclusive cache and inclusive cache map without changing normalized usage",
        %{tracing: tracing} do
     for {model, usage, expected} <- [
-          {%ExAgent.Models.Anthropic{},
-           %Usage{
-             input_tokens: 20,
-             output_tokens: 10,
-             details: %{cache_read_input_tokens: 60, cache_creation_input_tokens: 20}
-           }, 100},
-          {%ExAgent.Models.OpenAI{},
-           %Usage{input_tokens: 100, output_tokens: 10, details: %{cached_tokens: 60}}, 100},
+          {%TestModel{},
+           qualified_semantics(
+             %Usage{
+               input_tokens: 20,
+               output_tokens: 10,
+               details: %{cache_read_input_tokens: 60, cache_creation_input_tokens: 20}
+             },
+             "exclusive_cache"
+           ), 100},
+          {%TestModel{},
+           qualified_semantics(
+             %Usage{input_tokens: 100, output_tokens: 10, details: %{cached_tokens: 60}},
+             "inclusive"
+           ), 100},
           {%FailingModel{}, %Usage{input_tokens: 100, output_tokens: 10}, nil}
         ] do
       OpenTelemetry.around(tracing, :model, %{}, nil, fn operation ->
@@ -791,9 +843,29 @@ defmodule ExAgent.Observability.OpenTelemetryTest do
 
       [span] = collect(1)
       assert span.attrs["gen_ai.usage.input_tokens"] == expected
-      assert span.attrs["exagent.usage.reported_input_tokens"] == usage.input_tokens
+
+      key =
+        if usage.accounting,
+          do: "exagent.usage.normalized_input_tokens",
+          else: "exagent.usage.reported_input_tokens"
+
+      assert span.attrs[key] == usage.input_tokens
       assert span.attrs["exagent.cost.cents"] == 0.3
     end
+  end
+
+  defp qualified_semantics(usage, semantics) do
+    usage = Usage.qualify(usage)
+
+    %{
+      usage
+      | accounting:
+          Map.merge(usage.accounting, %{
+            "source" => "req_llm",
+            "quality" => "normalized",
+            "input_semantics" => semantics
+          })
+    }
   end
 
   test "disabled instrumentation does not replace tracer or create spans", %{
@@ -834,6 +906,36 @@ defmodule ExAgent.Observability.OpenTelemetryTest do
     second_request = Enum.find(kind(spans, :model), &(&1.attrs["exagent.run_step"] == 2))
     assert first.end_time <= second_request.start_time
     assert second_request.parent_id == run.id
+  end
+
+  test "public Flow plugin keeps router and concurrent delegated branches under one native trace",
+       c do
+    {result, app} =
+      in_app_span(c.tracer, fn _ ->
+        ExAgent.Examples.FlowPipeline.execute(c.tracing, OpenTelemetry.capture_context())
+      end)
+
+    assert result.request_count == 7 and result.tool_calls == 3 and result.effects_count == 2
+    spans = collect(18)
+    assert Enum.all?(spans, &(&1.trace_id == :otel_span.trace_id(app)))
+    runs = kind(spans, :run)
+    assert length(runs) == 6
+    by_run = Map.new(runs, &{&1.attrs["exagent.run_id"], &1})
+    [router, parallel] = [result.router.run_id, result.parallel.run_id]
+    assert by_run[router].parent_id == :otel_span.span_id(app)
+    assert by_run[parallel].parent_id == :otel_span.span_id(app)
+
+    for root <- [router, parallel],
+        step <- if(root == router, do: result.router.steps, else: result.parallel.steps),
+        step.run_id != nil do
+      assert by_run[step.run_id].parent_id == by_run[root].id
+    end
+
+    assert length(kind(spans, :model)) == 7 and length(kind(spans, :tool)) == 3
+    [delegation] = kind(spans, :delegation)
+    delegated = Enum.find(runs, &(&1.parent_id == delegation.id))
+    assert delegated && delegated.attrs["exagent.parent_run_id"] != nil
+    refute_receive {:otel_batch, _, _}, 50
   end
 
   defp in_app_span(tracer, fun) do
@@ -904,10 +1006,13 @@ defmodule ExAgent.Observability.OpenTelemetryTest do
     end
 
     assert {:error, %RunError{partial: partial}} = Task.await(caller)
-    assert partial.usage == before.usage
+    assert partial.usage.input_tokens == before.usage.input_tokens
+    assert partial.usage.output_tokens == before.usage.output_tokens
+    assert partial.usage.accounting["availability"]["input"] == "partial"
     assert partial.usage_status == :partial
     assert partial.cost_status == :unknown
-    assert partial.cost_cents == before.cost_cents
+    assert partial.cost_cents == nil
+    assert partial.usage.accounting["cost"]["subtotal_cents"] == before.cost_cents
     assert :atomics.get(estimate_calls, 1) == before_estimates
 
     event_type = if terminal == :abort, do: :server_request_cancelled, else: :run_failed
@@ -918,7 +1023,8 @@ defmodule ExAgent.Observability.OpenTelemetryTest do
 
     assert event_partial.usage_status == :partial
     assert event_partial.cost_status == :unknown
-    assert event_partial.cost_cents == before.cost_cents
+    assert event_partial.cost_cents == nil
+    assert event_partial.usage["accounting"]["cost"]["subtotal_cents"] == before.cost_cents
     assert event_partial.usage["input_tokens"] == before.usage.input_tokens
     assert event_partial.usage["output_tokens"] == before.usage.output_tokens
     assert event_partial.request_count == before.request_count

@@ -33,6 +33,7 @@ defmodule ExAgent.Test.NativeOTLPProbe do
     end
 
     Application.put_env(:opentelemetry, :processors, [])
+    Application.put_env(:req_llm, :load_dotenv, false)
     {:ok, _} = Application.ensure_all_started(:exagent)
     {:ok, _} = Application.ensure_all_started(:inets)
     {:ok, _} = Application.ensure_all_started(:opentelemetry)
@@ -196,7 +197,12 @@ defmodule ExAgent.Test.NativeOTLPProbe do
       before_timeout = resources(port)
 
       assert_receive {:DOWN, ^old_monitor, :process, ^old_worker, :killed}, 1500
-      timed_out = wait_stats(&(&1.export_timed_out == 1 and &1.status == :ready))
+      wait_stats(&(&1.export_timed_out == 1 and &1.status == :ready))
+      # stats reads ETS and counters separately. The timeout counter proves the
+      # processor entered finish_batch; synchronize with that callback before
+      # reading retained, rather than combining gauges from different instants.
+      :sys.get_state(processor)
+      timed_out = BoundedProcessor.stats(@processor)
       assert timed_out.exported == 0
       assert timed_out.retained == 0
       assert Enum.all?(worker_tables, &(:ets.info(&1) == :undefined))

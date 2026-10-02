@@ -90,7 +90,9 @@ defmodule ExAgent.Scenarios.ServerConcurrencyTest do
 
       assert Server.health(server).status == :idle
       assert :sys.get_state(server).model.index == 2
-      assert Server.usage(server) == %Usage{input_tokens: 2, output_tokens: 2}
+
+      assert %Usage{input_tokens: 2, output_tokens: 2, accounting: %{"quality" => "reported"}} =
+               Server.usage(server)
 
       assert Enum.map(Message.parts(Server.history(server)), &{&1.__struct__, &1.content}) ==
                [

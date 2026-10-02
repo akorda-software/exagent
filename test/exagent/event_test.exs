@@ -83,6 +83,7 @@ defmodule ExAgent.EventTest do
                "version" => 1,
                "id" => "evt_fixed",
                "emitter_id" => "emitter_fixed",
+               "namespace" => nil,
                "occurred_at" => "2026-09-10T09:00:00Z",
                "type" => "run_finished",
                "seq" => 3,

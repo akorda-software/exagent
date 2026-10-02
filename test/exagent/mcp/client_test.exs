@@ -138,7 +138,11 @@ defmodule ExAgent.MCP.ClientTest do
     end
 
     test "the actual scheduled deadline expires without a GenServer.call timeout exit" do
-      {client, ref} = controlled_client(timeout: 50)
+      {client, ref} = controlled_client()
+      # Initialization is setup, not the deadline under test. Confirm it before
+      # installing the short request deadline; keep the real scheduled timer.
+      assert %{ready: true} = :sys.get_state(client)
+      :sys.replace_state(client, &%{&1 | timeout: 50})
       task = Task.async(fn -> Client.tools(client) end)
       assert_receive {:outbound, ^client, ^ref, _}, 1_000
       assert {:error, :timeout} = Task.await(task, 2_000)

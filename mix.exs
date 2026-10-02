@@ -8,9 +8,11 @@ defmodule ExAgent.MixProject do
     [
       app: :exagent,
       version: @version,
-      elixir: "~> 1.17",
+      elixir: "~> 1.18",
       start_permanent: Mix.env() == :prod,
       elixirc_paths: elixirc_paths(Mix.env()),
+      # This separate consumer application is exercised by its own runner.
+      test_ignore_filters: [~r"^test/fixtures/framework_integrations/"],
       deps: deps(),
       aliases: aliases(),
       package: package(),
@@ -49,11 +51,12 @@ defmodule ExAgent.MixProject do
 
   defp deps do
     [
-      {:req, "~> 0.5"},
+      {:req_llm, "~> 1.24.0"},
+      {:req, "~> 0.7.4"},
       {:finch, "~> 0.22"},
       # Decoder floors protect library consumers too; dependency lockfiles do
       # not constrain the applications that depend on a published Hex package.
-      {:mint, "~> 1.10"},
+      {:mint, "~> 1.10 and >= 1.10.2"},
       {:hpax, "~> 1.0 and >= 1.0.4"},
       {:jason, "~> 1.4"},
       {:jsv, "~> 0.22.0"},
@@ -93,8 +96,26 @@ defmodule ExAgent.MixProject do
         {"docs/architecture/overview.md", filename: "architecture"},
         "docs/architecture/design.md",
         "docs/development/roadmap.md",
+        "docs/development/r4-implementation.md",
+        "docs/development/r5-implementation.md",
+        "docs/development/r6-implementation.md",
+        "docs/development/r7-mcp-implementation.md",
+        "docs/development/continuation-jobs.md",
+        "docs/development/framework-integrations.md",
+        "docs/development/coordination-recipes.md",
+        "docs/development/external-retrieval.md",
+        "docs/development/mcp-continuation-binding.md",
+        "docs/development/otlp-transport.md",
+        "docs/development/otlp-isolated-transport.md",
+        "docs/development/otlp-collector-transport.md",
+        "docs/development/release-scope.md",
+        "docs/development/production-acceptance.md",
+        "docs/development/jido-comparison.md",
+        "docs/development/framework-direction.md",
         "docs/development/verification.md",
+        "docs/development/real-consumer-e2e.md",
         "docs/development/testing-audit.md",
+        "docs/development/execution-flow.md",
         "docs/development/environment.md",
         "docs/development/backend-evaluation.md",
         "docs/development/handoff.md",
@@ -148,14 +169,8 @@ defmodule ExAgent.MixProject do
           ExAgent.ModelProfile
         ],
         Providers: [
-          ExAgent.Models.OpenAI,
-          ExAgent.Models.OpenRouter,
-          ExAgent.Models.OpenCode,
-          ExAgent.Models.Anthropic,
-          ExAgent.Models.Test,
-          ExAgent.Providers.OpenAIChat,
-          ExAgent.Providers.Anthropic,
-          ExAgent.Providers.SSE
+          ExAgent.Models.ReqLLM,
+          ExAgent.Models.Test
         ],
         "Capabilities & Telemetry": [ExAgent.Capability, ExAgent.Capabilities, ExAgent.Telemetry],
         Exceptions: [ExAgent.RequestError, ExAgent.UnexpectedModelBehavior, ExAgent.ModelRetry]

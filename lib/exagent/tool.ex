@@ -10,6 +10,12 @@ defmodule ExAgent.Tool do
   Tools are normally built via the `deftool` macro (see `ExAgent.Tools`),
   which derives the JSON-Schema from the function's `@spec`. They can also be
   built by hand with `new/1`.
+
+  `execution_binding` is private, data-only adapter identity used by persisted
+  continuation fingerprints, never by `definition/1`. Local tools retain `nil`.
+  MCP creates a validated descriptor or marks missing host identity `:unbound`;
+  the latter supports ordinary calls and rejects persisted execution before IO.
+  Do not strip this field or put credentials in it to make a tool resumable.
   """
 
   @type kind :: :function | :output | :external | :unapproved
@@ -21,6 +27,8 @@ defmodule ExAgent.Tool do
             takes_ctx: true,
             call: nil,
             max_retries: 1,
+            delegation: nil,
+            execution_binding: nil,
             prepared_validator: nil
 
   @type t :: %__MODULE__{
@@ -31,6 +39,8 @@ defmodule ExAgent.Tool do
           takes_ctx: boolean(),
           call: (ExAgent.RunContext.t(), map() -> term()) | (map() -> term()) | nil,
           max_retries: non_neg_integer(),
+          delegation: term(),
+          execution_binding: map() | :unbound | nil,
           prepared_validator: term()
         }
 

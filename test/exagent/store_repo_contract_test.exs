@@ -9,7 +9,12 @@ defmodule ExAgent.StoreRepoContractTest do
     def query(sql, params) do
       send(self(), {:repo_query, sql, params})
 
-      case Process.get({__MODULE__, :reply}, {:ok, %{rows: []}}) do
+      default =
+        if String.starts_with?(sql, "INSERT"),
+          do: {:ok, %{rows: [[hd(params)]]}},
+          else: {:ok, %{rows: []}}
+
+      case Process.get({__MODULE__, :reply}, default) do
         :raise -> raise "synthetic Repo exception"
         :throw -> throw(:synthetic_repo_throw)
         :exit -> exit(:synthetic_repo_exit)
@@ -36,19 +41,23 @@ defmodule ExAgent.StoreRepoContractTest do
     assert_receive {:repo_query, sql, ["agent:customer-'quoted'", bytes]}
 
     assert sql ==
-             "INSERT INTO synthetic_snapshots (key, data) VALUES ($1, $2) " <>
-               "ON CONFLICT (key) DO UPDATE SET data = EXCLUDED.data, updated_at = now()"
+             "INSERT INTO \"synthetic_snapshots\" (key, data) VALUES ($1, $2) " <>
+               "ON CONFLICT (key) DO UPDATE SET data = EXCLUDED.data, updated_at = now() " <>
+               "WHERE NOT (\"synthetic_snapshots\".data::jsonb ? 'record_version') RETURNING key"
 
     refute sql =~ "customer"
     raw = Jason.decode!(bytes)
     assert raw["agent_id"] == "customer-'quoted'"
     assert raw["revision"] == 7
 
-    assert raw["usage"] == %{
+    assert Map.drop(raw["usage"], ["accounting"]) == %{
              "input_tokens" => 8,
              "output_tokens" => 6,
              "details" => %{"cached_tokens" => 1}
            }
+
+    assert raw["version"] == 4
+    assert raw["usage"]["accounting"]["quality"] == "reported"
 
     assert raw["metadata"] == %{"region" => "north"}
 
@@ -65,7 +74,7 @@ defmodule ExAgent.StoreRepoContractTest do
     Process.put({Repo, :reply}, {:ok, %{rows: [[bytes]]}})
     assert {:ok, loaded} = Store.load_agent_snapshot(@store, snapshot.agent_id)
 
-    assert_receive {:repo_query, "SELECT data FROM synthetic_snapshots WHERE key = $1",
+    assert_receive {:repo_query, "SELECT data FROM \"synthetic_snapshots\" WHERE key = $1",
                     ["agent:customer-'quoted'"]}
 
     assert loaded == snapshot

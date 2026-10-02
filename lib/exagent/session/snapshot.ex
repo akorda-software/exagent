@@ -1,6 +1,7 @@
 defmodule ExAgent.Session.Snapshot do
   @moduledoc """
-  Version 2 JSON checkpoint of coordination data; reads valid v1 data.
+  JSON checkpoint of coordination data. Version 3 adds bounded continuation
+  references; unbound sessions still write v2, and valid v1/v2 data remains readable.
 
   Decoding never loads modules or constructs structs chosen by stored bytes.
   `restore/3` uses only the policy explicitly supplied by the host app. Custom
@@ -20,6 +21,7 @@ defmodule ExAgent.Session.Snapshot do
     :saved_at,
     seq: 0,
     metadata: %{},
+    continuations: [],
     version: 2,
     policy_version: 1,
     revision: 0
@@ -46,6 +48,8 @@ defmodule ExAgent.Session.Snapshot do
           status: state.status,
           seq: state.seq,
           metadata: state.metadata,
+          continuations: ExAgent.Session.Continuations.dump(state),
+          version: if(map_size(Map.get(state, :continuation_bindings, %{})) == 0, do: 2, else: 3),
           revision: state.revision,
           saved_at: DateTime.utc_now()
         }
@@ -92,8 +96,13 @@ defmodule ExAgent.Session.Snapshot do
     participants = map["participants"]
 
     cond do
-      version not in [1, 2] ->
+      version not in [1, 2, 3] ->
         {:error, {:unsupported_snapshot_version, version}}
+
+      not ExAgent.Session.Continuations.valid_data?(Map.get(map, "continuations", [])) or
+        (version != 3 and Map.get(map, "continuations", []) != []) or
+          (version == 3 and Map.get(map, "continuations", []) == []) ->
+        {:error, :invalid_session_continuations}
 
       not is_binary(map["session_id"]) ->
         {:error, :invalid_session_id}
@@ -142,6 +151,9 @@ defmodule ExAgent.Session.Snapshot do
                seq: Map.get(map, "seq", 0),
                revision: Map.get(map, "revision", 0),
                metadata: Map.get(map, "metadata", %{}),
+               continuations:
+                 ExAgent.Session.Continuations.normalize_data(Map.get(map, "continuations", [])),
+               version: if(version == 3, do: 3, else: 2),
                saved_at: date
              }}
           else
@@ -163,7 +175,7 @@ defmodule ExAgent.Session.Snapshot do
     end
   end
 
-  defp policy_data(map, 2) do
+  defp policy_data(map, version) when version in [2, 3] do
     if is_integer(map["policy_version"]) and map["policy_version"] > 0,
       do: {:ok, map["policy_state"]},
       else: {:error, :invalid_policy_version}

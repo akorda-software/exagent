@@ -24,6 +24,12 @@ defmodule ExAgent.Observability.OpenTelemetry do
   inclusive total. Custom model semantics are unknown: their input remains in
   `exagent.usage.reported_input_tokens` instead of claiming a GenAI total. Run
   aggregates retain the existing ledger's provider-native token semantics.
+  A durable pause ends its run span with `exagent.status=paused`, without an OTel
+  error. Resume creates a new attempt/span under the same run identity. Run usage
+  and host request/tool counts are cumulative lifetime snapshots, not attempt
+  deltas or successful-effect counts; do not sum them across resumed attempts.
+  `exagent.continuation.*` contains only the validated public reference identity
+  and numeric version/revision, never approval actors, tokens or stored records.
   A Server terminal synthesized after abort/worker loss has only its last
   progress snapshot: `exagent.usage.source=last_progress`, partial usage and an
   unknown total cost. Observed token/count subtotals are retained, and any known
@@ -272,6 +278,7 @@ defmodule ExAgent.Observability.OpenTelemetry do
     Map.new(
       [
         :run_id,
+        :attempt_id,
         :root_run_id,
         :parent_run_id,
         :model_request_id,
@@ -318,13 +325,44 @@ defmodule ExAgent.Observability.OpenTelemetry do
         "exagent.usage.request_count" => token(result[:request_count]),
         "exagent.usage.tool_calls" => token(result[:tool_calls])
       })
+      |> Map.merge(continuation_attributes(result[:continuation]))
       |> Map.merge(run_accounting_attributes(result, source))
+      |> Map.merge(
+        quality_attributes(
+          if(source == :last_progress, do: Usage.partial(result[:usage]), else: result[:usage])
+        )
+      )
     )
 
     content(operation, :output, result[:output])
   end
 
   def run_result(_, _, _), do: :ok
+
+  # Access in the shared public-reference validator requires a plain map.
+  # Reject even forged struct markers; the literal version pattern is strict.
+  defp continuation_attributes(%{__struct__: _}), do: %{}
+
+  defp continuation_attributes(%{version: 1} = reference) do
+    case ExAgent.Event.continuation_reference(reference) do
+      nil ->
+        %{}
+
+      reference ->
+        identity = Map.take(reference, [:id, :record_id, :run_id, :attempt_id])
+
+        if Enum.all?(identity, fn {_, value} -> is_nil(value) or label(value) != nil end) do
+          Map.new(reference, fn {key, value} ->
+            {"exagent.continuation." <> Atom.to_string(key), value}
+          end)
+          |> compact()
+        else
+          %{}
+        end
+    end
+  end
+
+  defp continuation_attributes(_), do: %{}
 
   defp run_accounting_attributes(result, :last_progress) do
     %{
@@ -350,42 +388,81 @@ defmodule ExAgent.Observability.OpenTelemetry do
     usage = snapshot.usage
     details = if match?(%Usage{}, usage), do: usage.details, else: %{}
 
-    attributes(operation, %{
-      "gen_ai.usage.input_tokens" => input_tokens(usage, model),
-      "exagent.usage.reported_input_tokens" => if(usage, do: token(usage.input_tokens)),
-      "exagent.usage.input_tokens_semantics" => input_semantics(model),
-      "gen_ai.usage.output_tokens" => if(usage, do: token(usage.output_tokens)),
-      "gen_ai.usage.cache_read.input_tokens" =>
-        detail(details, [:cached_tokens, :cache_read_input_tokens]),
-      "gen_ai.usage.cache_write.input_tokens" => detail(details, [:cache_creation_input_tokens]),
-      "exagent.usage.reasoning_tokens" => detail(details, [:reasoning_tokens]),
-      "exagent.usage.status" => label(snapshot.usage_status),
-      "exagent.cost.cents" => number(snapshot.cost_cents),
-      "exagent.cost.status" => label(snapshot.cost_status)
-    })
+    attributes(
+      operation,
+      Map.merge(
+        %{
+          "gen_ai.usage.input_tokens" => input_tokens(usage, model),
+          "exagent.usage.reported_input_tokens" =>
+            if(usage && Usage.qualify(usage).accounting["quality"] == "reported",
+              do: token(usage.input_tokens)
+            ),
+          "exagent.usage.normalized_input_tokens" =>
+            if(usage && Usage.qualify(usage).accounting["quality"] == "normalized",
+              do: token(usage.input_tokens)
+            ),
+          "exagent.usage.input_tokens_semantics" => usage_input_semantics(usage, model),
+          "gen_ai.usage.output_tokens" => if(usage, do: token(usage.output_tokens)),
+          "gen_ai.usage.cache_read.input_tokens" =>
+            detail(details, [:cached_tokens, :cache_read_input_tokens]),
+          "gen_ai.usage.cache_write.input_tokens" =>
+            detail(details, [:cache_creation_input_tokens]),
+          "exagent.usage.reasoning_tokens" => detail(details, [:reasoning_tokens]),
+          "exagent.usage.status" => label(snapshot.usage_status),
+          "exagent.cost.cents" => number(snapshot.cost_cents),
+          "exagent.cost.status" => label(snapshot.cost_status)
+        },
+        quality_attributes(usage)
+      )
+    )
   end
 
   def model_result(_, _, _), do: :ok
 
-  defp input_semantics(%ExAgent.Models.Anthropic{}), do: "exclusive_cache"
+  defp quality_attributes(usage) do
+    a = Usage.qualify(usage).accounting
 
-  defp input_semantics(%module{})
-       when module in [
-              ExAgent.Models.OpenAI,
-              ExAgent.Models.OpenRouter,
-              ExAgent.Models.OpenCode,
-              ExAgent.Models.Test
-            ],
-       do: "inclusive"
+    %{
+      "exagent.usage.accounting_source" => a["source"],
+      "exagent.usage.quality" => a["quality"],
+      "exagent.usage.provider_presence" => a["provider_presence"],
+      "exagent.usage.input_availability" => a["availability"]["input"],
+      "exagent.usage.output_availability" => a["availability"]["output"],
+      "exagent.usage.cache_read_availability" => a["availability"]["cache_read"],
+      "exagent.usage.cache_write_availability" => a["availability"]["cache_write"],
+      "exagent.usage.reasoning_availability" => a["availability"]["reasoning"],
+      "exagent.cost.quality" => a["cost"]["quality"],
+      "exagent.cost.source" => a["cost"]["source"],
+      "exagent.cost.availability" => a["cost"]["availability"],
+      "exagent.cost.known_subtotal_cents" =>
+        if(a["cost"]["availability"] == "partial", do: number(a["cost"]["subtotal_cents"]))
+    }
+  end
+
+  defp usage_input_semantics(
+         %Usage{accounting: %{"source" => source, "input_semantics" => semantics}},
+         _
+       )
+       when source != "model", do: semantics
+
+  defp usage_input_semantics(_, model), do: input_semantics(model)
+
+  defp input_semantics(%ExAgent.Models.Test{}), do: "inclusive"
 
   defp input_semantics(_), do: "provider_reported"
 
-  defp input_tokens(%Usage{input_tokens: input, details: details}, model)
+  defp input_tokens(%Usage{input_tokens: input, details: details} = usage, model)
        when is_integer(input) do
-    case input_semantics(model) do
+    case usage_input_semantics(usage, model) do
       "exclusive_cache" ->
-        input + (detail(details, [:cache_read_input_tokens]) || 0) +
-          (detail(details, [:cache_creation_input_tokens]) || 0)
+        read = detail(details, [:cache_read_input_tokens, :cached_tokens])
+        write = detail(details, [:cache_creation_input_tokens])
+
+        if usage.accounting && usage.accounting["source"] != "model" do
+          if is_integer(read) and is_integer(write), do: input + read + write
+        else
+          input + (read || 0) + (write || 0)
+        end
 
       "inclusive" ->
         input
@@ -511,6 +588,8 @@ defmodule ExAgent.Observability.OpenTelemetry do
     do: {"cancelled", :cancelled}
 
   defp outcome({:error, reason}), do: {"failed", reason}
+
+  defp outcome({:ok, %{status: :paused}}), do: {"paused", nil}
 
   defp outcome({:ok, %Response{finish_reason: reason}, _})
        when reason in [:length, :content_filter],

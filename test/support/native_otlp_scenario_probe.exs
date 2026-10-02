@@ -92,6 +92,7 @@ defmodule ExAgent.Test.NativeOTLPScenarioProbe do
     end
 
     Application.put_env(:opentelemetry, :processors, [])
+    Application.put_env(:req_llm, :load_dotenv, false)
     {:ok, _} = Application.ensure_all_started(:exagent)
     {:ok, _} = Application.ensure_all_started(:inets)
     {:ok, _} = Application.ensure_all_started(:opentelemetry)
@@ -365,7 +366,8 @@ defmodule ExAgent.Test.NativeOTLPScenarioProbe do
       assert partial.usage["input_tokens"] == 10
       assert partial.usage["output_tokens"] == 2
       assert partial.cost_status == :unknown
-      assert partial.cost_cents == before_abort.cost_cents
+      assert partial.cost_cents == nil
+      assert partial.usage["accounting"]["cost"]["subtotal_cents"] == before_abort.cost_cents
       assert Server.health(server).status == :idle
       assert clean_server_context?(server)
       GenServer.stop(server)

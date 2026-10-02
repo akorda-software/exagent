@@ -1,5 +1,8 @@
 import Config
 
+# Tests use synthetic per-request credentials, never a developer's .env file.
+config :req_llm, load_dotenv: false
+
 # Test repo for ExAgent.Store.Postgres tests. Skipped automatically when the
 # database is unreachable (see test/exagent/store/postgres_test.exs).
 config :exagent, ExAgent.TestRepo,

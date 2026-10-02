@@ -138,10 +138,14 @@ advancing the turn (mid-turn changes). Finish the turn with `Session.end_turn/2`
 
 Delegation (agent-as-tool; both runs' tokens counted together):
 
+For the unreleased major, use `chat_model` configured with explicit credentials
+and the qualified tool profile from `exagent-run-agent`/README. Stock catalogue
+strings alone do not configure auth or enable tools.
+
 ```elixir
-helper = ExAgent.new(model: "openai:gpt-4o-mini", instructions: "You summarize.")
+helper = ExAgent.new(model: chat_model, instructions: "You summarize.")
 parent =
-  ExAgent.new(model: "openai:gpt-4o",
+  ExAgent.new(model: chat_model,
     tools: [ExAgent.Coordination.delegation_tool(helper, name: "summarize")])
 ```
 

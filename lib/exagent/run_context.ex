@@ -20,6 +20,7 @@ defmodule ExAgent.RunContext do
   defstruct deps: nil,
             run_id: nil,
             execution_scope: nil,
+            continuation: nil,
             root_run_id: nil,
             parent_run_id: nil,
             observability: nil,
@@ -34,6 +35,7 @@ defmodule ExAgent.RunContext do
             # tool-call-local fields (set when invoking a tool)
             tool_name: nil,
             tool_call_id: nil,
+            idempotency_key: nil,
             retry: 0,
             max_retries: 1,
             metadata: %{}
@@ -55,6 +57,7 @@ defmodule ExAgent.RunContext do
           run_step: non_neg_integer(),
           tool_name: String.t() | nil,
           tool_call_id: String.t() | nil,
+          idempotency_key: String.t() | nil,
           retry: non_neg_integer(),
           max_retries: non_neg_integer(),
           metadata: map()

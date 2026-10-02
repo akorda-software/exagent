@@ -79,17 +79,25 @@ defmodule ExAgent.IterationCTest do
                Model.profile(%ExAgent.Models.Test{})
     end
 
-    test "Anthropic advertises thinking support; OpenAI does not" do
-      assert Model.profile(%ExAgent.Models.Anthropic{model: "x"}).supports_thinking == true
-      assert Model.profile(%ExAgent.Models.OpenAI{model: "x"}).supports_thinking == false
+    test "thinking is qualified by effective capabilities, not provider name" do
+      for provider <- [:anthropic, :openai] do
+        model = ExAgent.Models.ReqLLM.new(model: %{provider: provider, id: "x"})
+        refute Model.profile(model).supports_thinking
+      end
+
+      model =
+        ExAgent.Models.ReqLLM.new(
+          model: %{provider: :openai, id: "x", capabilities: %{reasoning: %{enabled: true}}}
+        )
+
+      assert Model.profile(model).supports_thinking
     end
 
-    test "OpenAI supports native JSON-schema output; Anthropic does not" do
-      assert Model.profile(%ExAgent.Models.OpenAI{model: "x"}).supports_json_schema_output ==
-               true
-
-      assert Model.profile(%ExAgent.Models.Anthropic{model: "x"}).supports_json_schema_output ==
-               false
+    test "native JSON-schema output stays closed until R2.3 qualification" do
+      for provider <- [:openai, :anthropic] do
+        model = ExAgent.Models.ReqLLM.new(model: %{provider: provider, id: "x"})
+        refute Model.profile(model).supports_json_schema_output
+      end
     end
   end
 

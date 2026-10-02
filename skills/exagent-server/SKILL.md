@@ -21,7 +21,9 @@ every run in real time. It does **not** coordinate multiple participants (that's
 
 ## Prerequisites
 
-Host app depends on `{:exagent, "~> 1.0"}`. The `ExAgent.AgentSupervisor`
+This skill describes the unreleased major checkout (`{:exagent, path: "../exAgent"}`).
+Build `chat_model` with explicit credentials/profile as in `exagent-run-agent` or
+the README; stock strings alone resolve identity, not auth. The `ExAgent.AgentSupervisor`
 (DynamicSupervisor) and `ExAgent.PubSub.Local` registry are already started by
 exAgent's application tree.
 
@@ -32,7 +34,7 @@ exAgent's application tree.
 ```elixir
 {:ok, dm} =
   ExAgent.AgentSupervisor.start_agent(
-    agent: ExAgent.new(model: "openai:gpt-4o", instructions: "You are a DM."),
+    agent: ExAgent.new(model: chat_model, instructions: "You are a DM."),
     agent_id: "dm",
     pubsub: :local
   )

@@ -227,19 +227,25 @@ defmodule ExAgent.ExecutionScopeTest do
     assert [%Part.ToolReturn{usage: nil, status: :failed}] = returns(result)
   end
 
-  test "monetary budgets reject missing, invalid and unknown estimators before model invocation" do
+  test "monetary budgets reject missing configuration preIO and actual estimator failures after the report" do
     model = %Controlled{owner: self()}
     agent = ExAgent.new(model: model, usage_limits: %UsageLimits{max_budget_cents: 10})
 
     for opts <- [
           [],
-          [estimate_cost: :invalid],
-          [estimate_cost: fn _ -> -1 end],
-          [estimate_cost: fn _ -> :unknown end],
-          [estimate_cost: fn _ -> raise "bad estimator" end]
+          [estimate_cost: :invalid]
         ] do
       assert {:error, %RunError{}} = ExAgent.run(agent, "go", opts)
       refute_receive {:model_started, _, _, _}
+    end
+
+    for estimator <- [fn _ -> -1 end, fn _ -> :unknown end, fn _ -> raise "bad estimator" end] do
+      assert {:error, %RunError{partial: partial}} =
+               ExAgent.run(agent, "go", estimate_cost: estimator)
+
+      assert_receive {:model_started, _, _, _}
+      assert partial.request_count == 1
+      assert partial.cost_status == :unknown
     end
   end
 
@@ -300,16 +306,23 @@ defmodule ExAgent.ExecutionScopeTest do
     assert :ok = ExecutionScope.record_usage(scope, "request", usage(2, 3))
     assert :ok = ExecutionScope.record_usage(scope, "request", usage(5, 8), true)
     assert :ok = ExecutionScope.record_usage(scope, "request", usage(5, 8), true)
+
+    assert {:error, :request_already_finalized} =
+             ExecutionScope.record_usage(scope, "request", usage(6, 8), true)
+
     assert :ok = ExecutionScope.finish_request(scope, "request")
     assert {:ok, snapshot} = ExecutionScope.snapshot(scope)
     assert snapshot.request_count == 1
-    assert snapshot.usage == usage(5, 8)
+    assert {snapshot.usage.input_tokens, snapshot.usage.output_tokens} == {5, 8}
+    assert snapshot.usage.accounting["quality"] == "reported"
+    assert snapshot.usage.accounting["cost"]["quality"] == "estimated"
     assert_in_delta snapshot.cost_cents, 0.013, 0.0000001
 
     assert :ok = ExecutionScope.contribute(scope, "tool", usage(3, 4))
     assert :ok = ExecutionScope.contribute(scope, "tool", usage(3, 4))
     assert {:ok, snapshot} = ExecutionScope.snapshot(scope)
-    assert snapshot.usage == usage(8, 12)
+    assert {snapshot.usage.input_tokens, snapshot.usage.output_tokens} == {8, 12}
+    assert snapshot.usage.accounting["cost"]["availability"] == "partial"
     assert snapshot.cost_cents == nil
   end
 
@@ -326,7 +339,8 @@ defmodule ExAgent.ExecutionScopeTest do
     assert :ok = ExecutionScope.record_usage(scope, "request", nil, false)
     assert :ok = ExecutionScope.finish_request(scope, "request")
     assert {:ok, snapshot} = ExecutionScope.snapshot(scope)
-    assert snapshot.usage == usage(2, 1)
+    assert {snapshot.usage.input_tokens, snapshot.usage.output_tokens} == {2, 1}
+    assert snapshot.usage.accounting["availability"]["input"] != "available"
     assert snapshot.usage_status == :partial
 
     assert {:error, {:usage_limit_exceeded, :request_limit, 1}} =

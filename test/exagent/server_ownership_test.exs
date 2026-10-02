@@ -38,7 +38,9 @@ defmodule ExAgent.ServerOwnershipTest do
         )
 
       assert {:ok, request_id} = Server.send_message(server, "go")
-      assert_receive {:working, worker}
+      # Readiness took 155ms under the full async suite; cancellation is measured
+      # only after this barrier, with the unchanged DOWN assertions below.
+      assert_receive {:working, worker}, 1000
       {:monitored_by, monitors} = Process.info(worker, :monitored_by)
       # The runtime guardian and the execution-scope owner both monitor the run.
       # Check cleanup of every run-owned monitor rather than a fixed process count.

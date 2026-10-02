@@ -1,0 +1,116 @@
+{
+  "status": "synthetic_boundaries_verified_only",
+  "api": {
+    "positive": 2,
+    "negative": 17,
+    "missing_rows_not_accepted": true,
+    "project_identity_required_before_write": true,
+    "bounded_gets_verified": true,
+    "only_synthetic_new_ids": true,
+    "fake_secret_fixture_removed": true,
+    "partial_loss_and_secret_discard_fifo": {
+      "bytes_processed_in_memory": 136,
+      "events": 1,
+      "partial_events": 1,
+      "dropped_spans": 1,
+      "other_events": 0,
+      "raw_logs_retained": false,
+      "loss_is_backend_warning_not_ack": true
+    }
+  },
+  "collector_fifo_start_stop": {
+    "owner": {
+      "type": "closed",
+      "reason": "stop",
+      "group_closed": true,
+      "collector_pid": 1388824,
+      "stop_escalated": false,
+      "fault": "none",
+      "exit": 0,
+      "stop_ms": 14,
+      "log_bytes": 0,
+      "lifetime_ms": 61
+    },
+    "loss_logs": {
+      "bytes_processed_in_memory": 0,
+      "events": 0,
+      "partial_events": 0,
+      "dropped_spans": 0,
+      "other_events": 0,
+      "raw_logs_retained": false,
+      "loss_is_backend_warning_not_ack": true
+    }
+  },
+  "source_hashes": {
+    "admission_exporter.exs": "7bd99810314f80933ac6d41c8795221f796f5240baacf9a7f8297581f0632634",
+    "api.py": "4f93d0de2a1ee6496faa82108faa6b815d433e7e77b54b581fe063a086c3f576",
+    "http_fixture.py": "9bfc8dd9df3ffdf3293e678d6e253ae804b0aa0e5fa2d4982b7547d2287e485c",
+    "poll.py": "fab9abc918f379ba066ac31cbf9c7cd1ca68552c4d3f4bb49c44ec7b09f540c1",
+    "preflight.py": "acd9f2810d5758e56289e16a58fea219e2369cf68ad644a334999258372dc567",
+    "producer.exs": "f614054c6b38115f4a2de484dc3283733324e28c81ce9dd6b4ad525b83abee95",
+    "run.py": "7d273f6aa804c7b03da24a66d754d0d396453f0512f6edabc8d93c78a503d5f2",
+    "scenario.exs": "6968d06199fae2a646b5f79192a1c02d0b1f8887c194181a42ea6d3c5e56e506"
+  },
+  "credentials_real_read": false,
+  "cloud_writes": 0,
+  "native_a10_not_executed_here": true,
+  "ui_accepted": false,
+  "objective": "015",
+  "phase": "synthetic_api_fifo_boundary_preparation_only",
+  "commands": [
+    {
+      "argv": [
+        "python3",
+        "test/support/langfuse_acceptance/preflight.py",
+        "--run",
+        "--collector-binary",
+        "/tmp/opencode/exagent-v2-codex-t6qgpstl/otlp/collector-1z1bw2hp/bin/otelcol",
+        "--recipe",
+        "examples/otlp_transport",
+        "--work",
+        "/tmp/opencode/exagent-v2-codex-t6qgpstl/langfuse015"
+      ],
+      "exit": 0
+    },
+    {
+      "command": "Elixir Code.format_string! and Code.string_to_quoted! over three private .exs helpers; no Mix/ROOT build",
+      "exit": 0
+    }
+  ],
+  "primary_sources": [
+    {
+      "url": "https://cloud.langfuse.com/generated/api/openapi.yml",
+      "sha256": "0cfedceece040eb5d042dc0db7f561c4f5bb96ebfd5971a4807fb490f0a328ed",
+      "read": "unauthenticated public OpenAPI only"
+    },
+    {
+      "url": "https://langfuse.com/integrations/native/opentelemetry",
+      "contract": "EU OTLP HTTP/protobuf, Basic auth, x-langfuse-ingestion-version 4; direct gRPC unsupported"
+    },
+    {
+      "url": "https://opentelemetry.io/docs/collector/internal-telemetry/",
+      "contract": "public JSON logger output_paths/error_output_paths and disabled sampling"
+    },
+    {
+      "url": "https://github.com/langfuse/langfuse/blob/main/packages/shared/src/server/repositories/traces.ts",
+      "contract": "project/trace deep-link construction"
+    },
+    {
+      "url": "https://hex.pm/api/packages/opentelemetry_exporter/releases/1.11.0",
+      "tar_sha256": "24833c5f54d0996a454793383a5a8526750cbacc5c03e5be54b593fe7d47fb0a"
+    }
+  ],
+  "collector": {
+    "release": "0.162.0",
+    "binary_sha256": "910a66b1210e09143260914ef0634b4d234c789f23efc34bc9c7a3c0480324fa",
+    "archive_sha256": "f99929987a915d3c6b2c9b15bc4938c5cea903a37a3f49e478024a0fa0772339"
+  },
+  "pending": [
+    "final combined source/TAR/private consumer",
+    "full native A10 admission + opaque HTTP bytes",
+    "concrete cloud wave authorization",
+    "cloud API acceptance",
+    "user UI confirmation"
+  ],
+  "review_014_scope": "unchanged 004/010 only; this later 015 delta is not included"
+}

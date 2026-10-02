@@ -33,7 +33,7 @@ defmodule ExAgent.TestingAuditCoreTest do
           [delta, {:result, %{result | usage_status: :partial}}],
           [delta, {:result, %{result | usage: %Usage{input_tokens: nil, output_tokens: 3}}}],
           [delta, {:result, %{result | usage: %Usage{input_tokens: 7, output_tokens: 0}}}],
-          [delta, {:result, %{result | model: %ExAgent.Models.OpenAI{model: "wrong"}}}]
+          [delta, {:result, %{result | model: %ExAgent.Models.ReqLLM{model: "wrong"}}}]
         ] do
       assert_raise ExUnit.AssertionError, fn ->
         TestingAuditCore.assert_successful_text_stream(events, "one two three four five", "test")

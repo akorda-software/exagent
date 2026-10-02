@@ -1,0 +1,47 @@
+# Optional app-owned bridge. No queue, asynchronous batcher, or retry.
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: ${env:EXAGENT_COLLECTOR_GRPC_ENDPOINT}
+        max_recv_msg_size_mib: 1
+        max_concurrent_streams: 1
+processors:
+  memory_limiter:
+    check_interval: 100ms
+    limit_mib: 128
+    spike_limit_mib: 32
+exporters:
+  otlp_http/backend:
+    traces_endpoint: ${env:EXAGENT_OTLP_HTTP_TRACES_ENDPOINT}
+    encoding: proto
+    compression: none
+    timeout: 500ms
+    sending_queue:
+      enabled: false
+    retry_on_failure:
+      enabled: false
+service:
+  telemetry:
+    logs:
+      encoding: json
+      level: warn
+      disable_caller: true
+      disable_stacktrace: true
+      sampling:
+        enabled: false
+    metrics:
+      level: normal
+      readers:
+        - pull:
+            exporter:
+              prometheus:
+                host: 127.0.0.1
+                port: ${env:EXAGENT_COLLECTOR_METRICS_PORT}
+                without_type_suffix: true
+                without_units: true
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter]
+      exporters: [otlp_http/backend]

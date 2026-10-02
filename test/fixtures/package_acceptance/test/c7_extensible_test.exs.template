@@ -1,0 +1,63 @@
+defmodule PackageAcceptance.C7ExtensibleTest do
+  use ExUnit.Case, async: false
+  alias ExAgent.{Event, Permissions, Server, Store, Tool}
+  alias ExAgent.Message.{Part, Response}
+
+  defmodule CustomModel do
+    @behaviour ExAgent.Model
+    defstruct index: 0
+    def model_name(_), do: "consumer-custom"
+    def system(_), do: "consumer"
+    def profile(_), do: %ExAgent.ModelProfile{supports_tools: true}
+    def validate_resume(_, _, _, _), do: :ok
+    def request(%{index: 0} = model, _, _, _) do
+      {:ok, %Response{parts: [%Part.ToolCall{tool_name: "effect", tool_call_id: "call", args: %{"n" => 2}}]}, %{model | index: 1}}
+    end
+    def request(model, _, _, _), do: {:ok, %Response{parts: [%Part.Text{content: "custom done"}]}, %{model | index: model.index + 1}}
+  end
+
+  defmodule CustomStore do
+    @behaviour Store
+    defdelegate save_agent_snapshot(config, snapshot), to: Store.ETS
+    defdelegate load_agent_snapshot(config, id), to: Store.ETS
+    defdelegate list_agent_snapshots(config), to: Store.ETS
+    defdelegate delete_agent_snapshot(config, id), to: Store.ETS
+    defdelegate save_session_snapshot(config, snapshot), to: Store.ETS
+    defdelegate load_session_snapshot(config, id), to: Store.ETS
+    defdelegate delete_session_snapshot(config, id), to: Store.ETS
+    defdelegate capabilities(config), to: Store.ETS
+    defdelegate load_record(config, key), to: Store.ETS
+    defdelegate transition(config, key, revision, command), to: Store.ETS
+    defdelegate scan_records(config, namespace, query), to: Store.ETS
+  end
+
+  defmodule CustomPubSub do
+    @behaviour ExAgent.PubSub
+    def subscribe(_, _), do: :ok
+    def broadcast(owner, topic, event) do
+      send(owner, {:custom_event, topic, event})
+      :ok
+    end
+  end
+
+  test "installed package composes application Model, Tool, Store and PubSub through public continuation APIs" do
+    start_supervised!({Store.ETS, table: __MODULE__})
+    tool = Tool.new(name: "effect", parameters_json_schema: %{"type" => "object", "properties" => %{"n" => %{"type" => "integer"}}, "required" => ["n"]},
+      call: fn ctx, %{"n" => n} -> send(ctx.deps.owner, {:consumer_effect, n}); "saved" end)
+    continuation = %{durability: :ephemeral, expires_at: nil, lease_ms: 60_000,
+      definition: %{"id" => "custom", "version" => "1"}, policy: %{"id" => "custom", "version" => "1"}, model_ref: %{"id" => "custom", "version" => "1"},
+      model_codec: %{dump: fn model -> {:ok, %{"index" => model.index}} end, load: fn model, %{"index" => index} -> {:ok, %{model | index: index}} end}}
+    server = start_supervised!({Server, agent: ExAgent.new(model: %CustomModel{}, tools: [tool]), agent_id: "custom", namespace: "consumer", store: {CustomStore, __MODULE__}, continuation: continuation, pubsub: {CustomPubSub, self()}})
+    opts = [permissions: Permissions.new!(default: :ask), deps: %{owner: self()}]
+    assert {:ok, %{status: :paused}} = Server.chat(server, "input", opts)
+    topic = Event.agent_topic("custom", "consumer")
+    assert_receive {:custom_event, ^topic, %Event{type: :run_paused}}
+    refute_receive {:consumer_effect, _}
+    {:ok, %{record: record}} = Server.continuation(server)
+    [{id, approval}] = Enum.to_list(record["execution"]["progress"]["approvals"])
+    assert {:ok, _} = Server.decide(server, :approve, record_id: record["record_id"], revision: record["revision"], operation_id: "approve", approval_id: id, payload_hash: approval["payload_hash"], actor: :host, authorize: fn :host, :approve, _ -> {:ok, "human"} end)
+    assert {:ok, %{output: "custom done", request_count: 2, tool_calls: 1}} = Server.resume(server, opts)
+    assert_receive {:consumer_effect, 2}
+    refute_receive {:consumer_effect, _}
+  end
+end
