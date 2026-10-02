@@ -156,9 +156,10 @@ continuo, cron, fallback para obtener verde ni parte implícita de `mix test`.
    cualificación con builds privados. Ejecutar primero compile/focales stock TCP y
    negativos sin credenciales. Nunca probar una copia de ROOT que sigue editándose.
 2. Fijar endpoint, ID exacto, API/perfiles y opciones; consultar evidencia actual de
-   capacidades y precio. El mínimo aceptado de2026-09-27 es OpenRouter
-   `openai/gpt-4o-mini`, stock1.24/OpenAIChat, chat_tools_v1 y controles native
-   separados. Luna none tiene13/14 (length_stream no cualificado); GLM5.3Flash y
+   capacidades y precio. El mínimo OpenRouter `openai/gpt-4o-mini`, OpenAIChat,
+   chat_tools_v1 y controles native separados se recalifica el 2026-10-02 con
+   stock ReqLLM 1.26: 14/14 casos, 17 admisiones / 3 efectos. Los probes históricos
+   1.24 mantienen su identidad: Luna none tiene13/14 (length_stream no cualificado); GLM5.3Flash y
    DeepSeek4.1Flash sólo un control de texto buffered cada uno. Reasoning opcional
    no demuestra none y obligatorio no permite falsear capabilities.
 3. Activar explícitamente una **nueva ola** y selección de casos antes del primer

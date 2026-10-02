@@ -75,7 +75,7 @@ remain extension points. Tools, Ecto-tool output and streaming require the expli
 `chat_tools_v1` profile below. Its mandatory arguments envelope, history binding,
 normalized usage/estimated cost and bounded host postdecode cleanup are qualified
 offline; fourteen live cases also qualify the minimal GPT-4o-mini/OpenRouter
-Chat profile on stock ReqLLM1.24, Elixir1.20/OTP29. Other tools/stream profiles,
+Chat profile on stock ReqLLM 1.26, Elixir 1.20/OTP 29. Other tools/stream profiles,
 affected Anthropic reasoning/continuation
 stay closed. Native JSON Schema is separately opt-in through
 `output_profile: :chat_json_schema_v1` and agent `output_mode: :native`, with local
@@ -83,8 +83,8 @@ schema/Ecto validation and no remote strict guarantee. There is no legacy wire f
 hard-RAM/predecode promise. See the migration guide and roadmap for exact limits;
 durable C7 has real PostgreSQL/VM qualification in its declared profile. Langfuse
 and Opik have equivalent native/API/UI acceptance for the finite A10 scenario.
-Both remote offline suites pass; the overall compatibility run remains red due
-to strict warnings in stock dependencies. Versioning and publication remain pending.
+The status page records the current runtime checks and corrective tests.
+Strict stock-dependency diagnostics, versioning and publication remain pending.
 
 ## Installation
 
@@ -272,7 +272,7 @@ host request budget in sync, `stream_text` and `run_stream`; deltas are provisio
 No automatic tool fallback or JSON repair is performed.
 
 Stock stream objects become semantic JSON text in history, not original bytes.
-Stock Chat1.24 may discard a refusal field beside otherwise valid JSON: that JSON
+Stock Chat 1.26 may discard a refusal field beside otherwise valid JSON: that JSON
 can produce a locally valid output. Exposed refusals, absent/invalid output and
 incomplete terminals fail; total wire refusal detection is not promised. See the
 [migration guide](docs/guides/migration.md) for exact qualification and limits.

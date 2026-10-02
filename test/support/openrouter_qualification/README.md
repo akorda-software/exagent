@@ -4,7 +4,9 @@ Integrated from G2's validated portable delivery into
 `test/support/openrouter_qualification/`. Its six executable files are `run.py`,
 `entry.exs`, `g2.exs`, `input_budget.exs`, `synthetic.exs` and `text_probe.exs`.
 No new package, runtime framework or dependency is required: Python3, Elixir and
-the project's stock ReqLLM1.24 graph are already used by the validated harness.
+the project's stock ReqLLM1.26 graph are used by the current harness. Its entry
+checks the exact release before Model IO and records the runtime version in the
+manifest; historical1.24 receipts remain evidence of their original executions.
 
 ## Running the gate
 

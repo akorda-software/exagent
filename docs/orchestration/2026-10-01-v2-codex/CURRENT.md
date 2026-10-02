@@ -6,6 +6,23 @@ El usuario autorizó commit/push/PR; sin bump, tag, merge ni publicación en Hex
 ReqLLM oficial stock, R1.2 aceptado, C7 incluido, guards intactos.
 Una revisión máxima por objetivo; sin re-review ni reruns rutinarios del padre.
 
+## ReqLLM 1.26 — verificación cerrada
+
+Lock: ReqLLM 1.26.0 y catálogo llm_db 2026.9.8 requerido; otros entries conservados.
+Guards/accounting/codecs intactos. Anthropic conserva provider_block: comprobar dato
+público, guard preIO y rechazo sin soporte canónico. Cache read/write: 19 focales pasan.
+Rutina local: nueve fases exit 0; FULL 1.20, 2.177 pases / 0 fallos / 28 excl.
+FULL 1.18: 2.176 pases / 1 fallo de readiness / 28 excl, conservado. La barrera de
+100 ms precedía a la cancelación; Model controlado de 150 ms demuestra el oráculo
+incorrecto. Usar readiness 1.000 ms de sus vecinos; runtime y DOWN intactos.
+12 ownership + control pasan ambos runtimes; no nuevo FULL por el cambio del test.
+G2 nuevo 14/14, 17 requests / 3 efectos / USD 0.425 reservado; copia privada de app
+18/18 en una ola, 36 requests / USD 0.90 reservado y 15 offline. Original intacta.
+PG 17.4 nuevo: 14 fases / cleanup pasan. Ocho grafos limpios: 56 contratos pasan,
+46 comandos exit 0; strict upstream rojo. Docs/TAR final conservan runtime exacto.
+La evidencia 1.24 conserva identidad; G4 cloud reutilizado, sin otra ola.
+Recibo: [REQ-LLM126](REQ-LLM126.md). Sin Hex/bump/tag/merge ni cambio global.
+
 ## Documentación para personas y agentes
 
 Encargo explícito posterior al gate local: portada ExDoc y diez guías por tarea,
@@ -49,8 +66,8 @@ Originales y recibos: /tmp/opencode/exagent-v2-codex-t6qgpstl/ci030/.
 
 | Gate | Evidencia |
 |---|---|
-| G1 FULL actual |2176pases/0fallos/28excl ambos runtimes; FULL0192157/28/exit1 conservado como histórico |
-| G2 real |GPT-4o-mini/OpenRouter14/14,17requests/3efectos,USD0.425reserva; sin factura observada |
+| G1 ReqLLM 1.26 | FULL 1.20: 2177/0/28; FULL 1.18: 2176/1/28, fallo readiness corregido con 13 focales por runtime |
+| G2 real 1.26 | GPT-4o-mini/OpenRouter 14/14, 17 requests / 3 efectos, USD 0.425 reservado; sin factura observada |
 | E2E consumidor028 |18escenarios reales,40admisiones/USD1.00reserva; initial13/18 y cinco retries preservados |
 | G3 SQL |PG17.4,14fases,ACKperdido/dosVMs/FlowA8/restart/recover/backup; cleanup observado |
 | G4 Langfuse y Opik |Cada uno mismoA10 nativo/API33/33,667attrs/12usage; UI12casos/248attrs |

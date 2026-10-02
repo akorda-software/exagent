@@ -45,7 +45,7 @@ unit = opts[:reserve_usd] || minimum_unit
 true =
   max_count in 1..80 and max_usd > 0 and max_usd <= 5 and unit >= minimum_unit and unit <= max_usd
 
-true = to_string(Application.spec(:req_llm, :vsn)) == "1.24.0"
+true = to_string(Application.spec(:req_llm, :vsn)) == "1.26.0"
 key = if live, do: System.fetch_env!("OPENROUTER_API_KEY"), else: "synthetic-not-a-credential"
 true = byte_size(key) > 0
 :ok = File.mkdir(artifact)
@@ -199,7 +199,7 @@ manifest = %{
   runtime: %{
     elixir: System.version(),
     otp: to_string(:erlang.system_info(:otp_release)),
-    req_llm: "1.24.0"
+    req_llm: to_string(Application.spec(:req_llm, :vsn))
   },
   time_utc: DateTime.utc_now()
 }

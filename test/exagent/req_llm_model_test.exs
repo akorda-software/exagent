@@ -117,6 +117,47 @@ defmodule ExAgent.ReqLLMModelTest do
     refute_receive {:http, _, _, _}, 0
   end
 
+  test "stock cache read/write aliases remain distinct without double-counting input or reasoning" do
+    {status, body} = text("cached response")
+
+    body =
+      Map.put(body, "usage", %{
+        "prompt_tokens" => 10,
+        "completion_tokens" => 2,
+        "total_tokens" => 12,
+        "prompt_tokens_details" => %{"cached_tokens" => 3, "cache_write_tokens" => 2},
+        "completion_tokens_details" => %{"reasoning_tokens" => 1}
+      })
+
+    model = model([{status, body}, {status, body}])
+
+    assert {:ok, stock} =
+             ReqLLM.generate_text(model.model, "hello",
+               api_key: model.api_key,
+               base_url: model.base_url,
+               max_retries: 0,
+               req_http_options: model.http_options
+             )
+
+    public = ReqLLM.Response.usage(stock)
+    assert public.cached_tokens == 3
+    assert public.cache_creation_tokens == 2
+    normalized = ReqLLM.Usage.normalize(public)
+    assert normalized.cache_read_tokens == public.cached_tokens
+    assert normalized.cache_write_tokens == public.cache_creation_tokens
+
+    assert {:ok, response, _} = Model.request(model, [request()], nil, params())
+    assert {response.usage.input_tokens, response.usage.output_tokens} == {10, 2}
+    assert response.usage.details["cached_tokens"] == 3
+    assert response.usage.details["cache_creation_input_tokens"] == 2
+    assert response.usage.details["reasoning_tokens"] == 1
+    assert response.usage.accounting["quality"] == "normalized"
+    assert response.usage.accounting["provider_presence"] == "unknown"
+    assert_receive {:http, 0, _, _}
+    assert_receive {:http, 1, _, _}
+    refute_receive {:http, _, _, _}, 0
+  end
+
   test "run rejects tool batches before IO until stock argument fidelity is available" do
     first =
       chat(

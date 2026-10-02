@@ -8,13 +8,13 @@ bump, tag, merge to `main` or Hex publication has been performed.
 
 | Boundary | Evidence | Scope |
 |---|---|---|
-| Offline runtime | 2,176 passes / 0 failures / 28 exclusions on both remote runtime targets; the local routine also passes. | TestModel and fixtures, not real-provider compatibility. |
+| Offline runtime | ReqLLM 1.26: local 1.20 suite has 2,177 passes / zero failures / 28 exclusions. The 1.18 suite has one startup-assertion failure, corrected with 13 passing focal cases on each runtime. | Preserve the original 1.18 failure; the corrected full suite was not rerun. TestModel and fixtures, not real-provider compatibility. |
 | Runtime targets | Elixir 1.18 / OTP 28 and Elixir 1.20 / OTP 29; strict test compile passes on both. | Tested combinations, not every patch release or dependency graph. |
-| Real model | G2: 14/14 cases, 17 requests, 3 effects through stock ReqLLM 1.24, GPT-4o-mini/OpenRouter Chat tools profile. | Other providers, reasoning families and modalities remain subject to their guards. |
-| Real consumer | 18 application E2E scenarios accepted, with the initial 13/18 receipt and five causal retries preserved. | The authorized Phoenix consumer, 40 admissions; no observed invoice. |
-| Durable recovery | PostgreSQL 17.4, 14 phases: lost COMMIT ACK, competing resumers, fresh-VM resume, explicit recovery and backup/restore. | Declared single-database/host profile, not universal HA or external exactly-once effects. |
+| Real model | Fresh ReqLLM 1.26 G2: 14/14 cases, 17 requests, 3 effects; GPT-4o-mini/OpenRouter Chat tools profile. | Other providers, reasoning families and modalities remain subject to their guards. |
+| Real consumer | Fresh ReqLLM 1.26: all 18 application E2E scenarios pass in one wave; 15 offline cases also pass. | Private copy of the authorized Phoenix consumer; 36 admissions / USD 0.90 reserved, no observed invoice. The original application is unchanged. |
+| Durable recovery | Fresh PostgreSQL 17.4 qualification: 14 phases, including lost COMMIT ACK, competing resumers, fresh-VM resume, explicit recovery and backup/restore; cleanup confirmed. | Declared single-database/host profile, not universal HA or external exactly-once effects. |
 | Langfuse and Opik | Each: native transport + API 33/33 observations, 667 attributes, 12 model usages; UI 12 cases / 248 attributes. | Same finite A10 acceptance criteria. Content off; synthetic TestModel tokens. |
-| Package consumers | Eight clean graphs across two runtimes, 56 contract checks and 46 commands pass. | Functional acceptance; upstream strict warnings remain red. |
+| Package consumers | Fresh ReqLLM 1.26: eight clean graphs across two runtimes, 56 contract checks and 46 commands pass. | Functional acceptance; upstream strict warnings remain red. |
 | Integrations | Official MCP SDK 2.2.0: five profiles; LiveViewTest/Oban SQL: six cases plus crash/recovery. | Qualified recipes, not every deployment combination. |
 | Load and cleanup | Finite TestModel load/soak/saturation and owned-resource cleanup. | No LLM latency SLO, cloud availability or upstream predecode RAM guarantee. |
 
@@ -39,6 +39,28 @@ The local `bin/check` routine subsequently passed all eight phases. It took
 **33m44s**, including a 1,979.7-second suite, almost entirely synchronous work.
 This does not demonstrate a 20× local speedup. New documentation checks are
 recorded separately; they do not relabel an old TAR or test receipt as new evidence.
+
+## ReqLLM 1.26 qualification
+
+The candidate requires ReqLLM 1.26.0 and its llm_db 2026.9.8 catalogue. The fresh
+local routine passes all nine phases, including the complete 1.20 suite, ExDoc,
+link readback, TAR and isolation. Fresh G2, application E2E, PostgreSQL and clean
+consumer results are listed above. Historical 1.24 receipts retain their identity.
+
+The 1.18 integrated run executes all 2,205 cases: 2,176 pass, one fails and 28 are
+excluded. The failure is a 100 ms tool-readiness assertion before owner-death
+cancellation, using TestModel. A controlled 150 ms startup reproduces it; the
+existing 1,000 ms readiness barrier used by neighbouring ownership tests passes.
+The cancellation assertion and runtime remain unchanged. All 12 ownership cases
+plus that slow-start control pass on both runtimes; the original full-suite failure
+is retained, with no claim of a second green full run.
+
+Argument, accounting, continuation and capability guards remain in place. Stock
+Anthropic now preserves redacted provider blocks; ExAgent rejects their unqualified
+continuation explicitly. Cache reads/writes remain separate without double-counting
+inclusive input or reasoning. This update does not expand supported profiles.
+Langfuse/Opik retain their previous native/API/UI qualification; their SDK,
+exporter and ExAgent bridge are unchanged, with local tests exercised by this run.
 
 ## What remains before publication
 

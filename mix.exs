@@ -53,7 +53,7 @@ defmodule ExAgent.MixProject do
 
   defp deps do
     [
-      {:req_llm, "~> 1.24.0"},
+      {:req_llm, "~> 1.26.0"},
       {:req, "~> 0.7.4"},
       {:finch, "~> 0.22"},
       # Decoder floors protect library consumers too; dependency lockfiles do

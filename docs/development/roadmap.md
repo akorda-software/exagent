@@ -19,6 +19,26 @@ conservan contexto fechado. Su lectura como contexto no amplía un encargo.
 y [flujo simplificado](execution-flow.md). Los siguientes hitos fechados conservan
 evidencia, no reactivan investigaciones, revisiones ni probes del padre ya cerrados.
 
+**ReqLLM 1.26, 2026-10-02 — verificación cerrada:** solicitud explícita del usuario;
+el lock actualiza sólo ReqLLM 1.26.0 y llm_db 2026.9.8 requerido. La caracterización
+Anthropic comprueba el bloque público preservado, guard thinking sin IO y rechazo
+del contenido sin continuación cualificada. Nueva regresión de cache read/write;
+19 focales pasan. Accounting, codecs y guards conservados. G2 nuevo 14/14 con
+17 requests / 3 efectos; consumidor privado 18/18 en una ola, 36 requests /
+USD 0.90 reservado y 15 offline, sin cambios en la app original. PG 17.4 nuevo:
+14 fases y cleanup pasan. Rutina local: nueve fases exit 0, FULL 1.20 con
+2.177 pases / cero fallos / 28 exclusiones, 1.999,3 s; total 2.052,50 s.
+FULL 1.18: 2.176 pases / un fallo de readiness / 28 exclusiones, 2.013,4 s.
+La espera de arranque de una tool no tiene contrato de 100 ms: negativo controlado
+con Model de 150 ms falla; la barrera de 1.000 ms ya usada por sus vecinos permite
+cancelación observada en 0 ms. Doce ownership + ese control pasan en ambos runtimes;
+runtime y assertion de cancelación intactos, sin renombrar la suite roja ni rerun
+completo por este cambio del test. TAR de cualificación: 167 archivos exactos,
+ocho consumidores limpios / 56 contratos pasan / 46 comandos exit 0. Diagnóstico
+estricto permanece rojo sólo por TOML/WebSockex/gproc. El TAR documental final
+conserva la fuente runtime cualificada. Recibo: REQ-LLM126 en el relevo vigente;
+sin nueva ola cloud, bump/tag/Hex ni cambios globales.
+
 **Rutina local2026-10-02:** el usuario elige validar antes de commit/push en su
 máquina y evitar suites automáticas por push/PR. `bin/check` reúne formato,
 compile estricto/probes, suite offline, ExDoc y TAR/aislamiento; consumidores

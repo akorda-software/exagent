@@ -146,7 +146,9 @@ defmodule ExAgent.ServerOwnershipTest do
       )
 
     assert {:ok, _} = Server.send_message(server, "go")
-    assert_receive {:tool, worker}
+    # Wait for tool readiness before measuring owner-death cancellation, just
+    # like the model-worker barriers above. Startup has no 100 ms latency contract.
+    assert_receive {:tool, worker}, 1000
     ref = Process.monitor(worker)
     run = :sys.get_state(server).current.pid
 

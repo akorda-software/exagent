@@ -5,6 +5,24 @@ or published. [Design decisions](../architecture/design.md) record the selected
 contracts; [project status](../status.md) distinguishes accepted behavior and
 pending gates. Do not infer real-backend or consumer compatibility from this guide.
 
+## ReqLLM 1.26 dependency update
+
+The current candidate requires `req_llm ~> 1.26.0` and resolves the required
+`llm_db` catalogue to 2026.9.8. Update your application's dependency lock and run
+its integration checks. The older 1.24 qualification records below remain dated
+evidence; they do not certify the newer dependency graph.
+
+Existing tool/output profiles, argument envelopes, continuation codecs, snapshots
+and accounting quality remain unchanged. New upstream usage metadata does not
+make this adapter's normalized totals observed provider counters. Cache reads and
+writes remain separate; inclusive input and reasoning already included in output
+must not be added twice.
+
+ReqLLM now preserves Anthropic `redacted_thinking` as opaque provider blocks.
+ExAgent's thinking/continuation profile is still unqualified: thinking options
+reject before IO, and an unexpected returned provider block rejects explicitly
+instead of being silently dropped. This update does not enable that profile.
+
 ## Upgrade checklist
 
 Start with the changes your consumer actually uses. The sections below preserve
@@ -30,7 +48,7 @@ fixture-only evidence is not a substitute for those later receipts.
 
 ## Final tool arguments and streaming diagnostics
 
-The qualified Chat profile consumes one stock ReqLLM1.24 final response. A valid
+The qualified Chat profile consumes one stock ReqLLM final response. A valid
 final tool call may retain `invalid_arguments`, `unparseable_arguments` and
 `raw_arguments` diagnostics from its initial incomplete fragment. These are kept
 in portable metadata; do not classify the final call using those flags alone.
@@ -546,7 +564,7 @@ Buffered text and public streaming objects become existing Text parts containing
 JSON; whitespace/key order may differ, semantic data and continuation2 remain.
 No new message/snapshot version is required. A refusal exposed through the public
 ReqLLM projection rejects; malformed/non-object/truncated output and incomplete
-terminals never finalize. **Stock Chat1.24 may discard a wire refusal field beside
+terminals never finalize. **Stock Chat 1.26 may discard a wire refusal field beside
 valid content**: public refusals/content/metadata/provider_meta/finish_reason can
 be identical to an ordinary valid response, which can produce a locally valid
 output. No total wire-refusal detection is promised. G2 and fresh review are
@@ -585,7 +603,8 @@ message/snapshot format change is part of R2 base; native output remains R2.3.
 
 ## ReqLLM dependency and runtime floor (R1.1)
 
-This checkout adds `req_llm ~> 1.24.0`, resolved to 1.24.0. Its mandatory
+The original dependency integration added `req_llm ~> 1.24.0`, resolved to1.24.0.
+The current requirement is documented above. Its mandatory
 `llm_db >= 2026.9.3` dependency requires Elixir 1.18, so consumers on 1.17 must
 upgrade before adopting this major. The manifest now requires `~> 1.18`;
 qualification targets are 1.18/OTP28 and 1.20/OTP29, with exact executed versions
@@ -653,7 +672,7 @@ Removed parser tests are replaced by ExAgent/public stock boundary tests where
 the guarantee remains. Predecode byte bounds and raw-argument strings are no longer
 contracts (8.22); use postdecode stream limits and logical codec-tagged args.
 Validation covers **all semantic calls exposed by stock ReqLLM**, not wire entries
-discarded upstream. Stock1.24 drops an id-only entry, null entry, or function name
+discarded upstream. Stock 1.26 drops an id-only entry, null entry, or function name
 without args/ID from a tool_calls array, with no error/metadata signal in the
 public Response. A response with one valid call and such a lost sibling can execute
 the one valid, authorized call; ExAgent cannot promise wire-batch rejection or count
@@ -692,10 +711,12 @@ Changing provider/model/endpoint rejects a bound continuation. Older messages
 still load, but older writers may discard new fields: preserve checkpoints before
 downgrading and do not claim fidelity from an old reader.
 
-**Restrictions:** stock1.24 loses usage presence; R1.5 below qualifies its public
-normalized metrics instead of reconstructing presence. Unqualified ReqLLM tools reject, and Google also loses thought
+**Restrictions:** R1.5 below qualifies public normalized metrics; the new 1.26
+usage-presence metadata has not been qualified as observed accounting for this
+adapter. Unqualified ReqLLM tools reject, and Google also loses thought
 signatures. Anthropic thinking-enabled models/options and any Response continuation
-reject before IO due to lost redacted blocks; plain single-turn input requires
+reject before IO until a complete provider-block round-trip is qualified;
+plain single-turn input requires
 reasoning explicitly false in the resolved model. R1.3 remains partially blocked,
 not complete. Streaming is limited to the explicit Chat profile below, with
 postdecode operational limits rather than a public predecode RAM guarantee.

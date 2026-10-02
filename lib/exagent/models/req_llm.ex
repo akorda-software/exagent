@@ -23,7 +23,9 @@ defmodule ExAgent.Models.ReqLLM do
   limited to the explicit `:chat_tools_v1` profile below and rejects HTTP `:adapter`
   injection (stock streaming uses its own public transport path).
 
-  Stock ReqLLM 1.24 loses original usage presence. Public Response metrics are
+  Public ReqLLM Response metrics retain this adapter's conservative normalized
+  accounting contract. ReqLLM 1.26 adds usage-presence metadata, but its complete
+  provider/surface semantics are not qualified as observed host accounting. Metrics are
   exposed as `Usage.accounting` quality `"normalized"`, including zero; unavailable
   metrics remain nil. Public USD totals are estimates converted once to cents.
   Strict metric limits reject this declared normalized contract before IO. Opt in
@@ -51,7 +53,9 @@ defmodule ExAgent.Models.ReqLLM do
   stock normalization can turn non-object arguments into `{}`. This is offline
   qualification only; consult design8.23 and migration. Custom Model and Test
   remain independent. Anthropic thinking-enabled
-  requests and response continuation reject because redacted blocks can be lost;
+  requests and response continuation remain unqualified. ReqLLM 1.26 preserves
+  opaque redacted provider blocks; this adapter rejects them explicitly until a
+  complete canonical round-trip is qualified;
   accepting the `:thinking` option for validation does not enable that route.
 
   Receive timeout precedence is request `ModelSettings.timeout`, instance
@@ -95,7 +99,7 @@ defmodule ExAgent.Models.ReqLLM do
 
   Native stream objects exposed by stock become canonical JSON Text history;
   original JSON whitespace/key ordering is not promised. Any publicly exposed
-  refusal rejects. Stock Chat 1.24 can discard a wire refusal field alongside
+  refusal rejects. Stock Chat 1.26 can discard a wire refusal field alongside
   valid JSON content, so that content can still produce a locally valid output;
   refusal detection is not a wire-fidelity guarantee. A refusal without valid
   output, malformed/non-object JSON and incomplete terminals never succeed.

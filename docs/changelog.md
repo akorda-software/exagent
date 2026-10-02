@@ -8,6 +8,16 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Candidate qualification — 2026-10-02
 
+- Update the unreleased candidate to official ReqLLM 1.26.0 and its required
+  llm_db 2026.9.8 catalogue, retaining other compatible root lock entries. Keep
+  current tool/output/accounting/continuation guards. Characterize preserved
+  Anthropic redacted provider blocks and reject their unqualified continuation;
+  verify cache read/write aliases without double-counting input or reasoning.
+  Record fresh qualification separately from the historical 1.24 receipts.
+  Complete local, real-model, application, SQL and clean-consumer checks. Correct
+  the tool-owner test's startup wait using the existing readiness barrier;
+  preserve its cancellation assertion and the original 1.18 integrated failure.
+
 - Add an ExDoc documentation home and ten task guides for first runs, tools/output,
   models/limits, runtime/events, durability/approvals, coordination, testing, MCP,
   troubleshooting and coding-agent integration. Keep native search, keyboard

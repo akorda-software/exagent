@@ -13,6 +13,39 @@
 > Conserva sus reproducciones y guards como estado runtime, no como aceptación
 > del nuevo contrato. C7 y los contratos de autoridad/recuperación permanecen.
 
+## Actualización stock ReqLLM 1.26 (2026-10-02)
+
+**Problema y autorización:** el usuario solicita adoptar ReqLLM 1.26.0 y validar
+la integración antes de publicar v2. La frontera inicial se aceptó con 1.24.0;
+su requisito limitado a parches excluía las nuevas versiones. 1.26 requiere
+llm_db 2026.9.8.
+
+**Decisión y beneficio:** usar versiones Hex oficiales `req_llm ~> 1.26.0` y su
+catálogo requerido. En el lock raíz sólo cambian esos dos paquetes; se conservan
+Req, Finch, Mint y las demás entradas compatibles. Los consumidores sin lock
+resuelven sus propias versiones y requieren aceptación independiente. Se reciben
+correcciones upstream de uso/caché, esquemas y transporte sin fork ni parser wire.
+
+**Alternativas:** conservar 1.24 mantiene una base anterior a esos cambios;
+permitir todos los minors sin comprobarlos no acepta sus contratos. Se mantiene
+una base actualizada, limitada a parches, con pruebas públicas sobre la versión elegida.
+
+**Impacto y migración:** no se habilitan perfiles adicionales ni cambian codecs,
+snapshots, autoridad o límites. El accounting permanece normalized/estimated;
+nuevos campos upstream no convierten por sí solos números en observados. 1.26
+conserva bloques Anthropic `redacted_thinking` como `provider_block`: el guard de
+thinking sigue rechazando antes de IO y un bloque recibido sin esa opción
+rechaza explícitamente, en vez de desaparecer de la continuación canónica.
+El requisito de dependencia cambia dentro de la candidata v2 aún sin publicar;
+no hay bump/tag ni publicación del nominal 1.3.0.
+
+**Verificación:** la caracterización anterior detecta el cambio de Anthropic;
+su reemplazo comprueba el bloque público exacto, cero IO con thinking y rechazo
+del bloque devuelto. Una nueva regresión comprueba cache read/write por separado,
+input inclusivo y reasoning sin doble suma. Suite, runtimes, artefacto, consumidores
+y perfil real se registran por fuente en el recibo de la actualización; las
+aceptaciones históricas 1.24 no se renombran como ejecuciones 1.26.
+
 ## Coste de normalización JSON y canonicalización (2026-10-02; CI030)
 
 **Problema demostrado:** el CI completo descubre vencimientos durante pruebas

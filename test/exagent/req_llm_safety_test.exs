@@ -183,7 +183,7 @@ defmodule ExAgent.ReqLLMSafetyTest do
   end
 
   @tag :req_llm_characterization
-  test "stock Anthropic loses redacted reasoning, so thinking requests must reject before IO" do
+  test "stock preserves redacted Anthropic blocks while the unqualified thinking guard stays closed" do
     body = %{
       "id" => "redacted",
       "type" => "message",
@@ -199,7 +199,15 @@ defmodule ExAgent.ReqLLMSafetyTest do
 
     m = model([body, body], model: spec(:anthropic))
     assert {:ok, stock} = stock(m)
-    refute Jason.encode!(stock) =~ "opaque-redacted-block"
+
+    assert [
+             %ReqLLM.Message.ContentPart{
+               type: :provider_block,
+               data: %{"type" => "redacted_thinking", "data" => "opaque-redacted-block"}
+             },
+             %ReqLLM.Message.ContentPart{type: :text, text: "done"}
+           ] = stock.message.content
+
     assert_receive {:request, 0}
     m = %{m | provider_options: [thinking: %{type: "enabled", budget_tokens: 1024}]}
 
@@ -211,6 +219,19 @@ defmodule ExAgent.ReqLLMSafetyTest do
                %ModelRequestParameters{}
              )
 
+    refute_receive {:request, _}, 0
+
+    # Without thinking options, a returned opaque provider block must still
+    # reject explicitly rather than be dropped from canonical continuation.
+    assert {:error, %ExAgent.RequestError{reason: {:unsupported, :output_content}}} =
+             Model.request(
+               %{m | provider_options: []},
+               [Message.new_request([%Part.User{content: "go"}])],
+               nil,
+               %ModelRequestParameters{}
+             )
+
+    assert_receive {:request, 1}
     refute_receive {:request, _}, 0
   end
 end
