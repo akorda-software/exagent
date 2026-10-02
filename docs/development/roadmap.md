@@ -30,6 +30,21 @@ y total2024.1s. Casi todo el tiempo sync; no se demuestra aceleración20×.
 Control negativo whitespace exit2 antes de Mix y opciones desconocidas exit64.
 Fuente runtime intacta respecto a f69aede; sin re-review ni nuevas llamadas reales.
 
+**Documentación de uso2026-10-02:** encargo explícito de páginas útiles para personas
+y agentes. Portada ExDoc, diez guías por tarea, mapa de APIs para agentes y grupos
+de navegación por uso/integración/referencia/mantenimiento. El estado actual se
+resume sin pendientes obsoletos; su cuerpo anterior queda íntegro en el archivo.
+HTML/EPUB conservan ExDoc stock; el formatter Markdown público reubica los enlaces
+relativos y protege snippets, con regresión de tooling. `llms.txt` sigue siendo
+generado por ExDoc. `bin/check` incorpora `docs-links`; este delta documental se
+verifica con sus gates, sin volver a ejecutar FULL ni cualificaciones externas.
+ExDoc estricto exit0:116HTML/5135targets,114Markdown(incluido llms)/811targets
+y114XHTML EPUB/2837targets, cero enlaces/anchors/recursos locales rotos.
+Probe17casos:30bloques ejecutados y11setup parseados, cero warnings. Navegador:
+36vistas desktop claro/oscuro y móvil, búsqueda/teclado/sidebar pasan sin errores.
+El TAR documental y sus checks de metadata se sellan en el recibo del objetivo;
+no se sustituyen los SHA del CI o de las candidatas funcionales anteriores.
+
 **Git/CI030 autorizado2026-10-02:** commit inicial `b709d57` en
 `codex/v2-candidate-029`, [PR1 borrador](https://github.com/akorda-software/exagent/pull/1)
 y [run37008908156](https://github.com/akorda-software/exagent/actions/runs/37008908156).

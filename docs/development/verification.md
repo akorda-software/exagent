@@ -269,6 +269,7 @@ justificada, con workload fijado antes y sin seleccionar el mejor intento.
 
 ```bash
 EXAGENT_OFFLINE=1 MIX_ENV=dev mix docs --warnings-as-errors --output /tmp/opencode/exagent-docs
+python3 test/support/documentation_site.py /tmp/opencode/exagent-docs
 ```
 
 El probe documental selecciona codeblocks reales y falla si faltan/son ambiguos.
@@ -282,6 +283,16 @@ Al reorganizar páginas comprobar también:
 3. Extras/grupos ExDoc y nombres HTML sin colisiones de basename.
 4. Archivos documentales incluidos en `mix.exs` y en el TAR real.
 5. Ausencia de registros de ejecución archivados en el paquete de uso habitual.
+
+La portada y las guías de tareas usan ExDoc, con búsqueda/teclas/temas propios del
+generador y CSS local. ExDoc0.40.3 genera `llms.txt` y Markdown; su formatter público
+de `docs/markdown_formatter.exs` reubica los enlaces de los fuentes a los nombres aplanados,
+sin tocar bloques de código. El lector comprueba también esas rutas y recursos,
+además de los anchors HTML y las rutas/anchors internos del EPUB. `bin/check`
+incluye el gate `docs-links` después de ExDoc.
+Para previsualizar enlaces a la fuente en una candidata, indicar
+`EXAGENT_DOCS_SOURCE_REF=nombre-de-rama`; el valor por defecto es `main` hasta que
+se elija el tag de publicación. No señalar al tag1.3.0 como si contuviera v2.
 
 ## Consumidores de bytes del paquete
 

@@ -91,6 +91,7 @@ run suite mix_cli test --warnings-as-errors --seed 37556
 # ExDoc is a dev-only dependency. Use a separate build from the test VM.
 export MIX_ENV=dev MIX_BUILD_PATH="$EXAGENT_CHECK_ROOT/_build/dev"
 run docs mix_cli docs --warnings-as-errors --output "$evidence/docs"
+run docs-links python3 test/support/documentation_site.py "$evidence/docs"
 run package mix_cli hex.build --output "$evidence/exagent.tar"
 sha256sum "$evidence/exagent.tar" > "$evidence/exagent.tar.sha256"
 run package-isolation elixir test/support/package_acceptance_isolation.exs "$evidence/exagent.tar"

@@ -7,10 +7,13 @@ No tracing service is required for the ordinary core, Server or Session.
 This guide describes the current optional tracing implementation. The
 [verification guide](../development/verification.md) provides runnable checks;
 [project status](../status.md) records accepted evidence and remaining limits.
-Langfuse is a provisional reference for further evaluation, not a final platform
-selection or an accepted deployment. Opik remains a comparison candidate. G4 and
-backend API/UI acceptance remain open, as defined in the
-[backend acceptance plan](../development/backend-evaluation.md).
+Langfuse and Opik have **equal native/API/UI acceptance** for the finite A10
+scenario:33 observations,667 attributes and12 model usages by API, plus the same
+12 UI cases/248 attributes. Content is disabled, so Input `null` and Output
+`undefined` in a backend preview are expected; inspect correlation, status, usage,
+quality and provenance in the attributes. This acceptance does not certify cloud
+availability, retention or billing. See the
+[backend acceptance record](../development/backend-evaluation.md).
 
 ## 1. Application setup
 

@@ -82,7 +82,9 @@ stay closed. Native JSON Schema is separately opt-in through
 schema/Ecto validation and no remote strict guarantee. There is no legacy wire fallback and no upstream
 hard-RAM/predecode promise. See the migration guide and roadmap for exact limits;
 durable C7 has real PostgreSQL/VM qualification in its declared profile. Langfuse
-visual acceptance, exact remote CI and v2 release acceptance remain pending.
+and Opik have equivalent native/API/UI acceptance for the finite A10 scenario.
+Both remote offline suites pass; the overall compatibility run remains red due
+to strict warnings in stock dependencies. Versioning and publication remain pending.
 
 ## Installation
 
@@ -601,6 +603,16 @@ fixture check, `--json <path>` for the report). Its percentiles and sampled reso
 maxima are synthetic framework evidence, not LLM latency or production SLOs.
 
 ## Documentation
+
+Start with the [documentation home](docs/home.md) or follow the
+[getting-started tutorial](docs/guides/getting-started.md). Task guides cover
+[tools/output](docs/guides/tools-and-output.md),
+[models/limits](docs/guides/models-and-limits.md),
+[runtime/events](docs/guides/runtime-and-events.md),
+[durability/approvals](docs/guides/durability-and-approvals.md),
+[coordination](docs/guides/coordination.md) and [testing](docs/guides/testing.md).
+[Coding-agent integration notes](docs/guides/agents.md) map tasks to public APIs;
+ExDoc generates `llms.txt` and Markdown pages from the same sources.
 
 For development in the source checkout, run `./bin/check` before committing and
 pushing. It checks formatting, strict compilation, finite probes, the complete

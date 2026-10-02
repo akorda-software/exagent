@@ -8,6 +8,15 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Candidate qualification — 2026-10-02
 
+- Add an ExDoc documentation home and ten task guides for first runs, tools/output,
+  models/limits, runtime/events, durability/approvals, coordination, testing, MCP,
+  troubleshooting and coding-agent integration. Keep native search, keyboard
+  navigation and themes with local styling/assets. Separate current support from
+  dated evidence and correct stale backend/CI acceptance claims. Require dev-only
+  ExDoc0.40.3 for native Markdown/llms generation; use its public custom formatter
+  to rebase flattened Markdown links while preserving snippets. Add link/resource
+  readback to the local routine. No runtime API, version or publication change.
+
 - Move routine validation to the local checkout with `bin/check`: canonical
   formatting, strict compilation, finite probes, complete offline tests, ExDoc
   and package build/isolation. Clean TAR consumers remain explicitly selectable.

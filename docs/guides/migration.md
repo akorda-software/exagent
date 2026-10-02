@@ -1,9 +1,32 @@
 # Migration to the consolidation major
 
-Draft for the implementation in this worktree. No version has been bumped or
-published. [Design decisions](../architecture/design.md) record the selected
+Migration reference for the unreleased v2 candidate. No version has been bumped
+or published. [Design decisions](../architecture/design.md) record the selected
 contracts; [project status](../status.md) distinguishes accepted behavior and
 pending gates. Do not infer real-backend or consumer compatibility from this guide.
+
+## Upgrade checklist
+
+Start with the changes your consumer actually uses. The sections below preserve
+the detailed contract decisions; stage names refer to implementation milestones,
+not additional work an application must execute.
+
+| Existing consumer behavior | Required change |
+|---|---|
+| Pattern-matches bare operational errors | Read `RunError.reason` and retain `RunError.partial`. |
+| Uses old provider helpers or implicit tools support | Resolve stock ReqLLM specs and explicitly configure the qualified profile. |
+| Treats every stream delta as final output | Deliver the successful terminal result; enumerate once. |
+| Calls tools without a validated schema/envelope | Use current Tool contracts and preserve the mandatory argument gate. |
+| Adds parent and child usage totals | Use inclusive parent totals and qualified accounting/status fields. |
+| Retries a prompt after a failed checkpoint | Retry storage only with `checkpoint/1` or the exact checkpoint token. |
+| Restores messages to replay interrupted effects | Use C7 continuation bindings and explicit effect reconciliation. |
+| Subscribes without tenant/request correlation | Match the authenticated namespace and request ID. |
+
+The [task guides](../README.md) provide shorter integration examples.
+[Support status](../status.md) is the current evidence summary: integrated reviews,
+real SQL and both backend UI gates are closed in their declared profiles; strict
+stock dependency diagnostics and release publication remain open. Historical
+fixture-only evidence is not a substitute for those later receipts.
 
 ## Final tool arguments and streaming diagnostics
 
@@ -136,8 +159,9 @@ with its exact evidence hash and `allow_evidence_deletion: true`, under normal
 administrative authorization. This permits later replacement/deletion; it neither
 deletes immediately nor asserts the old effect was reconciled. Retention limits
 can reject a command instead of evicting evidence. Local C7 integration, capacity
-and fixed-graph distribution gates have owner evidence; independent review and
-external service/clean-resolution gates remain open. See the roadmap for the
+and fixed-graph distribution gates have accepted evidence; integrated review and
+the declared external profiles are closed. Strict dependency diagnostics remain
+open. See the roadmap for the
 accepted baseline rather than treating local passes as production certification.
 
 Distinguish `status: :paused` from a successful final output. A paused stream ends;
@@ -198,8 +222,9 @@ Server from that record. Volatile queued requests are not replayed by restart.
 ## Atomic persistence data primitives (R4)
 
 R4 adds experimental data operations, not a runtime pause/approval/resume API.
-Integration on accepted R3.4 is owner-verified offline; independent integrated
-review remains pending. ETS is ephemeral; SQL protocol fixtures are not real G3.
+Integration on accepted R3.4 is verified and reviewed; G3 separately qualifies
+the real PostgreSQL17.4 profile. ETS is ephemeral; earlier SQL protocol fixtures
+remain offline evidence rather than real G3.
 
 ### Select capabilities and a trusted namespace
 
@@ -393,7 +418,7 @@ Steer inserts at the front of the volatile pending queue; it does not modify an
 active model request. Caller timeout does not cancel owned work; abort cancels the
 current run and drains the next admitted entry. Owner death loses pending work.
 
-### Current-run postdecode retention (R3.4, verification pending)
+### Current-run postdecode retention (R3.4)
 
 Agent definitions and run options now have `max_payload_bytes` P (1MiB default)
 and `max_history_bytes` H (8MiB default), integers1..64MiB. Server uses the smaller
@@ -676,7 +701,7 @@ not complete. Streaming is limited to the explicit Chat profile below, with
 postdecode operational limits rather than a public predecode RAM guarantee.
 The R1.8 migration above removes the old wrappers and duplicated transport.
 
-### Qualified streaming (R1.4 candidate)
+### Qualified streaming (R1.4)
 
 Use the same explicit `chat_tools_v1` model with `Model.request_stream/4`,
 `ExAgent.run(..., stream_text: true)` or `ExAgent.run_stream/3`. Creation is lazy:
@@ -771,7 +796,7 @@ coordination/policy data, not Usage/history, so its schema is unchanged. Restore
 integrates only new runs; it never creates ledger operations from stored history.
 
 The codec/schema migration below is unchanged. Other profiles remain guarded;
-the offline candidate and fresh-review status are recorded in the roadmap, with
+the accepted candidate and review status are recorded in the roadmap, with
 no live-provider qualification inferred from loopback tests. See design8.24.
 
 ### Qualified buffered envelope and remaining stock replan

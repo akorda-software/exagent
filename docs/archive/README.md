@@ -7,6 +7,10 @@ parte de la navegación de uso ni del paquete documental vigente. Empieza por
 
 ## Consolidación de septiembre de 2026
 
+- [Estado histórico hasta el2026-10-02](2026-10-02-status-history.md): copia íntegra
+  del estado anterior a la reorganización documental. Sus pendientes y rutas
+  pertenecen a cada fecha; el estado vigente vive en `docs/status.md`.
+
 | Documento original | Ubicación conservada | Propósito histórico |
 |---|---|---|
 | `ROADMAP.md` | [roadmap](2026-09-consolidation/roadmap.md) | Fases originales y seguimiento C0–C8/nocturno. |
