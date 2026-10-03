@@ -11,7 +11,7 @@ bump, tag, merge to `main` or Hex publication has been performed.
 | Offline runtime | Latest 1.20 suite: 2,198 passes / zero failures / 28 exclusions. Earlier dependency-baseline FULL: 2,177/0/28 on both runtimes. Latest 146 integrated cases pass on both. | The new 1.18 focal is not a new complete 1.18 run. Preserve the previous ReqLLM-only failure below. TestModel and fixtures, not real-provider compatibility. |
 | Runtime targets | Elixir 1.18 / OTP 28 and Elixir 1.20 / OTP 29; strict test compile passes on both. | Tested combinations, not every patch release or dependency graph. |
 | Real model | Updated dependencies: 12 scenarios pass initially; length sync/stream pass after correcting the stimulus. All 14 scenarios covered, 18 admissions / 3 effects. | Original refusal/stop failure retained; not a single new 14/14 wave. GPT-4o-mini/OpenRouter Chat tools profile only. |
-| Real consumer | October 3: 23 smoke scenarios plus four combined SQL/application workflows. Combined receipts accept Luna 27/27 and DeepSeek 26/27; native receipt extraction remains red. New complex scenarios pass 4/4 per model, with 46 requests / 15 synthetic effects each. Consumer precommit: 17 offline passes / 27 opt-in exclusions. | OpenRouter Chat, reasoning disabled. Complex ledgers: 70/53 admissions including causal controls, USD1.75/1.325 reserved; prior smoke ledgers remain 51/54. Invoice unobserved. Marker failures retained; not a single new 27-case wave or universal provider qualification. |
+| Real consumer | October 3: 27 scenarios accepted per model, reusing 26 unchanged cases plus the newly qualified required-header native case08. Consumer precommit: 20 offline passes /27 opt-in exclusions. Complex workflows retain their 4/4 receipts,46 requests /15 effects per model. | OpenRouter Chat, reasoning disabled. The old nullable extraction still fails. Smoke phases now Luna53/DeepSeek57; complex phases retain70/53. Invoice unobserved. No new complete27-case wave or universal provider qualification. |
 | Durable recovery | October 3 PostgreSQL 17.4: 14 phases, including lost COMMIT ACK, competing resumers, fresh-VM resume, explicit recovery and backup/restore; cleanup confirmed. | Declared single-database/host profile, not universal HA or external exactly-once effects. |
 | Langfuse and Opik | Each: prior native/API 33/33 observations, 667 attributes, 12 model usages; UI 12 cases / 248 attributes. Exporter 1.11 booleans newly verified locally. | Same finite A10 criteria. No fresh cloud/API/UI wave. Content off; synthetic TestModel tokens. |
 | Package consumers | Dependency baseline: eight clean graphs/two runtimes, 56 contracts. After the bridge change: four clean 1.20 graphs, 28 contracts and 23 commands pass. | Each identified TAR retains its own receipt. Functional acceptance; upstream strict warnings remain red. |
@@ -30,6 +30,13 @@ both runtimes. TestModel's executable AST and six runtime BEAM chunks are unchan
 so the earlier complete runtime evidence retains its scope. See the
 [alignment receipt](https://github.com/akorda-software/exagent/blob/codex/v2-candidate-029/docs/orchestration/2026-10-01-v2-codex/RELEASE-READINESS.md).
 This pass does not reopen the independent R9 review or expand provider guarantees.
+
+The subsequent [known-limit investigation](development/known-limits.md) isolates
+native extraction to the caller's optional header contract. The final E2E schema
+requires merchant/currency and case08 passes with both models, while reverting
+to nullable reproduces DeepSeek's failure. ExAgent runtime and dependency lock
+remain unchanged. Stock warnings have identified upstream fixes/release blockers;
+the strict diagnostic remains red, without a suppression or publication waiver.
 
 ## Read the CI result accurately
 
@@ -72,7 +79,9 @@ negative/lifecycle/composed-approval scenarios. Luna's initial 23/23 wave passes
 affected exact-marker controls also pass. DeepSeek's 22 accepted scenarios span
 several finite waves; native JSON receipt output still has missing merchant and
 currency despite schema validation. Its native extraction profile remains
-unqualified. No private parser, coercion, guard relaxation or model fallback is
+unqualified in that receipt. The later required-header control above qualifies
+the updated case08 without relabelling that nullable failure. No private parser,
+coercion, guard relaxation or model fallback is
 used to convert that failure to a pass. The library runtime and root lock are
 unchanged by this comparison; the earlier G2 Mini receipt remains historical.
 

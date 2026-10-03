@@ -6,6 +6,18 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Known-limit investigation — 2026-10-03
+
+- Qualify the consumer's native receipt scenario with an explicit required
+  merchant/currency changeset. Preserve the partial-upload schema and original
+  nullable failures. Both models pass the final case; nullable reversal reproduces
+  DeepSeek's failure. Add three offline consumer regressions; no library behavior,
+  provider guard, prompt, oracle or retry-policy change.
+- Identify stock warning categories and their dependency paths. Track the merged
+  TOML charlist fix awaiting publication and gproc1.3 blocked by grpcbox's range.
+  Preserve the red strict diagnostic without patches, overrides or suppression;
+  document exact upstream adoption checks and add the guide to ExDoc.
+
 ### Documentation and test-contract alignment — 2026-10-03
 
 - Correct TestModel's exhausted-script documentation and the two-argument

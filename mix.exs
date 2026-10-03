@@ -131,6 +131,7 @@ defmodule ExAgent.MixProject do
         "docs/development/framework-direction.md",
         "docs/development/verification.md",
         "docs/development/dependencies.md",
+        "docs/development/known-limits.md",
         "docs/development/real-consumer-e2e.md",
         "docs/development/testing-audit.md",
         "docs/development/execution-flow.md",

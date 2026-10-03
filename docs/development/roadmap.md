@@ -19,6 +19,19 @@ conservan contexto fechado. Su lectura como contexto no amplía un encargo.
 y [flujo simplificado](execution-flow.md). Los siguientes hitos fechados conservan
 evidencia, no reactivan investigaciones, revisiones ni probes del padre ya cerrados.
 
+**Límites conocidos,2026-10-03 — tratamiento solicitado:** NativeReceipt expresa
+merchant/currency required; demo parcial intacta, mismo prompt/oráculo y retries0.
+Final08 pasa por modelo; reversal nullable DeepSeek reproduce null. Cinco controles
+nuevos/5requests/USD0.125reserva, smoke Luna53/DeepSeek57 sin reset/refund.
+Precommit20/0/27excl;52inputs consumer idénticos a la copia probada;95inputs
+lib/config/Mix/lock raíz coincidían antes de añadir la guía a ExDoc.
+Cobertura reutilizada27/27 por modelo; no ola completa ni fiabilidad universal.
+Warnings stock categorizados: TOML15charlists/4tipos, WebSockex19pins y gproc9OTP.
+TOMLfix mergeado sin release; gproc1.3 publicado pero grpcbox exige1.2; no actualización
+compatible que deje limpio el grafo. Strictdeps sigue rojo, sin waiver/fork/override.
+[Guía](known-limits.md) y [recibo](https://github.com/akorda-software/exagent/blob/codex/v2-candidate-029/docs/orchestration/2026-10-01-v2-codex/KNOWN-LIMITS.md).
+Lib/config/lock intactos; sólo docs/ExDoc config en raíz. Sin bump/Hex/R9 nueva.
+
 **Alineación final,2026-10-03 — revisión del owner solicitada:** corregidas
 contradicciones de TestModel/script/type, contadores/identidad runtime, enlaces
 API a1.x y pendientes obsoletos C7/SQL/Langfuse/Opik. Ejemplo de agotamiento prueba
@@ -203,7 +216,7 @@ están en `docs/archive/2026-09-release-{roadmap,scope}.md`.
 | R5 | Aprobación persistida y recuperación de ejecución | R3 + R4 | C7 ordinario/composición/MCP integrado; G3/FlowA8 y Oban SQL prueban pausa/resume y recuperación explícita sin replay en sus perfiles |
 | R6 | Composición multi-agente coherente | R3; R4/R5 para pausa durable | Implementado y revisado: secuencia9/delegación10/Flow11. Final00973+11; recetas públicas PASS y A8 SQL entreVMs sobre019. FULL2157sin fallos; guards generales no demostrados siguen cerrados |
 | R7 | Observabilidad e integraciones utilizables | R1/R2; cierre sobre R5/R6 | MCP SDK5/5, binding, retrieval/job y LiveView/Oban6/6; Langfuse y Opik A10 nativo/API/UI aceptados con los mismos criterios por mandato2026-10-02 |
-| R8 | Cualificación externa, consumidores, carga y CI | R1–R7 pertinentes | G2mínimo/G3/G6 aceptados; ocho grafos56contratos pasan también remotamente. E2E app27casos: Luna27aceptados/DeepSeek26, cuatro complejos4/4por modelo; ticket nativo rojo. CI030 funcional aceptado; strictdeps RED upstream |
+| R8 | Cualificación externa, consumidores, carga y CI | R1–R7 pertinentes | G2mínimo/G3/G6 aceptados; ocho grafos56contratos pasan también remotamente. E2E app27aceptados por modelo reutilizando26+08con required header; nullable previo sigue rojo. Cuatro complejos4/4por modelo. CI030 funcional aceptado; strictdeps RED upstream |
 | R9 | Revisión final, candidata y release2.0.0 | R0–R8 aceptados | Revisión única cerrada y candidata029 preparada; PR1 borrador autorizado. CI030 funcional aceptado; run global failure sólo por diagnóstico strictdeps upstream. G5strict abierto, sin versionar ni publicar |
 
 ```text

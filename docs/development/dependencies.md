@@ -152,6 +152,9 @@ afectados. Una biblioteca publicada no distribuye su lock: los mínimos necesari
 deben estar en el manifiesto. No mezclar una actualización con bump/tag/Hex.
 
 Los avisos stock TOML/WebSockex/gproc siguen siendo un seguimiento separado.
+La [investigación posterior](known-limits.md) identifica cada categoría y su
+ruta, la corrección OTP29 publicada en gproc1.3 bloqueada por grpcbox, y el arreglo
+de charlists TOML aún sin release compatible. Versiones/lock y diagnóstico intactos.
 «Versión actual» no significa «sin avisos». No se suprimen avisos, se parchean
 dependencias ni se declara verde el diagnóstico estricto desde pases funcionales.
 Consultar [verificación](verification.md), [estado](../status.md) y

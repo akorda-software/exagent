@@ -63,6 +63,7 @@ las guías anteriores son la entrada habitual.
 | Alcance de v2 y oráculos de producción | [Release scope](development/release-scope.md), [Acceptance](development/production-acceptance.md) |
 | Rutina local, exclusiones y gates | [Verificación](development/verification.md) |
 | Versiones actuales y actualizaciones compatibles | [Dependencias](development/dependencies.md) |
+| Causa y tratamiento de límites conocidos | [Límites conocidos](development/known-limits.md) |
 | Tooling por proyecto | [Entorno](development/environment.md) |
 | E2E real y límites observados | [Consumidor real](development/real-consumer-e2e.md) |
 | Langfuse/Opik y ownership ExAgent frente a ReqLLM | [Backend evaluation](development/backend-evaluation.md) |

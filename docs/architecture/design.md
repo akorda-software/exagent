@@ -13,6 +13,30 @@
 > Conserva sus reproducciones y guards como estado runtime, no como aceptación
 > del nuevo contrato. C7 y los contratos de autoridad/recuperación permanecen.
 
+## Contrato de extracción nativa del consumidor (2026-10-03)
+
+**Problema demostrado:** el caso08 DeepSeek devolvía comercio/moneda null, válidos
+para el changeset parcial de la demo pero incorrectos para su oráculo E2E.
+El control con ambos campos requeridos pasa; volver al contrato nullable reproduce
+el fallo. La declaración del consumidor no expresaba la exigencia del escenario.
+
+**Decisión/beneficio:** usar un changeset de extracción nativa con ambos campos
+obligatorios en la fixture del consumidor. ExAgent ya refleja required/no-null
+y valida localmente; no se introduce un contrato de biblioteca nuevo. La demo
+parcial mantiene su caso de uso. El oráculo independiente sigue comprobando valores.
+
+**Alternativas/impacto/migración:** rellenar datos, relajar el oráculo o cambiar
+todos los campos opcionales de ExAgent a required ocultaría el problema o rompería
+extracciones parciales legítimas. Cambiar sólo el prompt no declararía la exigencia
+local. Sólo cambia el tipo/schema del escenario08; no hay migración de snapshots,
+guards, accounting o adapters, ni cambios de runtime/lock. Cada app declara sus
+requisitos reales en su changeset, no mediante reglas de dominio en ExAgent.
+
+**Verificación:** tres regresiones offline y caso08 real por modelo sobre la
+fixture final; cinco controles en total conservan reversal rojo, fuente y ledger.
+Ver [límites conocidos](../development/known-limits.md). Una salida requerida
+todavía necesita validación semántica; no se demuestra determinismo universal.
+
 ## Actualización stock ReqLLM 1.26 (2026-10-02)
 
 **Problema y autorización:** el usuario solicita adoptar ReqLLM 1.26.0 y validar

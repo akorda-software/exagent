@@ -96,6 +96,20 @@ consumidor y en el recibo vigente del checkout; una exclusión nunca cuenta como
 
 ## Aceptación 2026-10-03
 
+### Control posterior del límite nativo
+
+El caso08 actual usa `ChatApp.E2E.NativeReceipt` con comercio/moneda obligatorios,
+frente al `Receipt` parcial de la demo. Mismo prompt y oráculo; schema no nullable
+derivado del changeset, sin cambiar ExAgent. Los archivos finales pasan08 con
+una petición por modelo. El control de vuelta al schema nullable reproduce el
+fallo DeepSeek; los resultados anteriores de abajo conservan esa identidad.
+Precommit actual:20pases/27exclusiones. Cobertura conjunta27/27 por modelo,
+reutilizando26casos inalterados; no una ola nueva completa. Cinco controles en
+total, USD0.125reservado; smoke Luna53/60 y DeepSeek57/60, sin reset/refund.
+Detalles y límites en [límites conocidos](known-limits.md).
+
+### Recibo smoke anterior
+
 Los 23 escenarios se ejecutan para **cada modelo**, con el grafo de dependencias
 actual. Precommit consumer: **17 pases offline, cero fallos, 23 exclusiones live**.
 
@@ -199,8 +213,10 @@ Luna/DeepSeek, incluyendo todos los intentos; factura observada null.
 Todos los nueve grupos de escenarios y sus clusters PostgreSQL propios se cierran.
 Precommit final:17 pases offline, cero fallos,27 exclusiones opt-in.
 
-La cobertura conjunta alcanza **27/27 para Luna y 26/27 para DeepSeek** mediante
-recibos separados; el ticket JSON nativo 08 de la suite smoke sigue sin aceptar.
+En ese recibo complejo, la cobertura conjunta alcanzaba **27/27 para Luna y
+26/27 para DeepSeek** mediante recibos separados; el ticket JSON nativo08 con
+cabecera nullable seguía sin aceptar. El control posterior de arriba cualifica
+el nuevo contrato de cabecera obligatoria y conserva aquel fallo.
 No se repiten los otros 23 escenarios ni FULL/G2/G3/cloud. El runtime y lock raíz
 permanecen idénticos; SQL se añade sólo al montaje de test del consumidor.
 El [recibo complejo](https://github.com/akorda-software/exagent/blob/codex/v2-candidate-029/docs/orchestration/2026-10-01-v2-codex/E2E-COMPLEX.md)

@@ -6,12 +6,14 @@ El usuario autorizó commit/push/PR; sin bump, tag, merge ni publicación en Hex
 ReqLLM oficial stock, R1.2 aceptado, C7 incluido, guards intactos.
 Una revisión máxima por objetivo; sin re-review ni reruns rutinarios del padre.
 
-## Alineación final — revisión del owner
+## Límites conocidos — tratamiento verificado
 
-Corregidos TestModel/docs/type, contadores, links API1.x y pendientes C7/SQL/backend.
-18casos documentales por runtime y146críticos nuevos pasan; AST/chunks runtime
-idénticos, FULL/external anteriores conservan identidad. Strictdeps/DeepSeek08
-siguen limitados. [RELEASE-READINESS](RELEASE-READINESS.md); sin publicación/R9 nueva.
+NativeReceipt08 required header pasa por modelo; nullable reversal reproduce null.
+5requests/USD0.125reserva; smoke Luna53/DeepSeek57; precommit20/0/27excl.
+Coverage27/27por modelo reutiliza26+08nuevo; rojos previos conservados.
+Warnings categorizados/upstream: TOMLfix sin release, gproc1.3 bloqueado por grpcbox.
+Strictdeps rojo, sin waiver/patch/override. [KNOWN-LIMITS](KNOWN-LIMITS.md).
+La alineación anterior conserva18doccases/146focales en [RELEASE-READINESS](RELEASE-READINESS.md).
 
 ## Ownership de observabilidad — combinación implementada y verificada
 
@@ -24,7 +26,7 @@ en perfil actual. No lock/bump/Hex/cloud/consumer/re-review nuevos.
 [OBSERVABILITY-OWNERSHIP](OBSERVABILITY-OWNERSHIP.md) conserva negativo37fed28;
 [OBSERVABILITY-COMBINATION](OBSERVABILITY-COMBINATION.md) conserva olas y límites.
 
-## E2E complejos — cuatro nuevos escenarios cerrados
+## E2E complejos — recibo anterior, cuatro escenarios cerrados
 
 24:C7/seis etapas;25:paralelo/doble delegación/collect;26:efecto sin ACK/recovery;
 27:memoria/Session/abort/paralelo/dos aprobaciones/PGrestart/stream entre VMs.
@@ -73,8 +75,8 @@ Los TAR fechados conservan identidad; no relabel ni promesa de speedup20×.
 | G1 dependencias actuales | FULL ambos2177/0/28; receipt118 rojo anterior permanece en REQ-LLM126 |
 | G2 real dependencias actuales |12pases iniciales y2length controles,14escenarios cubiertos;18requests/3efectos/USD0.45reserva; fallo inicial preservado |
 | E2E consumidor028 |18escenarios reales,40admisiones/USD1.00reserva; initial13/18 y cinco retries preservados |
-| E2E modelos actual |23por modelo; Luna23/DeepSeek22aceptados, caso08rojo;51/54admisiones |
-| E2E complejos adicional |4/4por modelo;46requests/15efectos; fases70/53admisiones; coverage conjunta27/26aceptados |
+| E2E modelos actual |23por modelo aceptados;08required header nuevo; smoke53/57admisiones, nullable anterior rojo |
+| E2E complejos adicional |4/4por modelo;46requests/15efectos; fases70/53admisiones; coverage actual27/27con08nuevo |
 | G3 SQL |PG17.4,14fases,ACKperdido/dosVMs/FlowA8/restart/recover/backup; cleanup observado |
 | G4 Langfuse y Opik |Cada uno mismoA10 nativo/API33/33,667attrs/12usage; UI12casos/248attrs |
 | G5 consumidores |8grafos×7=56PASS; strictdeps siguen rojos |
@@ -82,7 +84,7 @@ Los TAR fechados conservan identidad; no relabel ni promesa de speedup20×.
 | G6 finito |TestModel: carga/soaks/saturación; sin promesa providerHA/RAMpredecode |
 
 Revisión crítica027 expresamente pedida cerrada:1P1/4P2 corregidos.
-R9 final cerrada; no reactivar revisiones ni nuevas olas paid/cloud.
+R9 final cerrada; no reactivar revisiones ni olas por leer un prompt histórico.
 Opik tehsuso/exagent autorizado; claves sólo privadas0600, nunca Git.
 Consumidor exAgentTest/chat_app mantiene .env/WIP y código untracked;
 sus cambios/E2E están autorizados, su commit no está autorizado.
