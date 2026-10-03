@@ -11,7 +11,7 @@ bump, tag, merge to `main` or Hex publication has been performed.
 | Offline runtime | Updated dependencies, October 3: both complete suites have 2,177 passes / zero failures / 28 exclusions. | Preserve the previous ReqLLM-only 1.18 failure below. TestModel and fixtures, not real-provider compatibility. |
 | Runtime targets | Elixir 1.18 / OTP 28 and Elixir 1.20 / OTP 29; strict test compile passes on both. | Tested combinations, not every patch release or dependency graph. |
 | Real model | Updated dependencies: 12 scenarios pass initially; length sync/stream pass after correcting the stimulus. All 14 scenarios covered, 18 admissions / 3 effects. | Original refusal/stop failure retained; not a single new 14/14 wave. GPT-4o-mini/OpenRouter Chat tools profile only. |
-| Real consumer | October 2 ReqLLM 1.26: all 18 application E2E scenarios pass in one wave; 15 offline cases also pass. | Prior evidence, not a new run after all dependency updates. Private copy; 36 admissions / USD 0.90 reserved, no observed invoice. Original app unchanged. |
+| Real consumer | October 3, current dependencies: all 23 scenarios executed per model. GPT-6-Luna accepts 23; DeepSeek V4.1 Flash accepts 22, with native receipt extraction still failing. Consumer precommit: 17 offline passes / 23 live exclusions. | OpenRouter Chat, reasoning disabled; separate ledgers with 51/54 admissions including diagnostics. USD 1.275/1.35 reserved, invoice unobserved. Stronger marker controls pass; original failures retained. Not universal provider qualification. |
 | Durable recovery | October 3 PostgreSQL 17.4: 14 phases, including lost COMMIT ACK, competing resumers, fresh-VM resume, explicit recovery and backup/restore; cleanup confirmed. | Declared single-database/host profile, not universal HA or external exactly-once effects. |
 | Langfuse and Opik | Each: prior native/API 33/33 observations, 667 attributes, 12 model usages; UI 12 cases / 248 attributes. Exporter 1.11 booleans newly verified locally. | Same finite A10 criteria. No fresh cloud/API/UI wave. Content off; synthetic TestModel tokens. |
 | Package consumers | October 3 updated dependencies: eight clean graphs across two runtimes, 56 contract checks and 46 commands pass. | Functional acceptance; upstream strict warnings remain red. |
@@ -56,6 +56,16 @@ these new runs qualify the updated dependency graph independently.
 Fresh G2 covers all fourteen scenarios with the initial failure retained and two
 causal length controls; PostgreSQL and all eight clean package graphs also pass
 their functional checks. Strict upstream diagnostics remain open.
+
+The subsequent [application model comparison](development/real-consumer-e2e.md)
+uses GPT-6-Luna and DeepSeek V4.1 Flash instead of Mini, with five additional
+negative/lifecycle/composed-approval scenarios. Luna's initial 23/23 wave passes;
+affected exact-marker controls also pass. DeepSeek's 22 accepted scenarios span
+several finite waves; native JSON receipt output still has missing merchant and
+currency despite schema validation. Its native extraction profile remains
+unqualified. No private parser, coercion, guard relaxation or model fallback is
+used to convert that failure to a pass. The library runtime and root lock are
+unchanged by this comparison; the earlier G2 Mini receipt remains historical.
 
 ## ReqLLM 1.26 qualification — October 2 receipt
 

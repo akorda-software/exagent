@@ -6,6 +6,15 @@ El usuario autorizó commit/push/PR; sin bump, tag, merge ni publicación en Hex
 ReqLLM oficial stock, R1.2 aceptado, C7 incluido, guards intactos.
 Una revisión máxima por objetivo; sin re-review ni reruns rutinarios del padre.
 
+## E2E Luna/DeepSeek — comparación cerrada
+
+Usuario elige ambos modelos. 23casos ejecutados por modelo: Luna23aceptados,
+DeepSeek22/23; ticket JSON nativo reproduce merchant/currency null, no aceptado.
+Cinco casos nuevos de rechazo/cleanup/límite/Composition+C7 pasan en ambos.
+Marcadores con copia explícita/oráculo exacto pasan; rojos/falso positivo guardados.
+Precommit17/0/23excl;51/54requests/USD1.275/1.35reserva, factura null,16grupos cerrados.
+ReqLLM1.26 stock/Chat/none; lib/lock intactos, ExDoc/links/TAR verificados. [E2E-MODELS](E2E-MODELS.md).
+
 ## Dependencias — verificación cerrada
 
 Usuario pide revisar todas antes de publicar. 43 paquetes consultados: 12 nuevas
@@ -25,19 +34,15 @@ metadata/91runtime iguales al cualificado;SHA2b725ef5a9abd97b047d462952967b116b9
 
 ## ReqLLM 1.26 — recibo anterior
 
-[REQ-LLM126](REQ-LLM126.md) conserva FULL1202177/0/28 y FULL1182176/1/28,
-readiness corregido con13focales por runtime, G214/14/17requests y app18/18/36requests.
-PG14fases/cleanup y8grafos56contratos; guard/cache/redacted blocks cualificados.
-La revisión nueva de dependencias tiene su propia identidad; no renombrar receipts.
+[REQ-LLM126](REQ-LLM126.md): FULL1202177/0/28 y FULL1182176/1/28, readiness
+corregido con13focales por runtime; G214/14 y app18/18, PG14fases y8grafos.
+Guard/cache/redacted blocks cualificados; conservar identidad de cada receipt.
 
 ## Documentación para personas y agentes
 
-Encargo explícito posterior al gate local: portada ExDoc y diez guías por tarea,
-entrada de integración para agentes, llms.txt/Markdown y navegación de API.
-Estado actual separado del histórico: cuerpo anterior byte-idéntico archivado.
-HTML/EPUB stock; formatter público Markdown corrige rutas aplanadas y protege código.
-`bin/check` incluye el nuevo gate docs-links. Fuente runtime/lock intacta.
-Evidencia y límites de este delta: [DOCUMENTATION](DOCUMENTATION.md).
+Portada ExDoc, diez guías, entrada para agentes y llms.txt/Markdown/API.
+Histórico byte-idéntico archivado; HTML/EPUB stock y formatter público Markdown.
+`bin/check` incluye docs-links; runtime/lock intactos. [DOCUMENTATION](DOCUMENTATION.md).
 No repetir FULL/G2/G3/G4 por este cambio documental.
 
 ## Rutina local y CI
@@ -61,13 +66,8 @@ CI funcional aceptado; G5strict upstream abierto. No afirmar CI global verde.
 TAR run03 eff31a95803c414657333e1344831fcb8b7099460c481a664a3e4b0828fdbd3f:
 153archivos exactos f69aede. No confundirlo con el nuevo TAR documental.
 
-Run01 sobreb709d57: paquete/harness pasan,118compile falla y120cancelado.
-Run02 sobredad90ff: failure/timeouts3000s con76/72fallos previos, sin totales.
-Correcciones causales cerradas en f69: tmp_dir/build real, fanout por oleadas,
-oráculo JSON/EFT independiente de ETS y menor coste de normalización/canonical.
-27portables+7fanout+3cap por runtime;79casos118/90en120;1015/1020vectores exactos.
-81ACK27.205s→18.968s; una inspección independiente0findings, sin re-review.
-Originales y recibos: /tmp/opencode/exagent-v2-codex-t6qgpstl/ci030/.
+Run01/02 rojos y correcciones causales conservados en ci030/roadmap;
+81ACK27.205s→18.968s, diferencial1015/1020vectores, review única0findings.
 
 ## Aceptaciones cerradas y límites
 
@@ -76,6 +76,7 @@ Originales y recibos: /tmp/opencode/exagent-v2-codex-t6qgpstl/ci030/.
 | G1 dependencias actuales | FULL ambos2177/0/28; receipt118 rojo anterior permanece en REQ-LLM126 |
 | G2 real dependencias actuales |12pases iniciales y2length controles,14escenarios cubiertos;18requests/3efectos/USD0.45reserva; fallo inicial preservado |
 | E2E consumidor028 |18escenarios reales,40admisiones/USD1.00reserva; initial13/18 y cinco retries preservados |
+| E2E modelos actual |23por modelo; Luna23/DeepSeek22aceptados, caso08rojo;51/54admisiones |
 | G3 SQL |PG17.4,14fases,ACKperdido/dosVMs/FlowA8/restart/recover/backup; cleanup observado |
 | G4 Langfuse y Opik |Cada uno mismoA10 nativo/API33/33,667attrs/12usage; UI12casos/248attrs |
 | G5 consumidores |8grafos×7=56PASS; strictdeps siguen rojos |
@@ -85,7 +86,7 @@ Originales y recibos: /tmp/opencode/exagent-v2-codex-t6qgpstl/ci030/.
 Revisión crítica027 expresamente pedida cerrada:1P1/4P2 corregidos.
 R9 final cerrada; no reactivar revisiones ni nuevas olas paid/cloud.
 Opik tehsuso/exagent autorizado; claves sólo privadas0600, nunca Git.
-Consumidor exAgentTest/chat_app mantiene .env/WIP y59fuentes untracked;
+Consumidor exAgentTest/chat_app mantiene .env/WIP y código untracked;
 sus cambios/E2E están autorizados, su commit no está autorizado.
 
 ## Relevo

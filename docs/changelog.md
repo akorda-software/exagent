@@ -6,6 +6,23 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Application model comparison — 2026-10-03
+
+- Select GPT-6-Luna and DeepSeek V4.1 Flash explicitly in the authorized sibling
+  consumer's real suite, through stock ReqLLM 1.26/OpenRouter Chat with reasoning
+  disabled. Use a separate persistent request ledger per model, reject unknown
+  profiles without fallback, and allow selecting stable case IDs for finite
+  causal controls. Keep the user's environment and library runtime unchanged.
+- Expand the application matrix from 18 to 23 scenarios with permission denial,
+  terminal tool error, busy/abort cleanup, request-budget enforcement and
+  Composition with persisted approval and no extraction replay. Require exact
+  marker text to reject incidental matches in unrequested code. Consumer
+  precommit passes 17 offline tests with 23 real-provider exclusions.
+- Execute all 23 scenarios per model. Luna accepts 23; DeepSeek accepts 22 and
+  retains a reproduced native JSON receipt-content failure. Preserve diagnostic
+  failures and the earlier weak-oracle false positive. Do not claim a single
+  green DeepSeek wave, native extraction acceptance or reasoning-on support.
+
 ### Dependency baseline — 2026-10-03
 
 - Audit all 43 resolved Hex dependencies against current stable releases and

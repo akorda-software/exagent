@@ -19,6 +19,19 @@ conservan contexto fechado. Su lectura como contexto no amplía un encargo.
 y [flujo simplificado](execution-flow.md). Los siguientes hitos fechados conservan
 evidencia, no reactivan investigaciones, revisiones ni probes del padre ya cerrados.
 
+**E2E de modelos, 2026-10-03 — comparación cerrada con limitación:** el usuario
+selecciona GPT-6-Luna y DeepSeek V4.1 Flash. La app hermana tiene 23 casos por
+modelo: Luna acepta 23; DeepSeek 22, con ticket JSON nativo sin merchant/currency
+correctos en dos intentos. No se acepta ese caso ni el perfil nativo completo.
+Cinco casos nuevos: deny sin efecto, error de tool sin replay, busy/abort con
+cleanup, límite antes de otro Model IO y Composition+C7 sin repetir extracción.
+Controles de copia literal y oráculo exacto pasan; falsos positivos anteriores
+quedan conservados. Precommit consumer 17/0/23 excl. Ledgers separados 51/54
+admisiones y USD1.275/1.35 reservado, factura null. ReqLLM1.26/Chat/none,
+sin fallback ni cambios de lib/lock raíz. Ver [matriz](real-consumer-e2e.md) y
+[recibo](https://github.com/akorda-software/exagent/blob/codex/v2-candidate-029/docs/orchestration/2026-10-01-v2-codex/E2E-MODELS.md).
+R9 cerrada; no revisión nueva ni repetición de FULL/SQL/cloud por este delta.
+
 **Dependencias,2026-10-03 — verificación cerrada:** petición explícita del usuario;
 43 paquetes raíz consultados con Hex oficial,11 upgrades estables compatibles.
 42 últimas estables y gproc1.2 bloqueado por grpcbox~>1.2.0, sin override.
@@ -151,7 +164,7 @@ están en `docs/archive/2026-09-release-{roadmap,scope}.md`.
 | R5 | Aprobación persistida y recuperación de ejecución | R3 + R4 | C7 ordinario/composición/MCP integrado; G3/FlowA8 y Oban SQL prueban pausa/resume y recuperación explícita sin replay en sus perfiles |
 | R6 | Composición multi-agente coherente | R3; R4/R5 para pausa durable | Implementado y revisado: secuencia9/delegación10/Flow11. Final00973+11; recetas públicas PASS y A8 SQL entreVMs sobre019. FULL2157sin fallos; guards generales no demostrados siguen cerrados |
 | R7 | Observabilidad e integraciones utilizables | R1/R2; cierre sobre R5/R6 | MCP SDK5/5, binding, retrieval/job y LiveView/Oban6/6; Langfuse y Opik A10 nativo/API/UI aceptados con los mismos criterios por mandato2026-10-02 |
-| R8 | Cualificación externa, consumidores, carga y CI | R1–R7 pertinentes | G2mínimo/G3/G6 aceptados; ocho grafos56contratos pasan también remotamente. CI030run03: paquete/harness y ambas suites completas verdes;2176pases/0fallos/28excl por runtime. Strictdeps RED upstream |
+| R8 | Cualificación externa, consumidores, carga y CI | R1–R7 pertinentes | G2mínimo/G3/G6 aceptados; ocho grafos56contratos pasan también remotamente. E2E app23casos: Luna23aceptados/DeepSeek22, ticket nativo rojo. CI030 funcional aceptado; strictdeps RED upstream |
 | R9 | Revisión final, candidata y release2.0.0 | R0–R8 aceptados | Revisión única cerrada y candidata029 preparada; PR1 borrador autorizado. CI030 funcional aceptado; run global failure sólo por diagnóstico strictdeps upstream. G5strict abierto, sin versionar ni publicar |
 
 ```text

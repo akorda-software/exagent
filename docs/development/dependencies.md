@@ -137,8 +137,11 @@ con16+2admisiones,3efectos y USD0.45 reservado, sin factura observada. Se conser
 la ola inicial12pases/1fallo/1sin ejecutar y los dos controles posteriores; no se
 presenta como una nueva ola completa14/14 ni se vuelve a ejecutar lo ya aceptado.
 
-El E2E de la aplicación hermana y la aceptación API/UI Langfuse/Opik conservan
-su evidencia anterior; no hubo una nueva ola app/cloud. El cambio del exporter
+Durante esta revisión de dependencias, el E2E de la aplicación hermana y la
+aceptación API/UI Langfuse/Opik conservaron su evidencia anterior; no hubo una
+nueva ola app/cloud en ese objetivo. La [comparación posterior de modelos](real-consumer-e2e.md)
+tiene su propio recibo: 23 escenarios Luna y 22 aceptados de 23 DeepSeek,
+sin convertirlo en otra ejecución G2 ni cloud. El cambio del exporter
 tiene la nueva aceptación nativa local descrita arriba. Recibos y límites en el
 [registro de esta revisión](https://github.com/akorda-software/exagent/blob/codex/v2-candidate-029/docs/orchestration/2026-10-01-v2-codex/DEPENDENCIES.md).
 
