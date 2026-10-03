@@ -28,17 +28,21 @@ paths below are relative to `docs/guides/`; generated ExDoc pages are flattened.
 | Define tools | `ExAgent.Tools`, `Tool.new/1` | [Tools and output](tools-and-output.md) |
 | Typed output | `output: MyEmbeddedSchema`, `output_mode:` | [Tools and output](tools-and-output.md) |
 | Provider/model | `Model.resolve/2`, `Models.ReqLLM.new/1` | [Models](models-and-limits.md) |
+| Qualified OpenRouter routing | `tool_profile: :openrouter_chat_tools_v1`, bounded `provider_options:` | [Models](models-and-limits.md) |
 | Conversation owner | `AgentSupervisor.start_agent/1`, `Server.chat/3` | [Runtime](runtime-and-events.md) |
 | UI updates | `Event.agent_topic/2`, `PubSub.subscribe/2` | [Runtime](runtime-and-events.md) |
 | Checkpoint | `store:`, `Server.checkpoint/1`, `Session.checkpoint/1` | [Durability](durability-and-approvals.md) |
 | Persisted approval | `Continuation.get/2`, `decide/4`, `ExAgent.resume/3` | [Durability](durability-and-approvals.md) |
 | Shared-state turns | `Session`, `Session.Participant`, `TurnPolicy` | [Coordination](coordination.md) |
+| Typed durable shared state | Host `Session.StateCodec`, `shared_state_codec:` | [Coordination](coordination.md) |
 | Delegation | `Coordination.delegation_tool/2`, `ExAgent.run_child/4` | [Coordination](coordination.md) |
 | Durable sequence/router/parallel | `Coordination.Composition`, `Coordination.Flow` | [Coordination](coordination.md) |
 | MCP tools | `MCP.Client.start_link/1`, `tools/1`, `close/1` | [MCP](mcp.md) |
 | Retrieval/jobs | Host-owned integration recipes | [Documentation map](../README.md) |
 | Traces and mixed ReqLLM calls | `ExAgent.Observability.OpenTelemetry`, `ExAgent.Observability.ReqLLM.attach/1` | [Observability](observability.md) |
 | Long-lived tracing cleanup | Supervise `ExAgent.Observability.ReqLLM.Maintenance`; set a finite processor `max_exporter_restarts` when needed | [Observability](observability.md) |
+| ReqLLM metrics | `ReqLLM.attach(metrics: [models: [...]])`; host experimental API/SDK 0.6 and reader | [Observability](observability.md) |
+| Disposable native HTTP/gRPC export | Application-owned VM recipe with finite batch and deadline | [Isolated transport](../development/otlp-isolated-transport.md) |
 | Offline verification | `%ExAgent.Models.Test{script: ...}` | [Testing](testing.md) |
 | Unexpected behavior | Sanitized reason + relevant boundary | [Troubleshooting](troubleshooting.md) |
 
@@ -59,12 +63,17 @@ paths below are relative to `docs/guides/`; generated ExDoc pages are flattened.
   estimated cost. Parent totals include descendants. Unknown cost is not zero.
 - **Persistence:** ACK requires confirmed save. Dirty blocks mutations; checkpoint
   retry saves data only. ETS is ephemeral. Resume needs trusted templates and bindings.
+  A typed Session codec is supplied by the host on every start; stored data never
+  selects its module. Keep encode/decode pure and validate application data.
 - **Recovery:** reconcile uncertain effects explicitly. Do not turn every error,
   queue retry or restored message history into a fresh run.
 - **Observability:** optional, host-owned SDK/exporter, content off by default.
   Use the integrated ReqLLM bridge for mixed applications; attach once at startup
   and maintain its upstream tracking TTL, optionally with the supervised child.
   The TTL must exceed live request durations; restart budgets reset per instance.
+  Metrics require an explicit bounded model allowlist and a host-owned reader;
+  their token counts retain normalized quality. The default tracer follows a
+  restarted SDK; replace any explicit tracer when replacing its provider.
   Sampled spans are not a billing ledger
   or guaranteed durable audit record.
 

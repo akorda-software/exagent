@@ -1,5 +1,53 @@
 # Native OTLP: application-owned VM per batch
 
+## Published stock HTTP extension — October 3
+
+The packaged recipe now also supports `protocol: :http_protobuf` with the published
+exporter1.11, SDK1.7 and API1.5. Use `examples/otlp_transport/vm_http_worker.exs`
+as the worker. In the application-owned `:otlp_isolated_probe, :transport` config,
+set `http_options` with the public signal-specific configuration:
+
+```elixir
+%{
+  protocol: :http_protobuf,
+  http_options: %{
+    otlp_traces_endpoint: "https://collector.example/v1/traces",
+    otlp_traces_headers: [{"authorization", "host-private-value"}]
+  }
+}
+```
+
+This is the HTTP part of the transport map; also supply the launcher, worker,
+runtime paths, observer, gate and port fields described below. `port` remains a
+launcher validation field; the actual HTTP address is the complete traces URL.
+The child sets these values only in its own OTP application environment, then
+calls the native exporter's public init/export/shutdown callbacks. Generic
+`endpoints` would append a signal path; this recipe uses the specific endpoint to
+preserve it. Optional ssl_options and otlp_traces_compression are allowed. A gRPC
+request_profile projection is not admitted on this native HTTP route.
+
+The host sends the native exporter callback's SDK table entries and opaque
+resource through its own bounded IPC. Native records can contain symbols created
+by host instrumentation, so HTTP ETF decoding admits those symbols **only in the
+owned disposable VM**, within the65,536-byte packet limit. Never feed this worker
+stored/network ETF or expose its stdin externally. No callback/module is selected
+from span data. Existing gRPC converter-map IPC retains safe decode. The recipe
+does not implement an OTLP encoder/parser or persist runtime terms.
+
+Every outcome reclaims the registered VM group, including profiles, held HTTP
+requests, sockets and that VM's atoms. This does not repair shutdown in an
+in-process stock exporter or touch the host's inets service. Three healthy cycles
+and held-POST deadline/owner-death controls verify the actual wire and OS closure.
+These controls use the published stock callback, not a custom exporter stub.
+
+Stock HTTP ignores the response body, including partial_success. Its2xx callback
+result means transport_ok; receipts report0 spans known accepted and all sent spans
+unknown. The same remains true for a synthetic partial response. HTTP errors and
+deadline/owner death fail without automatic replay. Separate backend API/UI
+receipts are required to prove ingestion. The existing finite limits, one-VM gate,
+Linux ownership and startup overhead below still apply; this is not a high-rate
+default transport. The earlier receipts and gRPC results remain identified below.
+
 This continues objective004. It preserves the earlier [gRPC experiment](otlp-transport.md)
 and its receipt. It does not change ExAgent defaults, dependencies, the root build,
 the version, or release acceptance. The new consumer physically freezes source and

@@ -6,6 +6,40 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Integrated Dragonex and operational observability — 2026-10-03
+
+- Bind OpenRouter routing in both disabled and none modes before the first
+  request and in response continuation4. Reject rerouting and legacy routed
+  history before IO; keep OpenAI continuation1–3 contracts. Validate Session
+  policy and continuation identities before its trusted shared-state decoder.
+- Add opt-in histogram support through the published experimental OTel0.6
+  APIs and ReqLLM's public Adapter. Keep one bridge, four fixed instruments,
+  host model allowlist, normalized token quality and no implicit metric SDK.
+- Resolve the default tracer through the live public provider so SDK replacement
+  cannot leave ExAgent using a cached tracer from the previous instance. Explicit
+  tracers remain application-owned. Add a causal SDK-restart regression.
+- Extend the application-owned VM recipe to stock HTTP protobuf. Reclaim its
+  VM/profile/socket on all outcomes; report transport acceptance separately
+  from unknown span acceptance. Direct stock HTTP and upstream strict warnings
+  retain their limitations. See design8.54 and the operational guides.
+
+### Dragonex consumer boundaries — 2026-10-03
+
+- Add explicit `:openrouter_chat_tools_v1` over stock ReqLLM, with bounded
+  provider `order`/`only`/`ignore` and fallback/parameter flags, plus attribution.
+  The mandatory argument envelope remains enforced; generic OpenRouter tools,
+  native JSON output and unrelated provider settings remain closed.
+- OpenRouter none mode keeps canonical max_tokens; OpenAI's qualified profile
+  keeps its existing max_completion_tokens translation. Routing participates
+  in the static nonsecret continuation binding.
+- Add host-selected `Session.shared_state_codec` for JSON checkpoint encoding
+  and decoding after structural snapshot/identity/roster validation. Stored
+  bytes cannot choose a module. Invalid callbacks fail explicitly; failed save
+  preserves the existing unconfirmed-checkpoint mutation block.
+- Scoped offline HTTP/SSE/session tests and Dragonex live Decart smoke verify
+  these boundaries. MiMo's `reasoning.enabled:false` is unavailable in stock
+  ReqLLM1.26; no capability guess, dependency patch or publication is included.
+
 ### Long-lived observability polish — 2026-10-03
 
 - Add opt-in supervised ReqLLM tracking maintenance with explicit TTL/cadence,

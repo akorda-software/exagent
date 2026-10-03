@@ -84,7 +84,8 @@ defmodule ExAgent.Observability.OpenTelemetry do
   @logger_keys [:otel_trace_id, :otel_span_id, :otel_trace_flags]
   @profile "exagent.gen_ai.v1"
   @gen_ai_revision "b5d8440f6f126738fd50f927752cd669772c517b"
-  @compile {:no_warn_undefined, [:otel_ctx, :otel_tracer, :otel_span, :opentelemetry]}
+  @compile {:no_warn_undefined,
+            [:otel_ctx, :otel_tracer, :otel_span, :opentelemetry, :otel_tracer_provider]}
 
   defmodule Context do
     @moduledoc false
@@ -202,7 +203,9 @@ defmodule ExAgent.Observability.OpenTelemetry do
       if Code.ensure_loaded?(:otel_tracer) do
         parent = context || capture_context()
         native = if parent, do: parent.native, else: %{}
-        tracer = config.tracer || :opentelemetry.get_tracer(:exagent, "1", :undefined)
+        # Consult the live public provider. The API's get_tracer cache can retain
+        # a tracer from an earlier SDK instance after an application restart.
+        tracer = config.tracer || :otel_tracer_provider.get_tracer(:exagent, "1", :undefined)
 
         span =
           :otel_tracer.start_span(native, tracer, "exagent." <> Atom.to_string(kind), %{

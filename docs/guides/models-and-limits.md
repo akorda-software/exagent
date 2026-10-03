@@ -46,6 +46,43 @@ and leaves unproven reasoning, modality and continuation combinations guarded.
 Native output is separate: `output_profile: :chat_json_schema_v1` plus agent
 `output_mode: :native`. See [Tools and output](tools-and-output.md).
 
+## Route OpenRouter Chat tools explicitly
+
+Use `tool_profile: :openrouter_chat_tools_v1` for a qualified OpenRouter Chat
+endpoint. The host supplies the exact model ID and truthful capabilities:
+
+```elixir
+model = ExAgent.Models.ReqLLM.new(
+  model: %{
+    provider: :openrouter,
+    id: qualified_model_id,
+    capabilities: %{tools: %{enabled: true}, reasoning: %{enabled: false}},
+    extra: %{wire: %{protocol: "openai_chat"}}
+  },
+  api_key: System.fetch_env!("OPENROUTER_API_KEY"),
+  tool_profile: :openrouter_chat_tools_v1,
+  provider_options: [
+    openrouter_provider: %{only: [qualified_provider_id], allow_fallbacks: false}
+  ]
+)
+```
+
+Routing admits `order`, `only`, `ignore`, `allow_fallbacks` and
+`require_parameters`. Provider lists contain 1–32 bounded identifiers. Optional
+`app_title` and `app_referer` are attribution; other wire settings remain closed.
+The mandatory tool argument envelope and validation still apply.
+
+For a reasoning-capable model, `reasoning_mode: :none` additionally requires
+declared support for effort `"none"` and disabling thinking. It sends one
+`max_tokens` budget. Declaring those capabilities does not establish real
+provider compatibility. This tools profile does not enable native JSON output.
+
+The route and reasoning mode are bound before the first request and in tool
+history. Changing them requires a fresh conversation; an existing approval or
+uncertain request cannot resume through another route. Earlier unbound
+OpenRouter history is rejected. See [Migration](migration.md) for continuation
+version 4 and the unaffected OpenAI history versions.
+
 ## Bound requests and tool calls
 
 ```elixir

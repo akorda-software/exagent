@@ -68,6 +68,8 @@ defmodule ExAgent.MixProject do
       {:opentelemetry_api, "~> 1.5", optional: true},
       # Keep the optional compile-order edge when a host supplies the SDK.
       {:opentelemetry, "~> 1.7", optional: true, runtime: false},
+      {:opentelemetry_api_experimental, "~> 0.6.0", optional: true, runtime: false},
+      {:opentelemetry_experimental, "~> 0.6.0", only: :test, runtime: false},
       # Exercise native OTLP locally without adding an exporter to consumers.
       {:opentelemetry_exporter, "~> 1.11.0", only: :test, runtime: false},
       # Only for ExAgent.Store.Postgres tests (the TestRepo needs the adapter).
@@ -188,6 +190,7 @@ defmodule ExAgent.MixProject do
         "Session & Coordination": [
           ExAgent.Session,
           ExAgent.Session.Snapshot,
+          ExAgent.Session.StateCodec,
           ExAgent.Session.Participant,
           ExAgent.Session.SharedState,
           ExAgent.Session.TurnPolicy,
@@ -234,6 +237,7 @@ defmodule ExAgent.MixProject do
           ExAgent.Observability.OpenTelemetry,
           ExAgent.Observability.ReqLLM,
           ExAgent.Observability.ReqLLM.Maintenance,
+          ExAgent.Observability.ReqLLM.Metrics,
           ExAgent.Observability.BoundedProcessor
         ],
         Exceptions: [

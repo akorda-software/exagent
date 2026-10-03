@@ -4,6 +4,11 @@ ExAgent instruments operations with native Erlang/Elixir OpenTelemetry. The host
 application owns the SDK, sampler, resource, processors, exporter and credentials.
 No tracing service is required for the ordinary core, Server or Session.
 
+The default tracer is resolved from the live public provider for each span, so
+restarting the application-owned SDK does not retain the previous provider's
+tracer. If the host supplies `tracer:` explicitly, it also owns replacing that
+handle when recreating its provider.
+
 This guide describes the current optional tracing implementation. The
 [verification guide](../development/verification.md) provides runnable checks;
 [project status](../status.md) records accepted evidence and remaining limits.
@@ -135,8 +140,33 @@ overwrites its status, accounting, cost or content. Request ID is
 `gen_ai.response.time_to_first_chunk` in **seconds**. Unknown/invalid labels or
 scalars are omitted. Ordinary ReqLLM calls outside that context keep stock spans,
 including native child-span callbacks. Optional ReqLLM metrics use its public
-adapter when the host has the meter APIs; the locked API1.5/SDK1.7 trace profile
-does not supply those APIs, so it does not certify metric export.
+adapter with the published experimental0.6 metric APIs. Metrics default to off;
+the API1.5/SDK1.7 trace-only profile does not supply a metric SDK.
+
+### Optional metrics
+
+The host adds `opentelemetry_api_experimental ~>0.6.0` and
+`opentelemetry_experimental ~>0.6.0`, configures `:readers` on the latter and
+starts that SDK. The integrated bridge can then enable:
+
+```elixir
+:ok = ExAgent.Observability.ReqLLM.attach(metrics: [models: ["my-fixed-model"]])
+```
+
+Supply1–32 unique model labels. All other models collapse to `"other"`. The four
+instruments are operation duration, token usage, time to first chunk and time per
+output chunk. Durations use seconds, tokens `{token}`; token points carry normalized
+accounting quality. The only other dimensions are input/output and fixed error.
+Response models, request IDs, endpoints and content are excluded. These choices
+bound series dimensions; they do not bound the SDK heap or exporter response.
+
+The host owns views, aggregation temporality, reader/exporter and their lifecycle.
+Use a metric-capable destination; the Langfuse/Opik trace ingestion URL and A10
+trace acceptance do not qualify metric ingestion. Optional API availability is
+not a running reader: absent/stopped SDKs or failures drop measurements. No
+instrument cache is retained across SDK restarts. ReqLLM's normalized zero values
+remain normalized zeros, not proof of observed zero consumption. Configure one
+integrated bridge; adding a separate listener would count requests twice.
 
 The native ReqLLM events remain available. Its ExAgent adapter requests
 `telemetry: [payloads: :none]` even if a host enables raw capture globally.
@@ -452,8 +482,9 @@ General long-lived native HTTP cleanup remains gated on an upstream ownership/
 cancellation/lifecycle fix, or an independently owned disposable exporter VM
 boundary with its own acceptance. Other transports/exporters require separate
 tests. ExAgent does not inspect private profile names, close shared inets services,
-or implement a second OTLP client to hide this limitation. Platform API/UI
-comparison and production-like acceptance remain open.
+or implement a second OTLP client to hide this limitation. This native lifecycle
+experiment does not qualify a backend API/UI. The separate Langfuse/Opik A10
+receipts and their finite acceptance are recorded in [status](../status.md).
 
 The new restart-budget control uses `max_exporter_restarts: 0` with exporter1.11.
 After one held HTTP request times out, the worker dies, the processor becomes
@@ -463,7 +494,9 @@ so this is a bound on automatic recreation per instance, not a cleanup fix.
 The probe cancels its exclusively owned request and removes its profile only
 inside that disposable VM. Existing unlimited-restart negative controls remain.
 See [known limits](../development/known-limits.md) for the upstream follow-up and
-the separate experimental-metrics API incompatibility.
+the separate metrics integration described above. The application-owned HTTP VM
+recipe now closes its complete transport lifetime; the direct stock route retains
+this diagnostic. See [HTTP extension](../development/otlp-isolated-transport.md).
 
 ### Composed scenario for later platform comparison
 

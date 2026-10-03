@@ -1,5 +1,14 @@
 # Coordinate agents
 
+For durable typed shared state, configure `shared_state_codec: MyCodec` on
+`Session.start_link/1`. Implement `c:ExAgent.Session.StateCodec.encode/1` to return
+portable JSON and `decode/1` to return the application's state. Supply that module
+again on restart: snapshots never choose code. Session checks snapshot structure,
+identity, roster, policy identity and continuation bindings before decode, then
+restores its policy with the decoded state. Keep callbacks pure. Failed encoding
+keeps the existing unconfirmed checkpoint block; no callback failure silently
+starts an empty session. Omitting the codec keeps ordinary JSON shared state.
+
 Choose coordination according to the state and ownership you need. Adding more
 agents does not require a fixed researcher, worker and reviewer pipeline.
 

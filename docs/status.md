@@ -4,30 +4,43 @@ Updated **2026-10-03**. These docs describe the unreleased v2 candidate on
 `codex/v2-candidate-029`. The nominal version remains **1.3.0**. No v2 version
 bump, tag, merge to `main` or Hex publication has been performed.
 
+The requested operational closure now integrates the Dragonex extensions, opt-in
+metrics through official experimental0.6 APIs and the stock HTTP disposable-VM
+recipe. A reproduced SDK-restart cache defect is corrected through a live public
+provider lookup.194 focused cases pass on1.18; the complete1.20 suite passes2,235
+cases with zero failures and28 exclusions in2,001.6 seconds. The original routine
+exits1 at ExDoc because a callback link lacks its `c:` prefix. That prose-only
+correction passes strict generation and link readback; the failed invocation is
+retained, without a suite rerun. Five installed graphs pass38 functional contracts
+on the frozen source. Final artifact checks and identities are recorded in the
+[closure record](https://github.com/akorda-software/exagent/blob/codex/v2-candidate-029/docs/orchestration/2026-10-01-v2-codex/OPERATIONAL-CLOSURE.md).
+
 ## What is accepted
 
 | Boundary | Evidence | Scope |
 |---|---|---|
-| Offline runtime | Lifecycle FULL1.20:2,208 passes /0 failures /28 exclusions; all nine local phases pass.94 integrated observability cases pass on each runtime, including32 owner deaths and4 healthy loopback requests. | The package-oracle regression passes separately,4/4, after the FULL freeze. No new complete1.18 run. Prior2,198 and dependency-baseline2,177 receipts retain their identities. Preserve the previous ReqLLM-only failure below. TestModel/loopback fixtures, not real-provider compatibility. |
+| Offline runtime | Operational FULL1.20:2,235 passes /0 failures /28 exclusions.194 integrated cases pass on1.18;53 affected tracing/metric cases pass on1.20 after the causal SDK-restart fix. | Five initial local phases pass. ExDoc initially fails on a callback link; corrected generation/link checks pass separately. No new complete1.18 run. Prior2,208/2,198/2,177 receipts retain their identities. TestModel/loopback fixtures, not real-provider compatibility. |
 | Runtime targets | Elixir 1.18 / OTP 28 and Elixir 1.20 / OTP 29; strict test compile passes on both. | Tested combinations, not every patch release or dependency graph. |
 | Real model | Updated dependencies: 12 scenarios pass initially; length sync/stream pass after correcting the stimulus. All 14 scenarios covered, 18 admissions / 3 effects. | Original refusal/stop failure retained; not a single new 14/14 wave. GPT-4o-mini/OpenRouter Chat tools profile only. |
 | Real consumer | October 3: 27 scenarios accepted per model, reusing 26 unchanged cases plus the newly qualified required-header native case08. Consumer precommit: 20 offline passes /27 opt-in exclusions. Complex workflows retain their 4/4 receipts,46 requests /15 effects per model. | OpenRouter Chat, reasoning disabled. The old nullable extraction still fails. Smoke phases now Luna53/DeepSeek57; complex phases retain70/53. Invoice unobserved. No new complete27-case wave or universal provider qualification. |
 | Durable recovery | October 3 PostgreSQL 17.4: 14 phases, including lost COMMIT ACK, competing resumers, fresh-VM resume, explicit recovery and backup/restore; cleanup confirmed. | Declared single-database/host profile, not universal HA or external exactly-once effects. |
 | Langfuse and Opik | Each: prior native/API 33/33 observations, 667 attributes, 12 model usages; UI 12 cases / 248 attributes. Exporter 1.11 booleans newly verified locally. | Same finite A10 criteria. No fresh cloud/API/UI wave. Content off; synthetic TestModel tokens. |
-| Package consumers | Latest lifecycle staging TAR: four clean1.20 graphs,32 contracts, including maintenance without implicit SDK/handlers. Earlier bridge28 and dependency-baseline56 retain their receipts. | New eight-case manifest validates actual ExUnit records after correcting the stale seven-case checker; initial rejection retained. Functional acceptance; upstream strict warnings remain red. |
+| Package consumers | Operational staging TAR: five clean1.20 graphs,38 contracts; none/API/SDK/exporter ×8 plus six metric SDK/reader cases.94 library sources match the FULL freeze. | Staging TAR and final documentation-only artifact retain separate identities. Actual ExUnit records have zero failures/exclusions/skips. Functional acceptance; upstream strict warnings remain red. Earlier32/28/56 receipts retain their scope. |
 | Integrations | Official MCP SDK 2.2.0: five profiles; LiveViewTest/Oban SQL: six cases plus crash/recovery. | Qualified recipes, not every deployment combination. |
 | Load and cleanup | Finite TestModel load/soak/saturation and owned-resource cleanup. | No LLM latency SLO, cloud availability or upstream predecode RAM guarantee. |
 
-The subsequent observability lifecycle polish adds an optional application-supervised
+The earlier observability lifecycle polish added an optional application-supervised
 ReqLLM maintenance child and a per-instance exporter worker restart budget.
 Its complete1.20 suite takes1,995.2 seconds; the nine-phase routine takes2,035.684
 seconds. The final documentation/tooling correction preserves all92 library
-sources from that freeze; parallel Dragonex WIP is outside this acceptance.
+sources from that freeze; Dragonex was outside that dated acceptance and is now
+integrated by the operational closure above.
 TTL must exceed live request durations. A finite budget closes admission after
 exhaustion; its default remains infinity and restarting the processor resets it.
 Native HTTP verifies one-profile recreation containment with budget0 while
 retaining the surviving-socket limit. Stock ReqLLM metric APIs also differ from
-published experimental0.6 arities; no metric-export qualification follows.
+published experimental0.6 arities; that receipt did not qualify metric export.
+The new opt-in Adapter uses those public arities, with its own SDK/reader checks.
 See [known limits](development/known-limits.md) and the
 [lifecycle receipt](https://github.com/akorda-software/exagent/blob/codex/v2-candidate-029/docs/orchestration/2026-10-01-v2-codex/OBSERVABILITY-LIFECYCLE.md).
 

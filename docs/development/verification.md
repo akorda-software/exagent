@@ -93,7 +93,7 @@ se pueden añadir a la misma rutina explícitamente:
 ./bin/check --package-consumers
 ```
 
-Esta opción añade cuatro grafos none/API/SDK/exporter, siete contratos cada uno,
+Esta opción añade cuatro grafos none/API/SDK/exporter, ocho contratos cada uno,
 en el runtime local. Descarga herramientas/dependencias en destinos aislados;
 conserva el diagnóstico estricto upstream y puede salir1 aunque los contratos
 pasen. No repetir toda la matriz ni servicios externos por cada cambio de prosa.

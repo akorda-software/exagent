@@ -18,6 +18,18 @@ defmodule ExAgent.Message.Continuation do
     value = metadata!(value)
 
     case value do
+      %{
+        "version" => 4,
+        "reasoning_mode" => mode,
+        "routing" => routing,
+        "provider" => "openrouter",
+        "arguments_codec" => "exagent.arguments/1"
+      }
+      when mode in ["disabled", "none"] and is_map(routing) ->
+        routing!(routing)
+        value |> Map.drop(["routing", "reasoning_mode"]) |> Map.put("version", 2) |> validate!()
+        value
+
       %{"version" => 3, "reasoning_mode" => "none", "arguments_codec" => "exagent.arguments/1"} ->
         value |> Map.delete("reasoning_mode") |> Map.put("version", 2) |> validate!()
         value
@@ -30,6 +42,31 @@ defmodule ExAgent.Message.Continuation do
         validate_v1!(value)
     end
   end
+
+  def routing!(routing) when is_map(routing) do
+    routing = metadata!(routing)
+
+    unless map_size(routing) <= 5 and
+             Enum.all?(routing, fn
+               {key, values} when key in ["order", "only", "ignore"] ->
+                 is_list(values) and length(values) in 1..32 and
+                   Enum.all?(values, fn value ->
+                     is_binary(value) and byte_size(value) in 1..128 and
+                       Regex.match?(~r/\A[a-zA-Z0-9][a-zA-Z0-9_.\/-]*\z/, value)
+                   end)
+
+               {key, value} when key in ["allow_fallbacks", "require_parameters"] ->
+                 is_boolean(value)
+
+               _ ->
+                 false
+             end),
+           do: raise(ArgumentError, "invalid bounded OpenRouter routing")
+
+    routing
+  end
+
+  def routing!(_), do: raise(ArgumentError, "invalid bounded OpenRouter routing")
 
   defp validate_v1!(value) do
     case value do

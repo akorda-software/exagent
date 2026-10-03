@@ -1,5 +1,17 @@
 # Roadmap ejecutable de ExAgent v2.0.0
 
+**Cierre solicitado2026-10-03:** Dragonex se integra con routing ligado al primer
+request/historial y validación de policy/bindings Session antes del codec. Métricas
+opt-in por API0.6 pública y HTTP por VM propia implementados; tracer default sigue
+el SDK vivo tras restart.194 focales pasan en1.18;193 antes del arreglo de cache en
+1.20 y53 afectados después. FULL1.20 pasa2235/0/28 en2001.6s. Bin/check sale1 en
+ExDoc por un enlace callback sin c:; corrección sólo de prosa pasa generación
+estricta/enlaces, sin rerun FULL. Cinco grafos del TAR pasan38contratos funcionales;
+identidad/controles del artefacto final quedan en el recibo de cierre.
+MiMo sigue cerrado; warnings estrictos requieren releases upstream compatibles.
+No publicación ni reapertura R9. Ver design8.53–8.54 y
+[recibo](https://github.com/akorda-software/exagent/blob/codex/v2-candidate-029/docs/orchestration/2026-10-01-v2-codex/OPERATIONAL-CLOSURE.md).
+
 **Actualización2026-10-03:** implementación v2 activada por el usuario; R6/R7
 implementados en los perfiles acotados y mínimo R1 cualificado mediante G2 real.
 Candidata común con pruebas locales, SQL, consumidores, frameworks, SDK y carga.

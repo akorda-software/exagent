@@ -16,7 +16,7 @@ defmodule ExAgent.Session do
   use GenServer
   require Logger
   alias ExAgent.{Event, PubSub, RuntimeCheckpoint, Store}
-  alias ExAgent.Session.{Participant, TurnPolicy, Snapshot, Continuations}
+  alias ExAgent.Session.{Participant, TurnPolicy, Snapshot, Continuations, StateCodec}
   alias ExAgent.Observability.OpenTelemetry, as: Observability
 
   defmodule State do
@@ -24,6 +24,7 @@ defmodule ExAgent.Session do
     defstruct session_id: nil,
               namespace: nil,
               shared_state: nil,
+              shared_state_codec: nil,
               participants: %{},
               policy_mod: nil,
               policy_state: nil,
@@ -51,6 +52,8 @@ defmodule ExAgent.Session do
   the app within the intended namespace; persisted data never resolves processes.
   Store errors/incompatible snapshots fail startup rather than starting empty.
   Additional participants after restore must be added explicitly with join/2.
+  `shared_state_codec: MyCodec` optionally encodes and restores application
+  structs through `ExAgent.Session.StateCodec`, after snapshot validation.
   """
   def start_link(opts) do
     {name, opts} = Keyword.pop(opts, :name)
@@ -102,6 +105,7 @@ defmodule ExAgent.Session do
       session_id: id,
       namespace: namespace,
       shared_state: Keyword.get(opts, :shared_state),
+      shared_state_codec: Keyword.get(opts, :shared_state_codec),
       policy_mod: mod,
       observability: Keyword.get(opts, :observability),
       pubsub: PubSub.normalize(Keyword.get(opts, :pubsub)),
@@ -114,6 +118,7 @@ defmodule ExAgent.Session do
            is_binary(id) and
              (state.continuation_bindings == %{} or ExAgent.Continuation.Record.text?(id)),
          :ok <- ExAgent.RuntimeIdentity.validate(namespace, id),
+         :ok <- StateCodec.validate(state.shared_state_codec),
          state = %{
            state
            | store: Store.scoped(Keyword.get(opts, :store), namespace),
@@ -532,10 +537,15 @@ defmodule ExAgent.Session do
 
       {:ok, raw} ->
         with {:ok, snapshot} <- Snapshot.validate(raw, state.session_id),
-             {:ok, participants} <- attach_participants(state.participants, snapshot.participants) do
+             {:ok, participants} <- attach_participants(state.participants, snapshot.participants),
+             :ok <- Snapshot.validate_policy(snapshot, state.policy_mod),
+             :ok <-
+               Continuations.validate_bindings(state, snapshot.continuations, snapshot.version),
+             {:ok, shared_state} <-
+               StateCodec.load(state.shared_state_codec, snapshot.shared_state) do
           candidate = %{
             state
-            | shared_state: snapshot.shared_state,
+            | shared_state: shared_state,
               participants: participants,
               current: snapshot.current,
               status: snapshot.status,

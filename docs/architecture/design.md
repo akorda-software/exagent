@@ -4973,6 +4973,103 @@ stock TOML/WebSockex/gproc. No inferir API/UI o métricas nuevas del A10 anterio
 El [recibo](https://github.com/akorda-software/exagent/blob/codex/v2-candidate-029/docs/orchestration/2026-10-01-v2-codex/OBSERVABILITY-COMBINATION.md)
 conserva identidad de las olas, fuentes y límites.
 
+### 8.53. Fronteras de consumidor Dragonex con OpenRouter y estado tipado (2026-10-03)
+
+**Estado:** Aceptada; extensión local, sin publicación ni reapertura de R9.
+
+**Problema observado:** Dragonex necesitaba herramientas Chat con un proveedor
+OpenRouter fijado, mientras el perfil cualificado solo admitía OpenAI. Además,
+su Store reconstruía un World antes de que Session validara el snapshot JSON,
+provocando `invalid_snapshot`. No debe declarar capacidades inexistentes,
+parchear ReqLLM ni saltarse la validación para integrar el consumidor.
+
+**Decisión:** `:openrouter_chat_tools_v1` opt-in exige wire Chat explícito,
+herramientas declaradas y razonamiento desactivado o none con evidencia vigente.
+Forward de opciones públicas stock: routing acotado order/only/ignore y flags
+booleanos, attribution sin CR/LF. El envelope obligatorio y validación lógica
+local permanecen; ningún pass-through extra, perfil genérico o native JSON queda
+habilitado. None mantiene max_tokens único porque el schema público OpenRouter
+no acepta max_completion_tokens. OpenAI conserva su contrato. El binding no
+secreto incluye routing, tanto en disabled como none, antes del primer request.
+Las respuestas OpenRouter escriben continuation4 con routing y modo explícitos;
+el historial no puede cambiar de ruta. OpenAI mantiene sus lectores1–3; el nuevo
+perfil rechaza historial routed previo sin binding, sin migración por conjetura.
+Attribution no forma parte de la identidad de routing.
+
+Session acepta un `shared_state_codec` del host, con encode/decode puros y retornos
+explícitos. Encode produce JSON portable; decode ocurre tras validar estructura,
+identidad, roster, identidad de política y bindings de continuación del snapshot,
+antes de restaurar la política con estado tipado. Esas comprobaciones previas son
+puras y no ejecutan el decoder ni consultan el Store de continuaciones.
+El codec no se escribe en el checkpoint ni se elige por bytes almacenados.
+Errores de callback fallan sin divulgar datos; encode fallido conserva bloqueo
+de checkpoint no confirmado y no reejecuta cambios. Sin codec rige el JSON actual.
+
+**Alternativas:** mentir sobre el proveedor o reasoning haría falsa la
+cualificación; un parser/transport privado violaría el stock-only aceptado; un
+decoder dentro de Store se ejecuta demasiado pronto. El codec explícito sirve
+a cualquier host con structs, sin conocer World ni reglas del consumidor.
+
+**Verificación y límites:** pruebas HTTP buffered y SSE reales locales recorren
+envelope→tool→history→texto con routing y un solo efecto; guards previos y native
+JSON siguen cerrados. Codec se verifica con ETS/reinicio/cursor, identidad falsa
+antes de decode, encode no portable y callback fallido. El recibo81/81 y el smoke
+DeepSeek4.1/Decart pertenecen al consumidor que preparó la extensión; la integración
+actual añade negativos de routing antes del codec, aprobación/primer request
+incierto, historial y política/bindings Session antes de decode. MiMo/io.net solo
+pasa con Hex1.2 del consumidor: stock ReqLLM1.26 no ofrece reasoning.enabled:false.
+No habilita reasoning continuation, certifica contabilidad observada/billing,
+garantiza RAM upstream ni sustituye la cualificación de cada modelo/proveedor.
+
+### 8.54 Cierre operativo de métricas y transporte HTTP aislado — 2026-10-03
+
+**Problema:** ReqLLM1.26 exige aridades de métricas distintas de las APIs0.6
+publicadas; el shutdown HTTP stock1.11 deja perfiles/sockets vivos. Limitar
+reinicios no libera la petición original. Ambos impiden usar esas rutas como si
+estuvieran cualificadas para operación prolongada.
+
+**Decisión:** el único Adapter integrado usa get_meter/1, lookup_instrument/2,
+create_histogram/3 y record/5 públicos. `metrics: [models: [labels]]` es opt-in;
+máximo32 modelos de host, desconocidos="other", cuatro instrumentos cerrados,
+error fijo y input/output. Sin IDs/endpoints/contenido como dimensiones, sin cache
+propia ni startup implícito. Tokens siguen normalizados; duraciones en segundos.
+Reader/exporter/SDK son del host. El API experimental es opcional/runtime false;
+su SDK sólo se añade a tests de la biblioteca. Ausencia/reinicio/fallo descarta
+métricas sin alterar ejecución o tracing.
+
+El control de restart detectó que get_tracer cacheado podía conservar el tracer
+del SDK anterior. El default ExAgent consulta ahora otel_tracer_provider.get_tracer/3
+público por span; sigue la instancia viva sin caché propia. Un tracer explícito
+sigue bajo ownership del host, que debe reemplazarlo al recrear su proveedor.
+La regresión reinicia el SDK con un processor nuevo y exige exactamente los dos
+spans de un run. No se manipula persistent_term ni configuración desde el core.
+
+La receta de VM por batch añade HTTP protobuf: transmite la tabla nativa SDK
+y su recurso por IPC propio finito; el child llama init/export/shutdown oficiales.
+El launcher registrado mata/recolecta esa VM también tras éxito, cerrando perfil,
+socket y átomos de la VM. No inspecciona estados privados, codifica OTLP ni toca
+inets del host. ETF HTTP admite símbolos del SDK del host sólo en la VM efímera,
+con65,536bytes; no es formato de Store ni entrada externa. gRPC conserva safe ETF.
+Stock HTTP descarta partial_success: se informa transport_ok y aceptación de
+spans desconocida, sin transformar un2xx en un recibo durable.
+
+**Alternativas:** esperar arreglos upstream mantiene indisponibles las rutas;
+parche/shim/parser propio incumpliría stock-only. Una VM por batch aporta ownership
+completo a baja cadencia, con coste de startup y límite1–8spans/1VM, y permanece
+receta explícita. No se hace default ni se promete alto throughput/predecode RAM.
+
+**Impacto/migración:** métricas antes ausentes se pueden activar explícitamente
+con paquetes0.6 y reader del host; configuración previa sigue off. Para HTTP aislado
+usar vm_http_worker y configuración pública específica del signal, con URL completa.
+El HTTP directo stock conserva su fuga: su corrección upstream sigue pendiente.
+Los warnings de dependencias siguen requiriendo releases oficiales compatibles.
+
+**Verificación:** SDK/reader/exporter de prueba reales comprueban unidades,
+sum/count de los cuatro histogramas, cardinalidad, default off, restart y bridge
+único. HTTP stock sobre loopback comprueba spans, correlación/privacy, path/headers,
+2xx/503/partial,3ciclos y cierre de POST retenido por deadline/owner kill. Estas
+pruebas no reemplazan API/UI cloud, cuyo recibo A10 permanece identificado aparte.
+
 ## 9. Estado actual y no-goals
 
 **Hecho (núcleo funcional):** loop, backend ReqLLM stock cualificado, Model custom/Test,

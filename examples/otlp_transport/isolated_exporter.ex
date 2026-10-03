@@ -17,7 +17,22 @@ defmodule OTLPTransportProbe.IsolatedExporter do
         fault: Map.get(opts, :fault, "none")
       })
 
-    if state.deadline_ms in 100..5_000 and state.rpc_deadline_ms in 1..5_000 and
+    valid_protocol =
+      Map.get(state, :protocol) in [nil, :grpc] or
+        (Map.get(state, :protocol) == :http_protobuf and
+           is_map(Map.get(state, :http_options)) and is_nil(Map.get(state, :request_profile)) and
+           Enum.all?(
+             Map.keys(state.http_options),
+             &(&1 in [
+                 :otlp_traces_endpoint,
+                 :otlp_traces_headers,
+                 :otlp_traces_compression,
+                 :ssl_options
+               ])
+           ) and
+           is_binary(Map.get(state.http_options, :otlp_traces_endpoint)))
+
+    if valid_protocol and state.deadline_ms in 100..5_000 and state.rpc_deadline_ms in 1..5_000 and
          state.fault in ["none", "shutdown_block", "before_rpc_hold"] do
       {:ok, state}
     else
@@ -28,7 +43,17 @@ defmodule OTLPTransportProbe.IsolatedExporter do
   def shutdown(_), do: :ok
 
   def export(table, resource, state) do
-    case :otel_otlp_traces.to_proto(table, resource) do
+    request =
+      if Map.get(state, :protocol) == :http_protobuf do
+        case :ets.tab2list(table) do
+          [] -> :empty
+          spans -> %{spans: spans, resource: resource, exporter_opts: state.http_options}
+        end
+      else
+        :otel_otlp_traces.to_proto(table, resource)
+      end
+
+    case request do
       :empty ->
         :ok
 
@@ -41,7 +66,12 @@ defmodule OTLPTransportProbe.IsolatedExporter do
             module -> module.project(request)
           end
 
-        count = Enum.sum(for r <- request.resource_spans, s <- r.scope_spans, do: length(s.spans))
+        count =
+          if Map.get(state, :protocol) == :http_protobuf,
+            do: length(request.spans),
+            else:
+              Enum.sum(for r <- request.resource_spans, s <- r.scope_spans, do: length(s.spans))
+
         payload = :erlang.term_to_binary(request)
 
         if count in 1..8 and byte_size(payload) <= 65_536 and
@@ -300,9 +330,10 @@ defmodule OTLPTransportProbe.IsolatedExporter do
 
     success =
       status == 0 and alive and not s.cancelling and receipt["group_closed"] == true and
-        receipt["result"] == "ok" and receipt["reported_accepted"] == s.count and
-        receipt["rejected"] == 0 and
-        receipt["unknown"] == 0
+        ((receipt["result"] == "ok" and receipt["reported_accepted"] == s.count and
+            receipt["rejected"] == 0 and receipt["unknown"] == 0) or
+           (Map.get(s.state, :protocol) == :http_protobuf and
+              receipt["result"] == "transport_ok" and receipt["http_status_success"] == true))
 
     send(s.owner, {s.token, if(success, do: :ok, else: :failed_not_retryable)})
   end

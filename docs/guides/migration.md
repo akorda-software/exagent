@@ -81,8 +81,29 @@ argument error; invalid args never imply a length terminal.
 
 ## Explicit none mode and continuation readers
 
+Dragonex adds the opt-in `:openrouter_chat_tools_v1` profile for explicitly
+qualified stock OpenRouter Chat. It allows only bounded `openrouter_provider`
+routing plus `app_title`/`app_referer`; it does not enable generic tools or native
+JSON output. None mode on this profile retains canonical max_tokens, while the
+OpenAI profile below keeps max_completion_tokens. Both disabled and none modes
+bind routing before the first request and write message continuation4, including
+the bounded routing map and explicit mode. Reusing history with different routing
+fails before IO. Legacy continuations1–3 do not qualify this new routed profile;
+start a fresh conversation rather than guessing its original route. Attribution
+headers are not routing identity. OpenAI history and binding contracts remain.
+Models exposing only `reasoning.enabled` (MiMo2.6Flash) remain
+unsupported by the stock ReqLLM1.26 options; do not invent effort capabilities.
+
+For typed Session shared state, supply `shared_state_codec: MyCodec` implementing
+`ExAgent.Session.StateCodec`. Return `{:ok, json_data}` from encode and
+`{:ok, application_state}` from decode. Stores must return portable snapshot data
+without early reconstruction: Session validates structure, identity, roster,
+policy identity and configured continuation bindings before calling decode.
+The host supplies the module again on restart; JSON never selects it. Default
+JSON state, checkpoint failures and mutation blocking retain their contracts.
+
 Set `reasoning_mode: :none` on a ReqLLM instance only with the existing qualified
-OpenAIChat profile and current, truthful capability evidence:
+OpenAIChat or explicit OpenRouterChat profile and current, truthful capability evidence:
 `reasoning.enabled=true`, `reasoning.effort.supported=true`, effort values containing
 `"none"`, and `reasoning.thinking.disable_supported=true`. A host may project an
 explicit optional/disable-supported catalog declaration into these fields; it must
@@ -90,13 +111,15 @@ not turn mandatory reasoning into disable support or invent none from its absenc
 There are no hardcoded model names or automatic gateway capability guesses.
 
 Omit temperature in this mode: an explicit value rejects instead of being removed.
-`ModelSettings.max_tokens` remains the only limit (1..4096, default4096), translated
-to the public stock max_completion_tokens option with canonical max_tokens omitted.
+`ModelSettings.max_tokens` remains the only limit (1..4096, default4096). The
+OpenAI Chat profile translates it to the public stock max_completion_tokens option
+with canonical max_tokens omitted; OpenRouter keeps max_tokens as described above.
 Do not supply those keys through provider_options/extra. Nil reasoning_mode retains
 previous settings/profile behavior. Thinking support is effectively false and any
 publicly exposed reasoning continuation still rejects before tool effects.
 
-None responses use message continuation3 with top-level reasoning_mode="none".
+OpenAI none responses use message continuation3 with top-level reasoning_mode="none".
+The explicit routed OpenRouter profile uses continuation4 in both modes.
 None cannot resume v1/v2 response history, nor can nil mode adopt v3. Envelope1 and
 logical arguments remain unchanged. No automatic downcast or guessed migration.
 

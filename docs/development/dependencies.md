@@ -5,6 +5,14 @@ Revisión del **2026-10-03**, solicitada antes de publicar. Se contrastan los
 --all`: producción, dependencias opcionales, tests, documentación y transitivas.
 La fecha importa: «última estable» describe esa consulta, no una promesa futura.
 
+El cierre operativo posterior añade dos paquetes oficiales0.6, sin cambiar los
+43anteriores: API experimental OTel opcional/runtime false y SDK experimental sólo
+test para verificar métricas. El lock tiene ahora45entradas. Sus requisitos públicos
+son compatibles con API1.5/SDK1.7; la aplicación consumidora decide instalar/arrancar
+su SDK de métricas. No equivale a iniciar dos exporters de tracing. Fuentes:
+[API0.6](https://hex.pm/packages/opentelemetry_api_experimental/0.6.0) y
+[SDK0.6](https://hex.pm/packages/opentelemetry_experimental/0.6.0).
+
 ## Resultado del resolver
 
 Había doce paquetes con una release estable posterior. Se actualizan once y se

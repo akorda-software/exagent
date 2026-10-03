@@ -77,7 +77,7 @@ por su propio evento de excepción: no atribuir todas las bajas al mantenimiento
 También se comprueban configuración, supervisión, timer obsoleto, otro handler y
 parada sin detach. Ver [guía](../guides/observability.md).
 
-## Exporter HTTP: reinicios acotados, limpieza upstream aún abierta
+## Exporter HTTP: limpieza con VM propia; ruta directa stock pendiente
 
 `BoundedProcessor` añade `max_exporter_restarts`: entero no negativo, o infinity
 para conservar el default anterior. Al agotar el presupuesto de reinicios
@@ -95,11 +95,20 @@ Los controles ilimitados anteriores conservan su resultado negativo.
 
 La consulta Hex confirma1.11; su shutdown HTTP no libera el perfil. Las fuentes
 oficiales main inspeccionadas también conservan perfil derivado de PID y shutdown
-sin limpieza HTTP. La solución completa requiere un lifecycle upstream o una
-frontera de exporter VM propia cualificada; no introducir inspección privada de
-perfiles ni cerrar inets compartido desde la biblioteca.
+sin limpieza HTTP. La ruta directa aún requiere lifecycle upstream. La receta de
+VM propia se ha ampliado a HTTP protobuf con callbacks nativos publicados: cada
+batch tiene una VM registrada que el launcher mata y recolecta tras éxito, error,
+deadline o muerte del owner. Las pruebas verifican el cierre de un POST retenido
+y sus procesos OS, además de tres ciclos sanos, path/headers, correlación y privacy.
+No cierra inets compartido ni inspecciona perfiles privados.
+Ver [receta](otlp-isolated-transport.md).
 
-## Métricas: incompatibilidad concreta de las APIs opcionales
+Es una solución explícita para baja cadencia:1–8spans,65,536bytes IPC,1VM activa,
+deadline100–5000ms y coste de startup por batch. HTTP stock descarta el cuerpo de
+respuesta; incluso con2xx se informa transport_ok y aceptación de spans desconocida.
+No prueba ingestion cloud, throughput elevado ni límites RAM antes del decode.
+
+## Métricas: adapter público compatible, SDK y destino del host
 
 El bridge stock ReqLLM1.26 requiere `otel_meter_provider.get_meter/3` y
 `otel_histogram.record/4`. El [API experimental0.6 publicado](https://hex.pm/packages/opentelemetry_api_experimental/0.6.0)
@@ -107,13 +116,22 @@ exporta get_meter/1–2 y record/5; create_histogram/3 sí coincide. Añadir sol
 ese paquete no satisface el detector de capacidades stock. El API estable1.5
 del lock no incluye esas APIs de métricas.
 
-Se verifican fuentes oficiales de ambos paquetes experimentales0.6 y checksums
-de sus TAR; sólo inspección, sin instalarlos o cambiar el lock. La aceptación de
-trazas no cubre histogramas/exportación de métricas. Un adapter público compatible
-o una corrección upstream necesita su propia aceptación de API, unidades,
-atributos/cardinalidad y reader/exporter. No se añade un shim ni se declara verde.
+Se conservan esa inspección y sus checksums. El Adapter integrado de ExAgent ya
+usa las aridades públicas0.6 mediante una opción metrics explícita, sin modificar
+ReqLLM ni añadir otro listener. API experimental es dependencia opcional/runtime
+false; SDK experimental sólo test. El host lo instala, configura reader/exporter
+y lo arranca. Default off; cuatro instrumentos fijos;1–32modelos permitidos y
+"other", input/output y error fijo. Sin IDs, endpoints o contenido como dimensiones.
+SDK/reader/exporter de prueba reales verifican sum/count, segundos/tokens, unidades,
+cardinalidad, ausencia/reinicio de SDK y una sola emisión por request buffered.
+La prueba de request exige una fixture Chat completa, incluido total_tokens;
+omitirlo reproduce normalized0 del upstream, conservado sin inventar consumo.
 
-Observabilidad integrada:94casos pasan en ambos runtimes1.18/28 y1.20/29,
+El SDK puede descartar puntos por ausencia/fallo; dimensiones acotadas no garantizan
+RAM ni entrega. El destino de métricas lo elige el host. La aceptación de trazas
+Langfuse/Opik no cualifica métricas en sus URLs de tracing. Ver [guía](../guides/observability.md).
+
+El recibo de lifecycle previo:94casos pasan en ambos runtimes1.18/28 y1.20/29,
 incluidos los nuevos controles de mantenimiento y presupuesto. Los recibos cloud,
 SQL, paid y FULL anteriores mantienen sus identidades y perfiles.
 
@@ -157,4 +175,7 @@ ni toda la matriz por una nota documental. [Dependencias](dependencies.md) y
 
 El [recibo de investigación](https://github.com/akorda-software/exagent/blob/codex/v2-candidate-029/docs/orchestration/2026-10-01-v2-codex/KNOWN-LIMITS.md)
 conserva controles, fuentes, presupuestos y resultados. Observabilidad cloud,
-métricas exportadas, SQL y carga no reciben una nueva aceptación en este objetivo.
+SQL y carga no recibieron una nueva aceptación en aquel objetivo. El posterior
+[cierre operativo](https://github.com/akorda-software/exagent/blob/codex/v2-candidate-029/docs/orchestration/2026-10-01-v2-codex/OPERATIONAL-CLOSURE.md)
+añade las métricas locales con SDK/reader/exporter y la alternativa HTTP VM;
+conserva la identidad de los recibos cloud y los diagnósticos estrictos anteriores.

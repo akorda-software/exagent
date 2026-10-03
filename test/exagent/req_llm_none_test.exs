@@ -221,114 +221,155 @@ defmodule ExAgent.ReqLLMNoneTest do
     end
   end
 
-  test "none approval resume binds endpoint, mode and current capabilities with an empty app codec" do
-    {store, config} = continuation()
-    {url, peer} = peer([:tool, :text])
-    base = model(url)
-    agent = ExAgent.new(model: base, tools: [tool()])
+  for routing_mode <- [:openai_none, :openrouter_none, :openrouter_disabled] do
+    @routing_mode routing_mode
+    test "#{routing_mode} approval resume binds configuration with an empty app codec" do
+      {store, config} = continuation()
+      {url, peer} = peer([:tool, :text])
+      base = routed_model(model(url), @routing_mode)
+      agent = ExAgent.new(model: base, tools: [tool()])
 
-    opts = [
-      continuation: config,
-      stream_text: true,
-      permissions: ExAgent.Permissions.new!(default: :ask)
-    ]
+      opts = [
+        continuation: config,
+        stream_text: true,
+        permissions: ExAgent.Permissions.new!(default: :ask)
+      ]
 
-    assert {:ok, %{status: :paused} = paused} = ExAgent.run(agent, "go", opts)
-    assert_receive {:request, ^peer, 0, _}
-    refute_receive {:effect, _, _}, 0
-    {:ok, %{record: record}} = ExAgent.Continuation.get(store, "conversation")
-    assert record["execution"]["progress"]["runtime"]["model_binding"]["reasoning_mode"] == "none"
-    [{id, approval}] = Map.to_list(record["execution"]["progress"]["approvals"])
+      assert {:ok, %{status: :paused} = paused} = ExAgent.run(agent, "go", opts)
+      assert_receive {:request, ^peer, 0, _}
+      refute_receive {:effect, _, _}, 0
+      {:ok, %{record: record}} = ExAgent.Continuation.get(store, "conversation")
 
-    {:ok, %{record: approved}} =
-      ExAgent.Continuation.decide(
-        store,
-        "conversation",
-        :approve,
-        admin(record, "approve") ++ [approval_id: id, payload_hash: approval["payload_hash"]]
+      assert record["execution"]["progress"]["runtime"]["model_binding"]["reasoning_mode"] ==
+               if(@routing_mode == :openrouter_disabled, do: "disabled", else: "none")
+
+      [{id, approval}] = Map.to_list(record["execution"]["progress"]["approvals"])
+
+      {:ok, %{record: approved}} =
+        ExAgent.Continuation.decide(
+          store,
+          "conversation",
+          :approve,
+          admin(record, "approve") ++ [approval_id: id, payload_hash: approval["payload_hash"]]
+        )
+
+      reference = %{paused.continuation | revision: approved["revision"]}
+      assert_changed_before_claim(agent, base, reference, config, store, approved)
+
+      assert {:ok, %{status: :succeeded, request_count: 2, tool_calls: 1} = result} =
+               ExAgent.resume(agent, reference, opts)
+
+      assert_receive {:effect, "none-call", %{"value" => 7}}
+      assert_receive {:request, ^peer, 1, _}
+      assert Message.from_json(Message.to_json(result.messages)) == {:ok, result.messages}
+      assert {:error, _} = ExAgent.resume(agent, reference, opts)
+      refute_receive {:effect, _, _}, 0
+      refute_receive {:request, ^peer, _, _}, 0
+    end
+
+    test "#{routing_mode} first uncertain request binds configuration before any response" do
+      {store, config} = continuation()
+      config = %{config | lease_ms: 200}
+      {url, peer} = peer([:block, :text])
+      base = routed_model(model(url), @routing_mode)
+      agent = ExAgent.new(model: base)
+      {:ok, runner} = Task.start(fn -> ExAgent.run(agent, "go", continuation: config) end)
+      assert_receive {:request, ^peer, 0, _}, 5000
+      monitor = Process.monitor(runner)
+      Process.exit(runner, :kill)
+      assert_receive {:DOWN, ^monitor, :process, ^runner, :killed}
+      {:ok, %{record: record}} = ExAgent.Continuation.get(store, "conversation")
+
+      Process.sleep(
+        max(record["execution"]["lease_until"] - System.system_time(:millisecond) + 1, 0)
       )
 
-    reference = %{paused.continuation | revision: approved["revision"]}
-    assert_changed_before_claim(agent, base, reference, config, store, approved)
+      {:ok, %{record: record}} =
+        ExAgent.Continuation.recover(store, "conversation", admin(record, "recover"))
 
-    assert {:ok, %{status: :succeeded, request_count: 2, tool_calls: 1} = result} =
-             ExAgent.resume(agent, reference, opts)
+      {:ok, history} = Message.from_json(record["snapshot"]["message_history"])
+      refute Enum.any?(history, &match?(%Message.Response{}, &1))
+      {:ok, %{retryable_effects: [binding]}} = ExAgent.Continuation.get(store, "conversation")
 
-    assert_receive {:effect, "none-call", %{"value" => 7}}
-    assert_receive {:request, ^peer, 1, _}
-    assert Message.from_json(Message.to_json(result.messages)) == {:ok, result.messages}
-    assert {:error, _} = ExAgent.resume(agent, reference, opts)
-    refute_receive {:effect, _, _}, 0
-    refute_receive {:request, ^peer, _, _}, 0
+      retry_opts = [
+        operation_id: "retry",
+        actor: :host,
+        authorize: fn :host, _, _ -> {:ok, "operator"} end,
+        idempotency_key: "none-key",
+        accept_duplicate_risk: true
+      ]
+
+      assert {:error, _} =
+               ExAgent.Continuation.retry_effect(
+                 store,
+                 "conversation",
+                 binding,
+                 Keyword.put(retry_opts, :authorize, fn _, _, _ -> :deny end)
+               )
+
+      {:ok, %{record: authorized}} =
+        ExAgent.Continuation.retry_effect(store, "conversation", binding, retry_opts)
+
+      reference = %{
+        id: "conversation",
+        record_id: authorized["record_id"],
+        revision: authorized["revision"]
+      }
+
+      assert_changed_before_claim(agent, base, reference, config, store, authorized)
+
+      assert {:ok, %{output: "done", request_count: 2, tool_calls: 0}} =
+               ExAgent.resume(agent, reference, continuation: config)
+
+      assert_receive {:request, ^peer, 1, payload}
+
+      if base.reasoning_mode == :none,
+        do: assert(payload["reasoning_effort"] == "none"),
+        else: refute(Map.has_key?(payload, "reasoning_effort"))
+
+      refute_receive {:request, ^peer, _, _}, 0
+      refute_receive {:effect, _, _}, 0
+    end
   end
 
-  test "none first uncertain request retries only matching static binding and actor; no history is needed" do
-    {store, config} = continuation()
-    config = %{config | lease_ms: 200}
-    {url, peer} = peer([:block, :text])
-    base = model(url)
-    agent = ExAgent.new(model: base)
-    {:ok, runner} = Task.start(fn -> ExAgent.run(agent, "go", continuation: config) end)
-    assert_receive {:request, ^peer, 0, _}, 5000
-    monitor = Process.monitor(runner)
-    Process.exit(runner, :kill)
-    assert_receive {:DOWN, ^monitor, :process, ^runner, :killed}
-    {:ok, %{record: record}} = ExAgent.Continuation.get(store, "conversation")
+  defp routed_model(model, :openai_none), do: model
 
-    Process.sleep(
-      max(record["execution"]["lease_until"] - System.system_time(:millisecond) + 1, 0)
-    )
-
-    {:ok, %{record: record}} =
-      ExAgent.Continuation.recover(store, "conversation", admin(record, "recover"))
-
-    {:ok, history} = Message.from_json(record["snapshot"]["message_history"])
-    refute Enum.any?(history, &match?(%Message.Response{}, &1))
-    {:ok, %{retryable_effects: [binding]}} = ExAgent.Continuation.get(store, "conversation")
-
-    retry_opts = [
-      operation_id: "retry",
-      actor: :host,
-      authorize: fn :host, _, _ -> {:ok, "operator"} end,
-      idempotency_key: "none-key",
-      accept_duplicate_risk: true
-    ]
-
-    assert {:error, _} =
-             ExAgent.Continuation.retry_effect(
-               store,
-               "conversation",
-               binding,
-               Keyword.put(retry_opts, :authorize, fn _, _, _ -> :deny end)
-             )
-
-    {:ok, %{record: authorized}} =
-      ExAgent.Continuation.retry_effect(store, "conversation", binding, retry_opts)
-
-    reference = %{
-      id: "conversation",
-      record_id: authorized["record_id"],
-      revision: authorized["revision"]
+  defp routed_model(model, mode) do
+    model = %{
+      model
+      | tool_profile: :openrouter_chat_tools_v1,
+        provider_options: [openrouter_provider: %{only: ["decart"], allow_fallbacks: false}]
     }
 
-    assert_changed_before_claim(agent, base, reference, config, store, authorized)
+    model = put_in(model.model.provider, :openrouter)
 
-    assert {:ok, %{output: "done", request_count: 2, tool_calls: 0}} =
-             ExAgent.resume(agent, reference, continuation: config)
-
-    assert_receive {:request, ^peer, 1, payload}
-    assert payload["reasoning_effort"] == "none"
-    refute_receive {:request, ^peer, _, _}, 0
-    refute_receive {:effect, _, _}, 0
+    if mode == :openrouter_disabled,
+      do: %{put_in(model.model.capabilities.reasoning, %{enabled: false}) | reasoning_mode: nil},
+      else: model
   end
 
   defp assert_changed_before_claim(agent, base, reference, config, store, record) do
-    for changed <- [
-          %{base | reasoning_mode: nil},
-          %{base | base_url: "https://other.invalid/v1"},
-          put_in(base.model.id, "other"),
-          put_in(base.model.capabilities.reasoning.effort.values, ["high"])
-        ] do
+    changed_models = [
+      %{base | reasoning_mode: if(base.reasoning_mode, do: nil, else: :none)},
+      %{base | base_url: "https://other.invalid/v1"},
+      put_in(base.model.id, "other"),
+      %{
+        base
+        | model: %{
+            base.model
+            | capabilities: %{tools: %{enabled: false}, reasoning: %{enabled: false}}
+          }
+      }
+    ]
+
+    changed_models =
+      if base.tool_profile == :openrouter_chat_tools_v1,
+        do: [
+          %{base | provider_options: [openrouter_provider: %{only: ["io-net"]}]} | changed_models
+        ],
+        else: changed_models
+
+    for changed <- changed_models do
       assert {:error, _} =
                ExAgent.resume(%{agent | model: changed}, reference, continuation: config)
 

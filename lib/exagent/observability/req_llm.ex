@@ -50,8 +50,11 @@ defmodule ExAgent.Observability.ReqLLM do
   @doc "Attach the single integrated bridge; never detach an application's foreign bridge."
   def attach(opts \\ []) do
     unless Keyword.keyword?(opts) and
-             Enum.all?(opts, fn {key, _} -> key in [:content, :langfuse] end),
+             length(Keyword.keys(opts)) == length(Enum.uniq(Keyword.keys(opts))) and
+             Enum.all?(opts, fn {key, _} -> key in [:content, :langfuse, :metrics] end),
            do: raise(ArgumentError, "invalid ReqLLM observability options")
+
+    ExAgent.Observability.ReqLLM.Metrics.validate!(Keyword.get(opts, :metrics, false))
 
     if Enum.any?(bridges(), &(&1.id != @handler)) do
       {:error, :conflicting_req_llm_bridge}
@@ -95,9 +98,9 @@ defmodule ExAgent.Observability.ReqLLM do
   @impl true
   defdelegate available?(), to: Native
   @impl true
-  defdelegate metrics_available?(), to: Native
+  defdelegate metrics_available?(), to: ExAgent.Observability.ReqLLM.Metrics
   @impl true
-  defdelegate record_histogram(record, config), to: Native
+  defdelegate record_histogram(record, config), to: ExAgent.Observability.ReqLLM.Metrics
 
   @impl true
   def start_span(name, attrs, config) do

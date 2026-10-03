@@ -70,6 +70,20 @@ defmodule ExAgent.Session.Continuations do
   def restore(state, data, version) do
     data = normalize_data(data)
 
+    with :ok <- validate_bindings(state, data, version) do
+      entries =
+        Map.new(
+          data,
+          &{&1["participant_id"], Map.take(&1, ~w(pending consumed error diagnostic_id))}
+        )
+
+      {:ok, %{state | continuation_state: entries} |> refresh()}
+    end
+  end
+
+  def validate_bindings(state, data, version) do
+    data = normalize_data(data)
+
     same_bindings? =
       version != 3 or
         Enum.sort(Enum.map(data, & &1["participant_id"])) ==
@@ -80,13 +94,7 @@ defmodule ExAgent.Session.Continuations do
            binding = state.continuation_bindings[item["participant_id"]]
            binding && binding_data(binding) == item["binding"]
          end) do
-      entries =
-        Map.new(
-          data,
-          &{&1["participant_id"], Map.take(&1, ~w(pending consumed error diagnostic_id))}
-        )
-
-      {:ok, %{state | continuation_state: entries} |> refresh()}
+      :ok
     else
       {:error, :session_continuation_binding_changed}
     end

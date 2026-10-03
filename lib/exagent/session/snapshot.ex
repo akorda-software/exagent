@@ -39,7 +39,11 @@ defmodule ExAgent.Session.Snapshot do
       {:ok, version, data} ->
         %__MODULE__{
           session_id: state.session_id,
-          shared_state: state.shared_state,
+          shared_state:
+            ExAgent.Session.StateCodec.dump!(
+              Map.get(state, :shared_state_codec),
+              state.shared_state
+            ),
           participants: Enum.map(state.participants, fn {id, p} -> %{id: id, kind: p.kind} end),
           policy_mod: Atom.to_string(state.policy_mod),
           policy_state: data,
@@ -79,15 +83,25 @@ defmodule ExAgent.Session.Snapshot do
   def validate(_, _), do: {:error, :invalid_snapshot}
 
   def restore(snapshot, trusted_mod, context) do
-    if snapshot.policy_mod == Atom.to_string(trusted_mod) do
-      PolicyCodec.restore(trusted_mod, snapshot.policy_version, snapshot.policy_state, context)
-    else
-      {:error, :snapshot_policy_mismatch}
-    end
+    with :ok <- validate_policy(snapshot, trusted_mod),
+         do:
+           PolicyCodec.restore(
+             trusted_mod,
+             snapshot.policy_version,
+             snapshot.policy_state,
+             context
+           )
   rescue
     _ -> {:error, :invalid_policy_state}
   catch
     _, _ -> {:error, :invalid_policy_state}
+  end
+
+  @doc false
+  def validate_policy(snapshot, trusted_mod) do
+    if snapshot.policy_mod == Atom.to_string(trusted_mod),
+      do: :ok,
+      else: {:error, :snapshot_policy_mismatch}
   end
 
   defp from_map(map) do

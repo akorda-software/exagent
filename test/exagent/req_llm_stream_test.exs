@@ -328,6 +328,102 @@ defmodule ExAgent.ReqLLMStreamTest do
     end
   end
 
+  test "explicit OpenRouter streaming retains routing, mandatory envelope and tool history" do
+    {url, peer} =
+      scripted([
+        reply([call(Jason.encode!(%{"arguments" => %{"value" => 7}}))]),
+        reply([], "stop", "done")
+      ])
+
+    routed =
+      model(url,
+        model: %{
+          provider: :openrouter,
+          id: "stream-gate",
+          extra: %{wire: %{protocol: "openai_chat"}},
+          capabilities: %{tools: %{enabled: true}, reasoning: %{enabled: false}}
+        },
+        tool_profile: :openrouter_chat_tools_v1,
+        provider_options: [
+          openrouter_provider: %{only: ["io-net"], order: ["io-net"], allow_fallbacks: false}
+        ]
+      )
+
+    assert {:ok, result} =
+             ExAgent.run(ExAgent.new(model: routed, tools: [tool()]), "go", stream_text: true)
+
+    assert result.output == "done" and result.request_count == 2
+    assert_receive {:effect, _, %{"value" => 7}}, 5000
+    refute_receive {:effect, _, _}, 0
+
+    for index <- 0..1 do
+      assert_receive {:script_request, ^peer, ^index, body}, 5000
+
+      assert body["provider"] == %{
+               "only" => ["io-net"],
+               "order" => ["io-net"],
+               "allow_fallbacks" => false
+             }
+
+      assert body["stream"] == true
+      assert get_in(hd(body["tools"]), ["function", "parameters", "required"]) == ["arguments"]
+    end
+
+    assert Message.from_json(Message.to_json(result.messages)) == {:ok, result.messages}
+  end
+
+  test "routed stream invalid envelopes and incomplete terminals cannot authorize effects" do
+    for {args, finish} <- [
+          {"[]", "tool_calls"},
+          {"{\"arguments\":[]}", "tool_calls"},
+          {"{\"arguments\":{}}", "length"}
+        ] do
+      {url, peer} = scripted([reply([call(args)], finish)])
+
+      m =
+        model(url,
+          tool_profile: :openrouter_chat_tools_v1,
+          model: %{
+            provider: :openrouter,
+            id: "stream-gate",
+            extra: %{wire: %{protocol: "openai_chat"}},
+            capabilities: %{tools: %{enabled: true}, reasoning: %{enabled: false}}
+          },
+          provider_options: [openrouter_provider: %{only: ["decart"]}]
+        )
+
+      assert [{:error, %ExAgent.RunError{}}] =
+               ExAgent.run_stream(ExAgent.new(model: m, tools: [tool()]), "go") |> Enum.to_list()
+
+      assert_receive {:script_request, ^peer, 0, body}
+      assert body["provider"] == %{"only" => ["decart"]}
+      refute_receive {:effect, _, _}, 0
+    end
+  end
+
+  test "routed stream owner death closes its actual HTTP socket" do
+    {url, peer} = peer()
+
+    m =
+      model(url,
+        tool_profile: :openrouter_chat_tools_v1,
+        model: %{
+          provider: :openrouter,
+          id: "stream-gate",
+          extra: %{wire: %{protocol: "openai_chat"}},
+          capabilities: %{tools: %{enabled: true}, reasoning: %{enabled: false}}
+        },
+        provider_options: [openrouter_provider: %{only: ["decart"]}]
+      )
+
+    owner = spawn(fn -> Enum.to_list(stream(m)) end)
+    ref = Process.monitor(owner)
+    assert_receive {:request, ^peer, _}, 5000
+    Process.exit(owner, :kill)
+    assert_receive {:DOWN, ^ref, :process, ^owner, :killed}, 2000
+    assert {:error, :closed} = command(peer, :closed)
+  end
+
   test "R1.5 strict stream metric requirement rejects zero and positive fixtures before transport" do
     for tokens <- [0, 7], surface <- [:stream_text, :run_stream] do
       reply =
