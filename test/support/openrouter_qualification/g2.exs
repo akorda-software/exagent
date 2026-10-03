@@ -199,7 +199,7 @@ defmodule G2 do
 
         :length ->
           {[tools: [tool(counter)]],
-           "Do not call any tools. Output the integers from 1 through 1000, one per line, without abbreviation or commentary. Continue until all 1000 integers are written."}
+           "Do not call any tools. Write one paragraph of at least 120 words explaining why plants need sunlight, water and soil."}
       end
 
     started = System.monotonic_time(:millisecond)

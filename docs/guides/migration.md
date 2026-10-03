@@ -1147,7 +1147,10 @@ fixtures or this read-only inventory cover similar paths.
 
 ## 7. Decoder dependency floors
 
-The manifest now requires Mint 1.10.2+ and HPAX 1.0.4+ within their 1.x ranges.
+The manifest now requires Mint 1.11+ and HPAX 1.1+ within their 1.x ranges,
+plus Finch 0.24+. The [dependency review](../development/dependencies.md) records
+the current versions and qualification. Finch's HTTP/1 error cleanup accompanies
+Mint's changed receive-timeout behavior; update them together.
 Updating only this repository's lockfile would not constrain a Hex consumer's
 dependency resolution. Applications that pin older decoder versions must update
 those constraints before adopting the major; no dependency override bypasses them.
@@ -1163,8 +1166,9 @@ header amplification
 ([CVE-2026-91043](https://cna.erlef.org/cves/CVE-2026-91043.html)) and buffering an
 oversized HTTP/2 frame before checking its declared size
 ([CVE-2026-92103](https://cna.erlef.org/cves/CVE-2026-92103.html)). Existing locks
-at1.10.1 must update Mint too. The root keeps the minimal official patch; other
-dependency entries, ReqLLM contracts and host resource guards are unchanged.
+at1.10.1 must update Mint too. The previous candidate adopted the minimal official
+1.10.2 patch; the current candidate advances to 1.11 with Finch/HPAX and the
+documented dependency review. ReqLLM contracts and host resource guards remain.
 
 These floors address concrete HTTP/HPACK buffering/decoding advisories. Mint must
 deliver partial chunk bodies so ExAgent can enforce its byte limit before a peer
@@ -1205,11 +1209,11 @@ Keep SDK processor bootstrap arguments free of credentials: OTP supervisor repor
 can include the original arguments on restart, before the processor's own status
 projection. Resolve credentials through exporter environment/application config.
 
-Native exporter1.10.0 HTTP qualification is measured in the
+Native exporter1.11.0 HTTP qualification is measured in the
 [observability guide](observability.md), section 7.
 Do not treat `BoundedProcessor.stats/1`'s `exported` counter as remote accepted
-spans: this exporter ignores successful OTLP partial-rejection bodies. Boolean
-attributes lose their native type, and timeout/shutdown can leave native HTTP
+spans: this exporter ignores successful OTLP partial-rejection bodies. Version1.11
+preserves boolean types, unlike the historical1.10 receipt. Timeout/shutdown can leave native HTTP
 profiles/atoms/requests after ExAgent's own resources close. The direct HTTP
 recipe is locally wire-tested, but general long-lived cleanup remains gated.
 No automatic profile cleanup or alternative transport is installed by ExAgent.

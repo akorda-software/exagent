@@ -1,6 +1,6 @@
 # Support and release status
 
-Updated **2026-10-02**. These docs describe the unreleased v2 candidate on
+Updated **2026-10-03**. These docs describe the unreleased v2 candidate on
 `codex/v2-candidate-029`. The nominal version remains **1.3.0**. No v2 version
 bump, tag, merge to `main` or Hex publication has been performed.
 
@@ -8,13 +8,13 @@ bump, tag, merge to `main` or Hex publication has been performed.
 
 | Boundary | Evidence | Scope |
 |---|---|---|
-| Offline runtime | ReqLLM 1.26: local 1.20 suite has 2,177 passes / zero failures / 28 exclusions. The 1.18 suite has one startup-assertion failure, corrected with 13 passing focal cases on each runtime. | Preserve the original 1.18 failure; the corrected full suite was not rerun. TestModel and fixtures, not real-provider compatibility. |
+| Offline runtime | Updated dependencies, October 3: both complete suites have 2,177 passes / zero failures / 28 exclusions. | Preserve the previous ReqLLM-only 1.18 failure below. TestModel and fixtures, not real-provider compatibility. |
 | Runtime targets | Elixir 1.18 / OTP 28 and Elixir 1.20 / OTP 29; strict test compile passes on both. | Tested combinations, not every patch release or dependency graph. |
-| Real model | Fresh ReqLLM 1.26 G2: 14/14 cases, 17 requests, 3 effects; GPT-4o-mini/OpenRouter Chat tools profile. | Other providers, reasoning families and modalities remain subject to their guards. |
-| Real consumer | Fresh ReqLLM 1.26: all 18 application E2E scenarios pass in one wave; 15 offline cases also pass. | Private copy of the authorized Phoenix consumer; 36 admissions / USD 0.90 reserved, no observed invoice. The original application is unchanged. |
-| Durable recovery | Fresh PostgreSQL 17.4 qualification: 14 phases, including lost COMMIT ACK, competing resumers, fresh-VM resume, explicit recovery and backup/restore; cleanup confirmed. | Declared single-database/host profile, not universal HA or external exactly-once effects. |
-| Langfuse and Opik | Each: native transport + API 33/33 observations, 667 attributes, 12 model usages; UI 12 cases / 248 attributes. | Same finite A10 acceptance criteria. Content off; synthetic TestModel tokens. |
-| Package consumers | Fresh ReqLLM 1.26: eight clean graphs across two runtimes, 56 contract checks and 46 commands pass. | Functional acceptance; upstream strict warnings remain red. |
+| Real model | Updated dependencies: 12 scenarios pass initially; length sync/stream pass after correcting the stimulus. All 14 scenarios covered, 18 admissions / 3 effects. | Original refusal/stop failure retained; not a single new 14/14 wave. GPT-4o-mini/OpenRouter Chat tools profile only. |
+| Real consumer | October 2 ReqLLM 1.26: all 18 application E2E scenarios pass in one wave; 15 offline cases also pass. | Prior evidence, not a new run after all dependency updates. Private copy; 36 admissions / USD 0.90 reserved, no observed invoice. Original app unchanged. |
+| Durable recovery | October 3 PostgreSQL 17.4: 14 phases, including lost COMMIT ACK, competing resumers, fresh-VM resume, explicit recovery and backup/restore; cleanup confirmed. | Declared single-database/host profile, not universal HA or external exactly-once effects. |
+| Langfuse and Opik | Each: prior native/API 33/33 observations, 667 attributes, 12 model usages; UI 12 cases / 248 attributes. Exporter 1.11 booleans newly verified locally. | Same finite A10 criteria. No fresh cloud/API/UI wave. Content off; synthetic TestModel tokens. |
+| Package consumers | October 3 updated dependencies: eight clean graphs across two runtimes, 56 contract checks and 46 commands pass. | Functional acceptance; upstream strict warnings remain red. |
 | Integrations | Official MCP SDK 2.2.0: five profiles; LiveViewTest/Oban SQL: six cases plus crash/recovery. | Qualified recipes, not every deployment combination. |
 | Load and cleanup | Finite TestModel load/soak/saturation and owned-resource cleanup. | No LLM latency SLO, cloud availability or upstream predecode RAM guarantee. |
 
@@ -40,7 +40,24 @@ The local `bin/check` routine subsequently passed all eight phases. It took
 This does not demonstrate a 20× local speedup. New documentation checks are
 recorded separately; they do not relabel an old TAR or test receipt as new evidence.
 
-## ReqLLM 1.26 qualification
+## Dependency review — October 3
+
+All 43 locked Hex packages were checked against official stable releases.
+Eleven are updated; 42 are current. Gproc remains at 1.2 because stock grpcbox
+requires `~> 1.2.0`, excluding 1.3. No unsupported override is introduced.
+The [dependency record](development/dependencies.md) lists every version,
+compatibility change and official source. `hex.audit` reports no retired packages
+or advisories for this lock at the time of the query.
+
+The new local routine passes all nine phases in 2,073.45 seconds. The complete
+1.20 and 1.18 suites pass in 2,007.4 and 2,024.7 seconds respectively. Compile
+checks report no ExAgent warnings. The previous failed 1.18 receipt remains below;
+these new runs qualify the updated dependency graph independently.
+Fresh G2 covers all fourteen scenarios with the initial failure retained and two
+causal length controls; PostgreSQL and all eight clean package graphs also pass
+their functional checks. Strict upstream diagnostics remain open.
+
+## ReqLLM 1.26 qualification — October 2 receipt
 
 The candidate requires ReqLLM 1.26.0 and its llm_db 2026.9.8 catalogue. The fresh
 local routine passes all nine phases, including the complete 1.20 suite, ExDoc,

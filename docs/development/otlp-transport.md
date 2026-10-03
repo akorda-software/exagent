@@ -1,5 +1,10 @@
 # R7.2 — alternativa OTLP/gRPC en consumidor privado
 
+**Actualización2026-10-03:** el lock raíz utiliza exporter1.11.0 estable de Hex,
+según la [revisión de dependencias](dependencies.md). Esta página conserva la
+procedencia del experimento y su fuente oficial fijada; su descripción de1.10
+como versión raíz corresponde al lote histórico, no al manifiesto actual.
+
 **2026-10-01: lote local verde; receta experimental, integración pendiente.**
 El harness nuevo en `test/support/otlp_transport/` demuestra una alternativa con
 SDK/API nativos, conversión oficial y cliente gRPC público. El límite HTTP1.10.0

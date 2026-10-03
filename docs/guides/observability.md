@@ -296,7 +296,9 @@ by changing an endpoint. Their integrations belong outside the critical run path
 
 ## 7. Native OTLP HTTP: measured local contract and limits
 
-N01–N03 add the real `opentelemetry_exporter`1.10.0 as a **test-only** dependency.
+N01–N03 use the real `opentelemetry_exporter`1.11.0 as a **test-only** dependency.
+The [dependency review](../development/dependencies.md) records its upgrade from
+1.10.0; historical receipts retain their original versions and observations.
 Four isolated-VM tests use SDK1.7/API1.5, a controller-gated receiver bound to
 127.0.0.1 on a dynamic port, and the exporter's official protobuf decoder. They
 inspect POST, full/generic path mapping, content type, resource/scope, nonzero
@@ -327,20 +329,21 @@ calls, two effects, two traces and two HTTP export requests. After both batches:
 | Response held beyond processor deadline | 8 | 4 | 0 | 4 |
 | 200 with protobuf `rejected_spans=4` | 8 | 8 | 0 | 0 |
 
-Exporter1.10.0 ignores the successful response body, including `partial_success`.
+Exporter1.11.0 still ignores the successful response body, including `partial_success`.
 Thus **`exported` is successful-callback count, not remote accepted-span count**.
 A late HTTP success does not undo a timed-out batch; another flush does not replay
 effects/batches. The test does not certify every upstream redirect/retry variant.
 Native failure logs can print a response body; use synthetic responses in tests
 and assess third-party exporter logging separately from ExAgent's projections.
 
-### Boolean type fidelity is a known upstream defect
+### Boolean type fidelity is corrected in exporter 1.11
 
-The native SDK retains boolean span/resource attributes. Exporter1.10.0 handles
-atoms before booleans and serializes true/false as protobuf strings. A direct
-native-export control reproduces this independently of ExAgent, alongside correctly
-typed string/integer controls. No vendor patch or false assertion of type fidelity
-is included. Carry this loss into destination/profile acceptance.
+The native SDK retains boolean span/resource attributes. Historical exporter1.10.0
+handled atoms before booleans and serialized true/false as protobuf strings.
+Published1.11.0 corrects this upstream. The direct native-export control now requires
+protobuf `bool_value` for true/false and the resource boolean, alongside exact
+string/integer controls. Composed probes require native boolean compaction and
+checkpoint-retry attributes. No vendor patch is included.
 
 ### Owned-process cleanup is distinct from HTTP cleanup
 

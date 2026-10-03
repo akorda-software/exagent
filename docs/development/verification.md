@@ -286,7 +286,7 @@ Al reorganizar páginas comprobar también:
 5. Ausencia de registros de ejecución archivados en el paquete de uso habitual.
 
 La portada y las guías de tareas usan ExDoc, con búsqueda/teclas/temas propios del
-generador y CSS local. ExDoc0.40.3 genera `llms.txt` y Markdown; su formatter público
+generador y CSS local. ExDoc0.40.4 genera `llms.txt` y Markdown; su formatter público
 de `docs/markdown_formatter.exs` reubica los enlaces de los fuentes a los nombres aplanados,
 sin tocar bloques de código. El lector comprueba también esas rutas y recursos,
 además de los anchors HTML y las rutas/anchors internos del EPUB. `bin/check`

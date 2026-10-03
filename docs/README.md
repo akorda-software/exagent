@@ -62,6 +62,7 @@ las guías anteriores son la entrada habitual.
 | Estado y orden de trabajo R0–R9 | [Roadmap](development/roadmap.md) |
 | Alcance de v2 y oráculos de producción | [Release scope](development/release-scope.md), [Acceptance](development/production-acceptance.md) |
 | Rutina local, exclusiones y gates | [Verificación](development/verification.md) |
+| Versiones actuales y actualizaciones compatibles | [Dependencias](development/dependencies.md) |
 | Tooling por proyecto | [Entorno](development/environment.md) |
 | E2E real y límites observados | [Consumidor real](development/real-consumer-e2e.md) |
 | Langfuse y Opik con aceptación equivalente | [Backend evaluation](development/backend-evaluation.md) |

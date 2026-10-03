@@ -57,7 +57,7 @@ allowlist; no fallback/substitution or generic forced capabilities are provided.
 ## Profiles, results and stopping
 
 - GPT-4o-mini:14 text/tools/Ecto/native/empty/length cases, three surfaces;
-  temperature0.0, max256/length16, original prompts/schema and public oracles.
+  temperature0.0, max256/length16, synthetic prompts/schema and public oracles.
 - GPT-6 Luna: the same cases with truthful reasoning capabilities,
   `reasoning_mode: :none`, nil temperature, canonical max_tokens256/16 translated
   by the product to stock max_completion_tokens; continuation3 checks included.
@@ -67,6 +67,15 @@ allowlist; no fallback/substitution or generic forced capabilities are provided.
   are rejected. Reasoning content is not logged, only public counts/usage metadata.
 
 Optional `--cases tools_stream,native_sync` selects a relevant subset explicitly.
+
+The length fixture requests a harmless paragraph of at least120words with a
+16-token output cap. The2026-10-03 dependency qualification found that the earlier
+request to enumerate1000integers can receive a short refusal with `stop`, leaving
+the intended truncation stimulus untested. Preserve that failed receipt. The new
+prompt passes sync/stream controls with actual `length`; the oracle still requires
+an incomplete-response error and zero tool effects. This is a fixture correction,
+not permission to classify every short response or HTTP error as truncation.
+
 All model/output/tool retries remain0 and execution concurrency is1. Any failed
 oracle stops the selection with exit1, preserving its result and reserved admission;
 no automatic paid rerun or assertion weakening. A successful HTTP status is not

@@ -6,6 +6,22 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Dependency baseline — 2026-10-03
+
+- Audit all 43 resolved Hex dependencies against current stable releases and
+  update eleven: Finch 0.24.0, Mint 1.11.0, HPAX 1.1.0, JSV 0.25.0, Ecto 3.14.2,
+  test-only OpenTelemetry exporter 1.11.0, ExDoc 0.40.4 and four transitives.
+  Raise the declared HTTP/decoder floors together and qualify the new JSV series
+  without removing schema/callback/continuation guards. Keep gproc 1.2.0 because
+  grpcbox 0.18.0 excludes 1.3.0; retain strict upstream warning diagnostics.
+  Document all versions, compatible constraints and validation separately from
+  earlier candidate receipts. No release version, tag or publication change.
+- Require native boolean protobuf values in the OTLP span/resource and composed
+  scenario probes after the upstream exporter fix. Preserve the HTTP partial-success
+  and lifecycle limitations. Correct the live length-test stimulus after the model
+  returns a short refusal to the old enumeration prompt; the new harmless long
+  paragraph still requires an actual length terminal and zero effects.
+
 ### Candidate qualification — 2026-10-02
 
 - Update the unreleased candidate to official ReqLLM 1.26.0 and its required

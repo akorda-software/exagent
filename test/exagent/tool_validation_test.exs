@@ -429,7 +429,7 @@ defmodule ExAgent.ToolValidationTest do
     assert {:error, _} = Tool.validate_args(tool(schema), %{n: "bad"})
   end
 
-  test "JSV 0.22 callbacks are reachable without preflight but blocked for every literal reference" do
+  test "JSV callbacks are reachable without preflight but blocked for every literal reference" do
     module = Atom.to_string(ExecutableSchema)
 
     for unsafe <- [%{"x-jsv-cast" => [module]}, %{"$ref" => "jsv:module:" <> module}] do

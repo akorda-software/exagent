@@ -1,4 +1,4 @@
-# ExAgent v2 — estado vigente, 2026-10-02
+# ExAgent v2 — estado vigente, 2026-10-03
 
 Implementación autorizada en /home/kukapu/dev/projects/exAgent.
 Rama: `codex/v2-candidate-029`, [PR1 borrador](https://github.com/akorda-software/exagent/pull/1).
@@ -6,22 +6,29 @@ El usuario autorizó commit/push/PR; sin bump, tag, merge ni publicación en Hex
 ReqLLM oficial stock, R1.2 aceptado, C7 incluido, guards intactos.
 Una revisión máxima por objetivo; sin re-review ni reruns rutinarios del padre.
 
-## ReqLLM 1.26 — verificación cerrada
+## Dependencias — verificación cerrada
 
-Lock: ReqLLM 1.26.0 y catálogo llm_db 2026.9.8 requerido; otros entries conservados.
-Guards/accounting/codecs intactos. Anthropic conserva provider_block: comprobar dato
-público, guard preIO y rechazo sin soporte canónico. Cache read/write: 19 focales pasan.
-Rutina local: nueve fases exit 0; FULL 1.20, 2.177 pases / 0 fallos / 28 excl.
-FULL 1.18: 2.176 pases / 1 fallo de readiness / 28 excl, conservado. La barrera de
-100 ms precedía a la cancelación; Model controlado de 150 ms demuestra el oráculo
-incorrecto. Usar readiness 1.000 ms de sus vecinos; runtime y DOWN intactos.
-12 ownership + control pasan ambos runtimes; no nuevo FULL por el cambio del test.
-G2 nuevo 14/14, 17 requests / 3 efectos / USD 0.425 reservado; copia privada de app
-18/18 en una ola, 36 requests / USD 0.90 reservado y 15 offline. Original intacta.
-PG 17.4 nuevo: 14 fases / cleanup pasan. Ocho grafos limpios: 56 contratos pasan,
-46 comandos exit 0; strict upstream rojo. Docs/TAR final conservan runtime exacto.
-La evidencia 1.24 conserva identidad; G4 cloud reutilizado, sin otra ola.
-Recibo: [REQ-LLM126](REQ-LLM126.md). Sin Hex/bump/tag/merge ni cambio global.
+Usuario pide revisar todas antes de publicar. 43 paquetes consultados: 12 nuevas
+releases,11actualizadas,42últimas estables/1bloqueada(gproc por grpcbox~>1.2.0).
+Finch0.24/Mint1.11/HPAX1.1 juntos; JSV0.25, Ecto3.14.2, exporter test1.11,
+ExDoc0.40.4 y cuatro transitivas. Guards/API/lifetimes intactos; sin overrides.
+76 schema/output/MCP y7OTLP pasan; bool_value native corregido upstream.
+G2:12aceptados iniciales; length_sync obtuvo stop/refusal y length_stream no corrió.
+Prompt largo benigno obtiene length sync/stream sin efectos: dos controles pasan.
+14escenarios cubiertos,18admisiones/3efectos/USD0.45reserva; fallo inicial conservado.
+PG17.4 nuevo14fases/cleanup;8grafos limpios56contratos/46comandos0,strictdeps rojo.
+FULL ambos2177/0/28;1202007.4s/1182024.7s. bin/check nueve fases0,total2073.45s.
+Artefactos privados: .exagent-local/dependencies20261003; fuentes runtime congeladas.
+[DEPENDENCIES](DEPENDENCIES.md) conserva recibos/fallos/controles y límites.
+ExDoc117HTML/115MD/115EPUB,0linksrotos;3vistas/anchors pasan. TAR168exactos,
+metadata/91runtime iguales al cualificado;SHA2b725ef5a9abd97b047d462952967b116b9ef47d3126d3126fd2ffb30b01ad40.
+
+## ReqLLM 1.26 — recibo anterior
+
+[REQ-LLM126](REQ-LLM126.md) conserva FULL1202177/0/28 y FULL1182176/1/28,
+readiness corregido con13focales por runtime, G214/14/17requests y app18/18/36requests.
+PG14fases/cleanup y8grafos56contratos; guard/cache/redacted blocks cualificados.
+La revisión nueva de dependencias tiene su propia identidad; no renombrar receipts.
 
 ## Documentación para personas y agentes
 
@@ -66,8 +73,8 @@ Originales y recibos: /tmp/opencode/exagent-v2-codex-t6qgpstl/ci030/.
 
 | Gate | Evidencia |
 |---|---|
-| G1 ReqLLM 1.26 | FULL 1.20: 2177/0/28; FULL 1.18: 2176/1/28, fallo readiness corregido con 13 focales por runtime |
-| G2 real 1.26 | GPT-4o-mini/OpenRouter 14/14, 17 requests / 3 efectos, USD 0.425 reservado; sin factura observada |
+| G1 dependencias actuales | FULL ambos2177/0/28; receipt118 rojo anterior permanece en REQ-LLM126 |
+| G2 real dependencias actuales |12pases iniciales y2length controles,14escenarios cubiertos;18requests/3efectos/USD0.45reserva; fallo inicial preservado |
 | E2E consumidor028 |18escenarios reales,40admisiones/USD1.00reserva; initial13/18 y cinco retries preservados |
 | G3 SQL |PG17.4,14fases,ACKperdido/dosVMs/FlowA8/restart/recover/backup; cleanup observado |
 | G4 Langfuse y Opik |Cada uno mismoA10 nativo/API33/33,667attrs/12usage; UI12casos/248attrs |

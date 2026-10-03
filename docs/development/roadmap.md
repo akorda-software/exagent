@@ -1,6 +1,6 @@
 # Roadmap ejecutable de ExAgent v2.0.0
 
-**Actualización2026-10-02:** implementación v2 activada por el usuario; R6/R7
+**Actualización2026-10-03:** implementación v2 activada por el usuario; R6/R7
 implementados en los perfiles acotados y mínimo R1 cualificado mediante G2 real.
 Candidata común con pruebas locales, SQL, consumidores, frameworks, SDK y carga.
 Langfuse G4 aceptado en la sesión autenticada autorizada; la revisión única R9
@@ -18,6 +18,22 @@ conservan contexto fechado. Su lectura como contexto no amplía un encargo.
 **Entrada vigente2026-10-02:** `docs/prompts/continue-native.md` (sólo checkout)
 y [flujo simplificado](execution-flow.md). Los siguientes hitos fechados conservan
 evidencia, no reactivan investigaciones, revisiones ni probes del padre ya cerrados.
+
+**Dependencias,2026-10-03 — verificación cerrada:** petición explícita del usuario;
+43 paquetes raíz consultados con Hex oficial,11 upgrades estables compatibles.
+42 últimas estables y gproc1.2 bloqueado por grpcbox~>1.2.0, sin override.
+Finch0.24/Mint1.11/HPAX1.1 juntos; JSV0.25/Texture2, Ecto3.14.2/Zoi0.18.11,
+exporter test1.11 y ExDoc0.40.4/parser/lexer. Guards y contratos conservados.
+76 schema/output/MCP y7OTLP pasan, bool_value corregido upstream. FULL ambos
+runtimes:2.177 pases/0fallos/28excl;1.20 en2.007,4s y1.18 en2.024,7s.
+bin/check nueve fases exit0,2.073,45s. PG17.4 nuevo14fases/cleanup;8grafos
+limpios56contratos/46comandos exit0; strictdeps sigue rojo. G2 conserva12pases
+iniciales y fallo de estímulo stop/refusal; dos controles length sync/stream pasan
+tras cambiar sólo prompt,14escenarios cubiertos/18admisiones/3efectos/USD0.45
+reservado. No afirmar ola única14/14. App/frameworks/cloud mantienen recibos
+anteriores, sin nueva ola ni cambios originales. Tabla completa y fuentes en
+[dependencias](dependencies.md); [recibo](https://github.com/akorda-software/exagent/blob/codex/v2-candidate-029/docs/orchestration/2026-10-01-v2-codex/DEPENDENCIES.md).
+No sustituir FULL118 rojo de ReqLLM anterior. Sin bump/tag/Hex ni revisión nueva.
 
 **ReqLLM 1.26, 2026-10-02 — verificación cerrada:** solicitud explícita del usuario;
 el lock actualiza sólo ReqLLM 1.26.0 y llm_db 2026.9.8 requerido. La caracterización

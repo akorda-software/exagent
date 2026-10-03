@@ -4800,6 +4800,40 @@ además de corrupciones con segundo User/System tardío. Pasan exit0 sin warning
 Las repeticiones real13–15 se registran por fuente en la aceptación028, sin
 contar la preparación offline como aceptación de proveedor.
 
+### 8.50. Revisión completa de dependencias antes de publicar (2026-10-03)
+
+**Problema y beneficio general.** El usuario solicita comprobar todas las
+dependencias tras actualizar ReqLLM. Hex y el resolver muestran doce versiones
+posteriores entre43paquetes, no sólo el backend. La adopción conjunta evita que
+el checkout cualifique un transporte viejo mientras consumidores nuevos resuelven
+otro; actualizar los mínimos publicados evita conservar una combinación inferior.
+
+**Decisión y alternativas.** Adoptar once releases oficiales, con Finch0.24,
+Mint1.11 y HPAX1.1 juntos; JSV0.25.x, Ecto3.14.2, exporter test1.11 y tooling
+ExDoc0.40.4. Sólo gproc1.3 queda fuera: grpcbox0.18 fija~>1.2.0. No forzar overrides,
+forks ni paquetes Git. Cambiar sólo el lock no protege consumidores; exigir que
+cada dependencia esté en su última release aunque el grafo la rechace rompería
+compatibilidad declarada. La [revisión](../development/dependencies.md) conserva
+tabla, fuentes, límites y verificación con identidad nueva.
+
+**Impacto y migración.** No cambian APIs/schemas/eventos/snapshots ni guards de
+ExAgent, y el mínimo Elixir sigue1.18. Aplicaciones con constraints inferiores a
+Finch0.24/Mint1.11/HPAX1.1/JSV0.25 deben actualizarlos antes de instalar v2; no se
+modifica un consumidor original. Exporter1.11 corrige booleans protobuf, por lo
+que los controles nativos cambian de strings a bool_value. SDK/API siguen iguales
+y opt-in. JSV conserva extensión codepoints/igualdad numérica y guards de callbacks;
+Texture2 cambia matching URI, sin habilitar resolvers o formatos nuevos. El cambio
+pertenece a la major pendiente, sin bump ni publicación automática.
+
+**Verificación.** Resolver, API pública y outdated cubren todos los43tuples;
+hex.audit0,42últimas estables/1bloqueada.76fronteras schema/output/MCP y7OTLP pasan;
+FULL1.18/1.20 nuevos2.177pases/0fallos/28excl cada uno; bin/check nueve fases0.
+Ocho consumidores sin lock56contratos/46comandos0, strictdeps rojo stock;
+PG17.4 nuevo14fases/cleanup. G2 cubre14escenarios con12pases iniciales y dos
+controles length tras corregir sólo estímulo; fallo inicial preservado.
+No reinterpretar receipts1.24/1.26 anteriores ni afirmar que estar actualizado
+elimina los diagnósticos stock o garantiza cualquier backend.
+
 ## 9. Estado actual y no-goals
 
 **Hecho (núcleo funcional):** loop, backend ReqLLM stock cualificado, Model custom/Test,

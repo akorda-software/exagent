@@ -38,7 +38,7 @@ defmodule ExAgent.Test.NativeOTLPProbe do
     {:ok, _} = Application.ensure_all_started(:inets)
     {:ok, _} = Application.ensure_all_started(:opentelemetry)
     :ok = Application.load(:opentelemetry_exporter)
-    assert to_string(Application.spec(:opentelemetry_exporter, :vsn)) == "1.10.0"
+    assert to_string(Application.spec(:opentelemetry_exporter, :vsn)) == "1.11.0"
     assert to_string(Application.spec(:opentelemetry, :vsn)) == "1.7.0"
     assert to_string(Application.spec(:opentelemetry_api, :vsn)) == "1.5.0"
   end
@@ -330,16 +330,16 @@ defmodule ExAgent.Test.NativeOTLPProbe do
     assert %{resource_spans: [%{resource: resource, scope_spans: [%{spans: [exported]}]}]} =
              @pb.decode_msg(request.body, :export_trace_service_request)
 
-    # Direct native export confirms this affects both span/resource values,
+    # Direct native export confirms boolean fidelity for span/resource values,
     # independently of ExAgent. Keep the string/int controls typed and exact.
     assert :otel_attributes.map(span(native_span(), :attributes))["test.true"] == true
     assert :otel_attributes.map(span(native_span(), :attributes))["test.false"] == false
-    assert typed_attributes(exported)["test.true"] == {:string_value, "true"}
-    assert typed_attributes(exported)["test.false"] == {:string_value, "false"}
+    assert typed_attributes(exported)["test.true"] == {:bool_value, true}
+    assert typed_attributes(exported)["test.false"] == {:bool_value, false}
     assert typed_attributes(exported)["test.string"] == {:string_value, "control"}
     assert typed_attributes(exported)["test.int"] == {:int_value, 17}
     assert :otel_attributes.map(:otel_resource.attributes(resource()))[:"test.synthetic"] == true
-    assert typed_attributes(resource)["test.synthetic"] == {:string_value, "true"}
+    assert typed_attributes(resource)["test.synthetic"] == {:bool_value, true}
   end
 
   defp typed_attributes(%{attributes: attrs}) do
@@ -555,7 +555,7 @@ defmodule ExAgent.Test.NativeOTLPProbe do
     assert request.path == path
     assert request.headers["content-type"] == "application/x-protobuf"
     assert request.headers["x-synthetic-auth"] == @header
-    assert request.headers["user-agent"] == "OTel-OTLP-Exporter-erlang/1.10.0"
+    assert request.headers["user-agent"] == "OTel-OTLP-Exporter-erlang/1.11.0"
 
     for sentinel <- [@header, @prompt, @argument, @output, @dependency, @model] do
       refute request.body =~ sentinel

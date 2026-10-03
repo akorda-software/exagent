@@ -110,8 +110,10 @@ servicios o cambiar consumidores requiere alcance explícito.
 
 ## Gate previo: transporte fiable
 
-El exporter HTTP1.10.0 convierte booleanos en strings, ignora successful
-`partial_success` y conserva recursos HTTP/perfiles/átomos en ciertos ciclos.
+El recibo histórico HTTP1.10.0 pierde tipos booleanos. La revisión de
+[dependencias](dependencies.md) adopta la release1.11.0, que corrige esa pérdida.
+El exporter HTTP sigue ignorando successful `partial_success` y conservando
+recursos HTTP/perfiles/átomos en ciertos ciclos.
 El processor limita sus propios recursos, pero no corrige ese lifecycle ajeno.
 Resolver o verificar una alternativa de transporte/ownership antes de presentar
 esa receta como operación longeva aceptada. La

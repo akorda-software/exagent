@@ -55,13 +55,13 @@ defmodule ExAgent.MixProject do
     [
       {:req_llm, "~> 1.26.0"},
       {:req, "~> 0.7.4"},
-      {:finch, "~> 0.22"},
+      {:finch, "~> 0.24"},
       # Decoder floors protect library consumers too; dependency lockfiles do
       # not constrain the applications that depend on a published Hex package.
-      {:mint, "~> 1.10 and >= 1.10.2"},
-      {:hpax, "~> 1.0 and >= 1.0.4"},
+      {:mint, "~> 1.11"},
+      {:hpax, "~> 1.1"},
       {:jason, "~> 1.4"},
-      {:jsv, "~> 0.22.0"},
+      {:jsv, "~> 0.25.0"},
       {:ecto, "~> 3.12"},
       {:telemetry, "~> 1.0"},
       # Instrumentation is opt-in; the application owns its SDK and exporter.
@@ -69,14 +69,14 @@ defmodule ExAgent.MixProject do
       # Keep the optional compile-order edge when a host supplies the SDK.
       {:opentelemetry, "~> 1.7", optional: true, runtime: false},
       # Exercise native OTLP locally without adding an exporter to consumers.
-      {:opentelemetry_exporter, "~> 1.10.0", only: :test, runtime: false},
+      {:opentelemetry_exporter, "~> 1.11.0", only: :test, runtime: false},
       # Only for ExAgent.Store.Postgres tests (the TestRepo needs the adapter).
       # ExAgent.Store.Postgres itself only calls Ecto.Repo.query/3 (from :ecto,
       # already a dependency); a host app that wants a durable store brings its
       # own ecto_sql + postgrex for its repo.
       {:ecto_sql, "~> 3.12", only: :test},
       {:postgrex, "~> 0.22.4", only: :test},
-      {:ex_doc, "~> 0.40.3", only: :dev, runtime: false}
+      {:ex_doc, "~> 0.40.4", only: :dev, runtime: false}
     ]
   end
 
@@ -130,6 +130,7 @@ defmodule ExAgent.MixProject do
         "docs/development/jido-comparison.md",
         "docs/development/framework-direction.md",
         "docs/development/verification.md",
+        "docs/development/dependencies.md",
         "docs/development/real-consumer-e2e.md",
         "docs/development/testing-audit.md",
         "docs/development/execution-flow.md",
