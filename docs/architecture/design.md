@@ -4834,6 +4834,44 @@ controles length tras corregir sólo estímulo; fallo inicial preservado.
 No reinterpretar receipts1.24/1.26 anteriores ni afirmar que estar actualizado
 elimina los diagnósticos stock o garantiza cualquier backend.
 
+### 8.51. Ownership de spans ReqLLM/ExAgent antes de publicar (2026-10-03)
+
+**Problema demostrado:** activar el bridge OTel ReqLLM1.26 junto a la observación
+Model de ExAgent produce dos generaciones anidadas para una petición; sumarlas
+duplica tokens observados aunque el resultado/ledger no cambia. Por defecto el
+bridge ReqLLM no se activa y ExAgent no lo instala. El solapamiento es real en
+esa configuración explícita, no una segunda conexión cloud automática.
+
+**Evaluación y beneficio general:** recomendar un único productor ExAgent para
+sus runs. ReqLLM conserva eventos nativos y datos de Response públicos. La
+[comparación](../development/backend-evaluation.md#reqllm-and-exagent-instrumentation-ownership)
+reconoce ventajas del cliente ReqLLM —timing/métricas/atributos— y responsabilidades
+propias de ExAgent: operaciones, identidad durable, uso cualificado, privacy,
+cancelación y Models custom. BoundedProcessor/exporter pertenece a otra frontera.
+No atribuir al usuario una elección nueva ni mantener código por inversión pasada.
+
+**Alternativas:** ReqLLM-only pierde la ejecución del framework. ExAgent para
+orquestación y ReqLLM como único productor de generación puede reducir mapping,
+pero requiere preservar identidad, guards/estado Model frente al resultado del
+proveedor, accounting, worker death y modelos no ReqLLM. Attach global y políticas
+de contenido distintas impiden presentar la mezcla actual como reparto automático.
+No introducir un modo duplicado permanente, fork o acceso al ETS privado.
+
+**Impacto y migración:** evaluación/configuración documentada, sin cambios de API,
+schemas, eventos, defaults, snapshots, versión ni runtime. Usar observability
+ExAgent sin attach OTel ReqLLM para sus ejecuciones. Los hosts que activan ambos
+deben revisar ownership al configurar el arranque; la biblioteca no desactiva
+handlers ajenos. La aceptación equivalente Langfuse/Opik sigue ligada al perfil
+ExAgent; una sustitución futura debe cualificar las fronteras afectadas en ambos.
+
+**Verificación:** cuatro controles stock/local HTTP-SSE con SDK nativo pasan
+sync/public stream × ReqLLM bridge off/on. Una petición; dos tokens output reales
+del fixture; suma de generaciones2 con ExAgent y4 al activar ambos. Parentesco,
+trace ID, counters y ausencia de contenido/clave comprobados. Rojo del fixture
+por tags públicos/claves atom/string y disponibilidad de input conservado; no
+se alteran guards ni fuentes runtime. No es prueba de todos los paths ReqLLM,
+cloud billing o nueva aceptación UI. No repetir FULL/G2/G3/G4 por esta evaluación.
+
 ## 9. Estado actual y no-goals
 
 **Hecho (núcleo funcional):** loop, backend ReqLLM stock cualificado, Model custom/Test,

@@ -116,6 +116,36 @@ Server owns a run span through its checkpoint; its core worker shares that span.
 There is no span per token and no span covering a Server's entire lifetime.
 Model-request spans end before after-request hooks and tool execution.
 
+### ReqLLM and one owner for request spans
+
+For ExAgent executions, use the ExAgent instrumentation above and leave
+`ReqLLM.OpenTelemetry.attach/1,2` unattached. ReqLLM 1.26 emits native `:telemetry`
+events without starting its OTel bridge; ExAgent does not attach that bridge.
+Both libraries use the application's SDK/exporter rather than supplying separate
+Langfuse or Opik transports.
+
+Attaching both bridges observes the same request twice. An offline stock-ReqLLM
+HTTP/SSE integration check demonstrates one HTTP request and one generation span
+with ExAgent alone, versus two nested generation spans with both bridges. Each
+reports two output tokens; summing those observations gives four, while the
+execution result still reports two. ExAgent's budget ledger is unchanged, but
+backend aggregation can double-count. This check does not measure cloud billing.
+
+ReqLLM's bridge is useful for applications making standalone ReqLLM calls:
+it includes request attributes, token/cost data and streaming timing. It does not
+observe ExAgent's caller-executed tools, delegation, durable approvals or run
+attempts. ExAgent also traces custom Models independently of ReqLLM. The
+[ownership comparison](../development/backend-evaluation.md#reqllm-and-exagent-instrumentation-ownership)
+explains the alternatives and the boundary a future simplification must preserve.
+
+A mixed application must choose ownership deliberately. The stock ReqLLM bridge
+attaches globally to ReqLLM request events; it has no built-in ExAgent exclusion.
+Do not detach/reattach around concurrent calls or assume ExAgent's redactor also
+protects attributes produced by another bridge. Native telemetry handlers can
+consume request events without producing another request span; custom metrics
+and their accounting policy remain application-owned. Automatic coexistence of
+both span bridges is not a qualified configuration.
+
 For application-owned process boundaries, capture before dispatch and attach in
 the receiving process:
 

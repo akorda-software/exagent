@@ -87,6 +87,105 @@ no implica permiso para modificarlas o leer datos reales.
   Funciones administrativas comerciales sólo compensan por una ventaja demostrada;
   esa preferencia no autoriza compras ni necesita preguntarse otra vez.
 
+## ReqLLM and ExAgent instrumentation ownership
+
+**Evaluación2026-10-03, previa a publicación:** el usuario pide valorar si la
+instrumentación propia sigue siendo necesaria ahora que ReqLLM ofrece OTel.
+La inversión anterior no justifica conservar una responsabilidad duplicada.
+Esta comparación recomienda una configuración sobre el runtime existente;
+no activa una sustitución, nuevo modo, bump o publicación.
+
+Fuentes oficiales fijadas a la dependencia instalada:
+[guía de telemetría ReqLLM1.26](https://github.com/agentjido/req_llm/blob/v1.26.0/guides/telemetry.md),
+[bridge y lifecycle](https://github.com/agentjido/req_llm/blob/v1.26.0/lib/req_llm/open_telemetry.ex),
+[atributos](https://github.com/agentjido/req_llm/blob/v1.26.0/lib/req_llm/open_telemetry/attributes.ex)
+y
+[mapper público](https://github.com/agentjido/req_llm/blob/v1.26.0/lib/req_llm/telemetry/open_telemetry.ex).
+Las fuentes del lock, la guía y un control local con SDK real sustentan la
+comparación; no se infiere comportamiento de una versión futura.
+
+| Responsabilidad | ReqLLM1.26 | ExAgent actual |
+|---|---|---|
+| Petición al modelo | Bridge opt-in: atributos de petición, respuesta, errores, tokens y costes disponibles. | Span del contrato Model, incluidos adapters ReqLLM y Models custom/Test. Hay solapamiento en las peticiones ReqLLM. |
+| Tiempo de primera salida y métricas | Timing de streaming, histogramas de duración/tokens/primera salida si el adaptador dispone de métricas; más detalle del cliente. | No ofrece ese conjunto de métricas ni promete equivalencia con el bridge ReqLLM. |
+| Herramientas | Puede representar herramientas built-in ejecutadas por el proveedor; la ejecución de funciones del caller corresponde al caller. | Ejecución local, permisos, error, delegación y contexto de las herramientas del agente. |
+| Ejecución y coordinación | No conoce el loop, Server, Session, Composition o Flow de ExAgent. | Árbol de operaciones, IDs de run/paso/intento y contexto a través de workers. No se promete un span para cada API administrativa. |
+| Aprobación y recuperación | La petición termina; no observa el record durable ni la espera humana. | Pausa cierra el intento; resume abre otro con identidad durable, checkpoint y contadores de lifetime. |
+| Uso y coste | Datos normalizados de la petición y coste calculado cuando está disponible; no conoce las admisiones o agregados de ExAgent. | Proyecta el ledger existente: admisiones exactas, tokens cualificados, disponibilidad/procedencia y costes estimados; no ejecuta otro callback de precios. |
+| Privacidad | Contenido off; opt-in requiere payloads raw y modo de captura. Su política es independiente de ExAgent. | Contenido off, redactor explícito, límites previos al SDK y allowlist de identificadores. |
+| Muerte abrupta del worker | Sin evento terminal puede quedar una entrada ETS; detach/prune elimina la entrada, sin finalizar aquel span. | Watcher cierra la operación y conserva sólo progreso conocido, parcial; no recupera tokens no reportados. |
+| SDK/exportación | Usa el SDK/exporter de la aplicación; no instala transporte cloud. | Misma autoridad host. BoundedProcessor limita la ruta de exportación y puede procesar spans de otras instrumentaciones. |
+
+### Qué hemos demostrado sobre el solapamiento
+
+`test/exagent/observability/req_llm_bridge_test.exs` usa **ReqLLM1.26 stock**, SDK
+nativo, clave sintética y un servidor HTTP/SSE en loopback; no TestModel, API
+pagada ni Collector/backend cloud. Matriz sync/public run_stream × bridge ReqLLM
+desactivado/activado explícitamente: cuatro casos pasan.
+
+| Configuración observada | Peticiones HTTP | Spans por ejecución | Suma de output tokens de generaciones | Resultado ExAgent |
+|---|---:|---|---:|---:|
+| Sólo ExAgent | 1 | run → model | 2 | 2 |
+| Ambos bridges | 1 | run → model → cliente ReqLLM | 4 | 2 |
+
+El parentesco y trace ID coinciden en ambas superficies. Los contadores de
+ExAgent siguen1request/0tools y sus tokens3input/2output: **el solapamiento está
+en observaciones, no en otra petición o un doble cargo observado**. Se comprueba
+ausencia de prompt/respuesta/clave sintética en los atributos con contenido off.
+Los cuatro casos no certifican todos los campos, paths de error, métricas, privacy
+opt-in ni facturación/UI de las plataformas.
+
+El input GenAI no se usa como oráculo de duplicación: para este modelo dinámico
+la proyección sync de ExAgent conserva el valor normalizado3 sin afirmar
+semántica inclusiva, mientras streaming sí dispone de esa semántica. El bridge
+ReqLLM publica input3 en ambos. No convertir esa diferencia en datos perdidos ni
+equivalencia de los contratos de accounting.
+
+Se conservan dos montajes fallidos del nuevo fixture: el primero asumía
+`:text_delta` en la API pública y sólo claves string; el segundo suponía la misma
+disponibilidad de input GenAI en sync/stream. Se corrigieron esas expectativas
+según el contrato y los atributos observados, sin cambiar biblioteca/guards.
+Logs locales: `.exagent-local/prepublish-20261003/bridge-01..03.log`.
+
+### Alternativas y recomendación para v2
+
+| Alternativa | Ventaja | Coste o pérdida |
+|---|---|---|
+| Sólo ReqLLM | Una instrumentación de cliente con buen detalle de petición y métricas. | Pierde las operaciones, identidad durable, host counters y Models no ReqLLM de ExAgent. No sustituye la observabilidad del framework. |
+| Sólo ExAgent para runs ExAgent | Un span Model por petición, mismo perfil para todos los Models, privacidad/lifecycle propios y aceptación A10 existente. | Mantiene la pequeña proyección Model y no incorpora automáticamente todas las métricas/atributos ReqLLM. |
+| ExAgent para orquestación + ReqLLM como único productor del span de generación | Puede reducir mapping propio y aprovechar detalle/metrics del cliente. | Requiere diseño de identidad, accounting, cancelación, Models custom, privacy y scope; no está implementado ni cualificado. |
+
+**Recomendación:** publicar el perfil actual con **ExAgent como único productor
+de spans para sus ejecuciones**, sin activar además el bridge ReqLLM. Los eventos
+nativos ReqLLM siguen disponibles; la ejecución obtiene datos del Response
+público stock. No hay dos SDKs, conexiones específicas Langfuse/Opik ni tablas de
+precios propias. La guía explicita esta configuración y su control negativo.
+Es una recomendación de ingeniería; no se atribuye al usuario una decisión nueva.
+
+Delegar sólo la generación es una alternativa razonable si demuestra una mejora
+de mantenimiento o diagnóstico. No basta con borrar el span Model: su estado
+describe también la aceptación del resultado por el contrato ExAgent, mientras
+una petición de proveedor puede terminar correctamente y fallar después nuestros
+guards. La alternativa debe conservar o representar explícitamente esa diferencia,
+el contexto/tracer host, los IDs, la cualificación del uso, la muerte del worker
+y los Models que no utilizan ReqLLM. Tampoco puede prometer que nuestro redactor
+controle un span de otro productor.
+
+ReqLLM attach es global a eventos de petición y no ofrece una exclusión ExAgent.
+Una aplicación mixta no debe alternar attach/detach alrededor de llamadas
+concurrentes. Un futuro reparto necesita una frontera pública de ownership,
+sin fork/patch ni dependencia de su ETS privado. El mapper público puede valorarse
+para reducir código común, pero su schema/cache/availability no reemplaza el
+perfil cualificado automáticamente. No añadir ahora dos modos permanentes sin
+consumidor, migración y criterio de retirada concretos.
+
+BoundedProcessor/exporter es otra responsabilidad: cambiar el productor de spans
+no elimina la necesidad de cola finita, pérdida observable y lifecycle de
+transporte. Langfuse y Opik mantienen **la misma aceptación A10 del perfil ExAgent**;
+no se reetiqueta esa evidencia como aceptación ReqLLM-only o híbrida. Un cambio
+del productor/perfil requiere actualizar diseño/migración y comprobar las
+fronteras nativas/API/UI afectadas en ambos, sin repetir gates ajenos por rutina.
+
 ## Pendientes registrados tras la comparación histórica
 
 La lista siguiente conserva el diagnóstico del 2026-09-27. La ruta nativa,

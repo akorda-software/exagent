@@ -109,6 +109,14 @@ exporter and ExAgent bridge are unchanged, with local tests exercised by this ru
   claiming support for it. These are future qualification goals, not silently
   implemented guarantees.
 
+The October 3 [instrumentation ownership assessment](development/backend-evaluation.md#reqllm-and-exagent-instrumentation-ownership)
+recommends ExAgent as the single span producer for ExAgent runs. ReqLLM's OTel
+bridge is explicitly attached by the application, not automatically enabled by
+ExAgent. Four stock-ReqLLM/local HTTP-SSE cases demonstrate the default and the
+double-counting risk if both bridges are attached. Orchestration, approval,
+accounting and lifecycle are not replaced by request telemetry. This is new local
+integration evidence, not a fresh full suite, cloud validation or publication.
+
 Routine verification now runs locally before commit/push. The candidate branch's
 six-job CI workflow is manual; `main` adopts that change when the PR is integrated.
 The [verification guide](development/verification.md) describes `bin/check`,

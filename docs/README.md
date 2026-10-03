@@ -65,7 +65,7 @@ las guías anteriores son la entrada habitual.
 | Versiones actuales y actualizaciones compatibles | [Dependencias](development/dependencies.md) |
 | Tooling por proyecto | [Entorno](development/environment.md) |
 | E2E real y límites observados | [Consumidor real](development/real-consumer-e2e.md) |
-| Langfuse y Opik con aceptación equivalente | [Backend evaluation](development/backend-evaluation.md) |
+| Langfuse/Opik y ownership ExAgent frente a ReqLLM | [Backend evaluation](development/backend-evaluation.md) |
 | Valor y cobertura del testing | [Testing audit](development/testing-audit.md) |
 | Método de ejecución vigente | [Execution flow](development/execution-flow.md) |
 | Persistencia/continuación/composición/MCP | [R4](development/r4-implementation.md), [R5](development/r5-implementation.md), [R6](development/r6-implementation.md), [R7](development/r7-mcp-implementation.md) |

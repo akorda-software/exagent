@@ -23,6 +23,19 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   root lock and published contracts are unchanged; SQL dependencies are test-only
   additions to the authorized consumer. No version bump or publication.
 
+### Observability ownership assessment — 2026-10-03
+
+- Compare the stock ReqLLM 1.26 bridge with ExAgent's instrumentation and recommend
+  one span owner for ExAgent runs. Document request-level overlap, native telemetry
+  versus exported spans, orchestration/lifecycle/accounting/privacy differences,
+  and the tradeoffs of delegating generation instrumentation in a future change.
+  Preserve equal Langfuse/Opik acceptance of the existing A10 profile.
+- Add a native SDK / local HTTP-SSE integration matrix: four cases prove one
+  request with one generation observation by default, and two observations when
+  the application explicitly attaches both bridges. Summing output tokens then
+  doubles the traced value without changing execution accounting. No runtime,
+  SDK/exporter defaults, dependency, release version or publication change.
+
 ### Application model comparison — 2026-10-03
 
 - Select GPT-6-Luna and DeepSeek V4.1 Flash explicitly in the authorized sibling

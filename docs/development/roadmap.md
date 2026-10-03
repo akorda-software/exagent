@@ -19,6 +19,15 @@ conservan contexto fechado. Su lectura como contexto no amplía un encargo.
 y [flujo simplificado](execution-flow.md). Los siguientes hitos fechados conservan
 evidencia, no reactivan investigaciones, revisiones ni probes del padre ya cerrados.
 
+**Ownership OTel,2026-10-03 — evaluación previa a publicar:** comparar ReqLLM1.26
+stock con el perfil ExAgent. Cuatro controles sync/stream con SDK y HTTP/SSE local
+demuestran1request/1generación por defecto y1request/2generaciones al activar ambos
+bridges; sumar output duplica2→4 sin cambiar el ledger. Se recomienda un productor
+ExAgent para sus runs, manteniendo eventos nativos ReqLLM; sustitución parcial de
+generación valorada, no implementada. Diferencias de lifecycle/accounting/privacy
+y scope documentadas en [backend evaluation](backend-evaluation.md#reqllm-and-exagent-instrumentation-ownership).
+Sin runtime/lock/versión nuevos, FULL o cloud repetidos ni reapertura R9.
+
 **E2E complejos,2026-10-03 — cuatro casos aceptados por modelo:** encargo explícito
 de tres combinaciones y un recorrido completo. Casos24–27: seis etapas tipadas
 con aprobación; paralelo con doble delegación y fallo collect; efecto sin ACK

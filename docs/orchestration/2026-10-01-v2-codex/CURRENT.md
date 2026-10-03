@@ -6,47 +6,39 @@ El usuario autorizó commit/push/PR; sin bump, tag, merge ni publicación en Hex
 ReqLLM oficial stock, R1.2 aceptado, C7 incluido, guards intactos.
 Una revisión máxima por objetivo; sin re-review ni reruns rutinarios del padre.
 
+## Ownership de observabilidad — evaluación cerrada
+
+ReqLLM1.26 bridge opt-in; ExAgent no lo activa.4controles SDK/HTTP-SSE pasan:
+1request/1generación por defecto; ambos bridges1request/2generaciones,output2→4
+al sumar observaciones, ledger intacto. Se recomienda productor ExAgent para sus
+runs; reparto parcial valorado/no implementado.32focales0; docs/enlaces/build/
+isolation0. Runtime/lock intactos, sin FULL/cloud/re-review/bump/publicación.
+[OBSERVABILITY-OWNERSHIP](OBSERVABILITY-OWNERSHIP.md) conserva análisis y evidencia.
+
 ## E2E complejos — cuatro nuevos escenarios cerrados
 
-Usuario pide tres combinaciones y un recorrido completo.24:seis etapas tipadas/
-C7;25:paralelo/doble delegación/fallo collect;26:VMmuerta tras efecto antes ACK/
-lease real/recover uncertain;27:memoria/Session/busy-abort/paralelo/delegación/
-dos approvals/restart PostgreSQL/nuevaVM/archivo/PubSubstream. TestModel4/4 y
-ambos modelos reales4/4,46requests/15efectos por modelo. Rojo DeepSeek27 Session
-conservado; copia ASCII explícita pasa sin relajar oráculo, control27 también Luna.
-Fases complex70/53requests/USD1.75/1.325reserva, factura null; smoke51/54intactas.
-Nueve grupos/clusters cerrados. Precommit17/0/27excl;52fuentes consumer/94runtime
-idénticas a las ejecutadas; rootlock intacto. Cobertura conjunta27/27Luna y
-26/27DeepSeek;08nativo rojo. Sin FULL/G2/G3/cloud ni revisión nueva.
-[E2E-COMPLEX](E2E-COMPLEX.md) conserva recibos, fuentes, límites y rojos.
-ExDoc117HTML/5204targets,115MD/847,115EPUB/2876,0linksrotos; build/isolation0.
-TAR168exactos/91runtime intactos, SHA8c5dc15a220ec353c42db7a6a6b11c7723f4a41402834e94811d0c7b7a490c9e.
+24:C7/seis etapas;25:paralelo/doble delegación/collect;26:efecto sin ACK/recovery;
+27:memoria/Session/abort/paralelo/dos aprobaciones/PGrestart/stream entre VMs.
+TestModel y ambos modelos4/4,46requests/15efectos cada uno. Rojo DeepSeek27 y
+control ASCII conservados, oráculos intactos. Complex70/53admisiones,
+USD1.75/1.325reserva, factura null. Nueve grupos/clusters cerrados; precommit17/0/27excl.
+Fuentes idénticas; cobertura conjunta27/27Luna y26/27DeepSeek,08nativo rojo.
+[E2E-COMPLEX](E2E-COMPLEX.md) conserva fuentes, documentación/TAR y límites.
 
 ## E2E Luna/DeepSeek — recibo smoke anterior
 
-Usuario elige ambos modelos. 23casos ejecutados por modelo: Luna23aceptados,
-DeepSeek22/23; ticket JSON nativo reproduce merchant/currency null, no aceptado.
-Cinco casos nuevos de rechazo/cleanup/límite/Composition+C7 pasan en ambos.
-Marcadores con copia explícita/oráculo exacto pasan; rojos/falso positivo guardados.
-Precommit17/0/23excl;51/54requests/USD1.275/1.35reserva, factura null,16grupos cerrados.
-ReqLLM1.26 stock/Chat/none; lib/lock intactos, ExDoc/links/TAR verificados. [E2E-MODELS](E2E-MODELS.md).
+23casos por modelo: Luna23,DeepSeek22; native JSON merchant/currency null rojo.
+51/54admisiones/USD1.275/1.35reserva, factura null,16grupos cerrados; guards intactos.
+ReqLLM1.26 stock/Chat/none. [E2E-MODELS](E2E-MODELS.md) conserva fuentes/rojos/controles.
 
 ## Dependencias — verificación cerrada
 
-Usuario pide revisar todas antes de publicar. 43 paquetes consultados: 12 nuevas
-releases,11actualizadas,42últimas estables/1bloqueada(gproc por grpcbox~>1.2.0).
-Finch0.24/Mint1.11/HPAX1.1 juntos; JSV0.25, Ecto3.14.2, exporter test1.11,
-ExDoc0.40.4 y cuatro transitivas. Guards/API/lifetimes intactos; sin overrides.
-76 schema/output/MCP y7OTLP pasan; bool_value native corregido upstream.
-G2:12aceptados iniciales; length_sync obtuvo stop/refusal y length_stream no corrió.
-Prompt largo benigno obtiene length sync/stream sin efectos: dos controles pasan.
-14escenarios cubiertos,18admisiones/3efectos/USD0.45reserva; fallo inicial conservado.
-PG17.4 nuevo14fases/cleanup;8grafos limpios56contratos/46comandos0,strictdeps rojo.
-FULL ambos2177/0/28;1202007.4s/1182024.7s. bin/check nueve fases0,total2073.45s.
-Artefactos privados: .exagent-local/dependencies20261003; fuentes runtime congeladas.
-[DEPENDENCIES](DEPENDENCIES.md) conserva recibos/fallos/controles y límites.
-ExDoc117HTML/115MD/115EPUB,0linksrotos;3vistas/anchors pasan. TAR168exactos,
-metadata/91runtime iguales al cualificado;SHA2b725ef5a9abd97b047d462952967b116b9ef47d3126d3126fd2ffb30b01ad40.
+43paquetes consultados:11actualizados,42últimas estables/gproc bloqueado por grpcbox.
+Finch0.24/Mint1.11/HPAX1.1,JSV0.25,Ecto3.14.2,exporter test1.11,ExDoc0.40.4.
+76schema/MCP+7OTLP pasan; guards intactos. G2:12pases y2controles length tras
+refusal inicial,14escenarios/18admisiones/3efectos. PG17.4:14fases/cleanup.
+FULL ambos2177/0/28; bin/check9fases0;8grafos56contratos/46comandos0,strictdeps rojo.
+[DEPENDENCIES](DEPENDENCIES.md) conserva fuentes/recibos/documentación/TAR/rojos.
 
 ## ReqLLM 1.26 — recibo anterior
 
@@ -63,27 +55,13 @@ No repetir FULL/G2/G3/G4 por este cambio documental.
 
 ## Rutina local y CI
 
-El usuario elige validar local antes de commit/push; CI sólo workflow_dispatch
-en esta rama, con seis jobs conservados. `main` cambia al integrar el PR.
-`bin/check`: formato, compile/probes, suite, ExDoc/enlaces, TAR/aislamiento.
-`--package-consumers` opt-in;22live+6PG excluidos offline, no timeouts ni pases.
-Primera invocación completa previa:8fases exit0,2176pases/0fallos/28excl;
-suite1979.7s, total2024.1s. No afirmar aceleración20× o nueva ejecución completa.
-
+Validar local con `bin/check`; CI workflow_dispatch/seis jobs en esta rama.
+`--package-consumers` opt-in;22live+6PG excluidos offline, no timeouts/pases.
 [Run03](https://github.com/akorda-software/exagent/actions/runs/37019949320)
-sobre `f69aedea1a2f7c94c546fa95b631a71664110b4d`:
-compile/test ambos y formato1.20 exit0;377fuentes exactas por runtime.
-Elixir1.18.4/OTP28.0:2176pases/0fallos/28excl,2706.4s.
-Elixir1.20.0/OTP29.0.5:2176pases/0fallos/28excl,2072.4s.
-Paquete/harness pasan;56contratos en8grafos pasan,46comandos exit0.
-Run global **failure** sólo por strictdeps: TOML ambos, WebSockex120,
-gproc exporter120. Sin compilerwarnings ExAgent, supresión, fork u override.
-CI funcional aceptado; G5strict upstream abierto. No afirmar CI global verde.
-TAR run03 eff31a95803c414657333e1344831fcb8b7099460c481a664a3e4b0828fdbd3f:
-153archivos exactos f69aede. No confundirlo con el nuevo TAR documental.
-
-Run01/02 rojos y correcciones causales conservados en ci030/roadmap;
-81ACK27.205s→18.968s, diferencial1015/1020vectores, review única0findings.
+sobre f69aede:ambos2176/0/28; paquete/harness/8grafos56contratos/46comandos0.
+Global **failure** por TOML/WebSockex/gproc stock; G5strict abierto, sin supresión.
+Recibos/run01–02/optimización81ACK/review única en ci030/roadmap; no reactivar.
+Los TAR fechados conservan identidad; no relabel ni promesa de speedup20×.
 
 ## Aceptaciones cerradas y límites
 
