@@ -11,6 +11,11 @@ GitHub queda manual para cualificaciones elegidas, sin repetir automáticamente
 esas suites en cada push/PR. La nueva rutina se verifica una vez completa al
 prepararla; conserva la revisión máxima única y los gates externos separados.
 
+**Decisión2026-10-03:** una release estable publicada en GitHub inicia la
+publicación automática en Hex. El workflow compila y verifica documentación/TAR;
+no repite las suites largas locales. Preview manual no publica ni recibe la clave.
+Ver [procedimiento de publicación](releasing.md).
+
 ## Un solo recorrido
 
 **Objetivo funcional → implementar y probar → una revisión como máximo →

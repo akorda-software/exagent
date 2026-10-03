@@ -1,0 +1,117 @@
+# Publicar ExAgent en Hex
+
+La versión2.0.0 y `.github/workflows/release.yml` están preparados. En el
+checkpoint2026-10-03 no hay merge, tag oficial ni publicación en Hex. El usuario
+ha pedido dejar la salida para la siguiente sesión. Las pruebas de runtime y
+backends ya aceptadas conservan sus recibos; preparar la publicación no las repite.
+
+## TOTP y la clave de publicación
+
+Sí se puede automatizar manteniendo el segundo factor de tu cuenta. Hex distingue
+el login OAuth interactivo, que puede pedir TOTP al escribir, de una clave de API,
+que no pide TOTP en cada publicación. Al crear o gestionar la clave desde la web
+sí puede pedir el segundo factor. Véanse la
+[documentación de autenticación](https://hex-core.hexdocs.pm/hex_core.html) y el
+[anuncio oficial de Hex2.4](https://hex.pm/blog/hex-v24-released).
+
+Preparación única, desde tu navegador:
+
+1. En [las claves de Hex](https://hex.pm/dashboard/keys), crear una clave llamada
+   `exagent-github-release` desde la cuenta propietaria del paquete.
+2. Seleccionar el permiso del paquete **exagent**, dominio `package`, recurso
+   `hexpm/exagent`. No hace falta una clave con escritura para toda la cuenta.
+   Este permiso permite publicar paquete y docs; el recurso está limitado al
+   paquete existente. Hex comprueba también la propiedad. El
+   [contrato oficial de permisos](https://github.com/hexpm/hexpm/blob/main/lib/hexpm/accounts/key_permission.ex)
+   describe estos recursos.
+3. Guardarla en el repositorio GitHub como secreto de Actions **`HEX_API_KEY`**:
+   [configuración de secretos](https://github.com/akorda-software/exagent/settings/secrets/actions).
+   También sirve `gh secret set HEX_API_KEY --repo akorda-software/exagent`, que
+   solicita el valor por entrada interactiva. No copiarlo a un archivo del repo.
+4. Si la clave tiene caducidad, renovar ese secreto antes de la siguiente release.
+   La clave no se guarda en las notas, los artefactos ni el código.
+
+La clave sólo se entrega al paso que escribe en Hex. La ejecución manual de
+preview no la recibe. No se automatiza el generador TOTP ni se desactiva2FA.
+El comando stock es `mix hex.publish --yes`, con `HEX_API_KEY` en el entorno;
+publica paquete y documentación. Véase
+[Hex publish](https://hex.hexdocs.pm/Mix.Tasks.Hex.Publish.html).
+
+## Lanzar la versión oficial
+
+1. Antes de cerrar el commit de release, ejecutar la rutina local `./bin/check`
+   para cambios de runtime. Para una preparación sólo de versión/prosa/workflow,
+   reutilizar las pruebas de runtime cuyos bytes siguen idénticos y ejecutar los
+   controles afectados: guards, formato, docs y TAR. No reabrir R9 ni añadir
+   proveedores pagados a la publicación.
+2. Mantener alineados `@version` en `mix.exs`, el encabezado de release en
+   `docs/changelog.md`, las guías de instalación y el footer. Para esta salida
+   están preparados como2.0.0. Comprobar localmente:
+
+   ```bash
+   python3 test/support/release_workflow_test.py
+   python3 bin/release-check v2.0.0 --prepare
+   ```
+
+   `--prepare` valida metadatos; no demuestra un tag ni autoriza publicar.
+3. Comitear y pushear la preparación; hacer merge de la PR en `main`. La versión
+   oficial debe incluir el workflow y corresponder a un commit ya integrado.
+4. Crear un tag `v2.0.0` sobre ese commit y pushearlo, sin mover un tag existente.
+   Un push del tag por sí solo no publica en Hex.
+5. Opcional: ejecutar **Publish official release to Hex** desde Actions, indicando
+   el tag. La ejecución manual compila y prepara los artefactos, sin publicar.
+   Equivalente: `gh workflow run release.yml --repo akorda-software/exagent --ref main -f tag=v2.0.0`.
+6. Publicar en GitHub una release para ese tag, con **prerelease desactivado**.
+   Publicar una release borrador dispara entonces el flujo automáticamente.
+   Las notas propuestas están en
+   [el borrador de v2](https://github.com/akorda-software/exagent/blob/codex/v2-candidate-029/.github/release-notes-v2.0.0.md).
+
+El workflow escucha `release: published`; omite borradores/prereleases y rechaza
+tags con sufijos o versiones no canónicas. La selección del tag pasa por una
+variable de entorno, sin interpolar su texto dentro de código shell. Comprueba
+tag exacto, versión, notas, introducciones actuales y pertenencia a `origin/main`.
+Ver [eventos release de GitHub](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#release).
+
+## Qué comprueba GitHub
+
+Elixir1.20.0/OTP29.0.5 y Hex2.5.1, dependencias según lock sin actualizar,
+compilación estricta del paquete, ExDoc estricto, enlaces HTML/Markdown/EPUB,
+build Hex y controles de aislamiento del TAR. Conserva paquete, SHA256, commit y
+documentación como artefacto. Las actions quedan fijadas a commits concretos.
+
+Las suites largas permanecen locales. `CI` sigue siendo manual y separado de
+este workflow. Los warnings externos siguen visibles, con el diagnóstico estricto
+rojo ya documentado; no se introduce una supresión ni un override upstream para
+publicar. El usuario acepta esa deuda en los perfiles cualificados actuales.
+La publicación no ejecuta las pruebas pagadas, SQL ni Langfuse/Opik otra vez.
+
+Tras subir, descarga el TAR público y exige igualdad byte a byte con el retenido.
+Comprueba también que responde la página de docs para esa versión. Esto verifica
+distribución; no constituye una nueva aceptación universal de runtime o backends.
+
+## Reintentos y recuperación
+
+Nunca se usa `--replace`. Si el TAR no existe, el paso publica paquete y docs.
+Si ya existe y coincide exactamente, sólo publica docs; permite recuperar un
+fallo posterior a la subida del paquete. Si difiere, se detiene sin sobrescribir.
+Un error de red o HTTP distinto de200/404 también detiene la escritura.
+
+Si falla la lectura pública inmediatamente después de subir, comprobar primero
+el estado de Hex y la propagación de docs; un fallo del job no despublica un
+paquete ya aceptado. Se puede reintentar el mismo workflow y commit. Para un
+paquete con bytes distintos hace falta investigar y decidir una versión nueva,
+no mover el tag ni forzar una sustitución.
+
+El primer envío real y la autenticación con la clave quedan pendientes hasta
+configurar `HEX_API_KEY` y publicar la release oficial. Los controles locales no
+se presentan como una ejecución remota de GitHub ni como una publicación en Hex.
+
+Verificación de esta preparación:17 controles offline de guards Git y recuperación
+contra un servidor loopback pasan; el CLI de publicación se sustituye por un
+recorder, sin escribir en Hex. Actionlint1.7.12 acepta el workflow. Compilación
+estricta dev/test,18 ejemplos documentados, ExDoc y enlaces, build repetible e
+aislamiento del TAR pasan. Un consumidor limpio instalado de2.0.0 pasa8contratos;
+su diagnóstico agregado conserva exit1 por38warnings stock. Las94fuentes de
+biblioteca y el lock son idénticos al FULL aceptado; no se repite aquella suite.
+El [recibo de preparación](https://github.com/akorda-software/exagent/blob/codex/v2-candidate-029/docs/orchestration/2026-10-01-v2-codex/RELEASE-PREPARATION.md)
+conserva identidades y alcance de artefactos.

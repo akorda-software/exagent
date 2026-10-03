@@ -1,0 +1,128 @@
+name: Publish official release to Hex
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing stable tag to preview; manual runs never publish
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hex-release-${{ github.event.release.tag_name || inputs.tag }}
+  cancel-in-progress: false
+
+env:
+  MIX_ENV: dev
+  EXAGENT_OFFLINE: "1"
+
+jobs:
+  release:
+    if: >-
+      github.repository == 'akorda-software/exagent' &&
+      (github.event_name == 'workflow_dispatch' ||
+       (!github.event.release.prerelease && !github.event.release.draft))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.release.tag_name || inputs.tag }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validate version, release documentation and main ancestry
+        id: metadata
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
+        run: |
+          python3 bin/release-check "$RELEASE_TAG" > "$RUNNER_TEMP/release.json"
+          cat "$RUNNER_TEMP/release.json"
+          printf 'tag=%s\n' "$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+          printf 'version=%s\n' "$(jq -r .version "$RUNNER_TEMP/release.json")" >> "$GITHUB_OUTPUT"
+
+      - uses: erlef/setup-beam@54075bcc5e249e4758d363f27d099f55d843f124 # v1
+        with:
+          otp-version: "29.0.5"
+          elixir-version: "1.20.0"
+
+      - name: Select the verified Hex client and resolve dependencies
+        run: |
+          mix local.hex 2.5.1 --force
+          elixir -e 'Application.put_env(:req_llm, :load_dotenv, false); Mix.CLI.main(System.argv())' -- deps.get --check-locked
+
+      - name: Compile the library and generate strict documentation
+        env:
+          EXAGENT_DOCS_SOURCE_REF: ${{ steps.metadata.outputs.tag }}
+        run: |
+          elixir -e 'Application.put_env(:req_llm, :load_dotenv, false); Mix.CLI.main(System.argv())' -- compile --warnings-as-errors
+          elixir -e 'Application.put_env(:req_llm, :load_dotenv, false); Mix.CLI.main(System.argv())' -- docs --warnings-as-errors
+          python3 test/support/documentation_site.py doc
+
+      - name: Build and inspect the release package without credentials
+        env:
+          EXAGENT_DOCS_SOURCE_REF: ${{ steps.metadata.outputs.tag }}
+        run: |
+          mkdir "$RUNNER_TEMP/exagent-release"
+          cp "$RUNNER_TEMP/release.json" "$RUNNER_TEMP/exagent-release/"
+          elixir -e 'Application.put_env(:req_llm, :load_dotenv, false); Mix.CLI.main(System.argv())' -- hex.build --output "$RUNNER_TEMP/exagent-release/exagent.tar"
+          elixir test/support/package_acceptance_isolation.exs "$RUNNER_TEMP/exagent-release/exagent.tar"
+          cd "$RUNNER_TEMP/exagent-release"
+          sha256sum exagent.tar > exagent.tar.sha256
+
+      - name: Retain the package, checksum and documentation
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: exagent-${{ steps.metadata.outputs.tag }}
+          path: |
+            ${{ runner.temp }}/exagent-release
+            doc
+
+      - name: Publish package and documentation to Hex
+        if: github.event_name == 'release'
+        env:
+          HEX_API_KEY: ${{ secrets.HEX_API_KEY }}
+          EXAGENT_DOCS_SOURCE_REF: ${{ steps.metadata.outputs.tag }}
+          RELEASE_VERSION: ${{ steps.metadata.outputs.version }}
+        run: |
+          if [[ -z "$HEX_API_KEY" ]]; then
+            echo 'Configure the HEX_API_KEY repository secret with permission package:hexpm/exagent.' >&2
+            exit 1
+          fi
+          git diff --exit-code
+          status=$(curl --silent --show-error --max-time 30 --output "$RUNNER_TEMP/exagent-existing.tar" \
+            --write-out '%{http_code}' "https://repo.hex.pm/tarballs/exagent-$RELEASE_VERSION.tar")
+          case "$status" in
+            404)
+              elixir -e 'Application.put_env(:req_llm, :load_dotenv, false); Mix.CLI.main(System.argv())' -- hex.publish --yes
+              ;;
+            200)
+              cmp "$RUNNER_TEMP/exagent-release/exagent.tar" "$RUNNER_TEMP/exagent-existing.tar"
+              echo 'Identical package already published; publishing documentation only.'
+              elixir -e 'Application.put_env(:req_llm, :load_dotenv, false); Mix.CLI.main(System.argv())' -- hex.publish docs --yes
+              ;;
+            *)
+              printf 'Cannot establish Hex release state: HTTP %s\n' "$status" >&2
+              exit 1
+              ;;
+          esac
+
+      - name: Verify the published package bytes and versioned documentation
+        if: github.event_name == 'release'
+        env:
+          RELEASE_VERSION: ${{ steps.metadata.outputs.version }}
+        run: |
+          curl --fail --silent --show-error --max-time 30 --retry 5 --retry-all-errors --retry-delay 3 \
+            "https://repo.hex.pm/tarballs/exagent-$RELEASE_VERSION.tar" \
+            --output "$RUNNER_TEMP/exagent-published.tar"
+          cmp "$RUNNER_TEMP/exagent-release/exagent.tar" "$RUNNER_TEMP/exagent-published.tar"
+          curl --fail --silent --show-error --max-time 30 --location --retry 5 --retry-all-errors --retry-delay 3 \
+            "https://hexdocs.pm/exagent/$RELEASE_VERSION/index.html" \
+            --output "$RUNNER_TEMP/exagent-published-docs.html"
+          grep -F "ExAgent v$RELEASE_VERSION" "$RUNNER_TEMP/exagent-published-docs.html"
+          printf 'Published exagent %s; remote TAR matches the retained package.\n' "$RELEASE_VERSION" >> "$GITHUB_STEP_SUMMARY"

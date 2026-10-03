@@ -1,5 +1,16 @@
 # Roadmap ejecutable de ExAgent v2.0.0
 
+**Preparación de publicación2026-10-03:** versión2.0.0 y documentación de entrada
+alineadas. Workflow de GitHub para releases estables, preview manual sin secretos
+y guard de tag/versión/changelog/main; suites largas siguen locales. El usuario
+acepta la deuda de warnings externa sin modificar upstream. Publicación diferida
+a la siguiente sesión: configurar HEX_API_KEY y hacer merge/tag/release.
+No tag ni publicación en este checkpoint. [Procedimiento](releasing.md).
+17guards Git/loopback y18casos documentados pasan; compile dev/test, ExDoc,
+enlaces y TAR/aislamiento pasan. Consumidor nuevo2.0.0:8contratos pasan;
+diagnóstico agregado exit1 por38warnings upstream.94fuentes lib/lock intactos.
+Ver [recibo de preparación](https://github.com/akorda-software/exagent/blob/codex/v2-candidate-029/docs/orchestration/2026-10-01-v2-codex/RELEASE-PREPARATION.md).
+
 **Cierre solicitado2026-10-03:** Dragonex se integra con routing ligado al primer
 request/historial y validación de policy/bindings Session antes del codec. Métricas
 opt-in por API0.6 pública y HTTP por VM propia implementados; tracer default sigue
@@ -226,7 +237,8 @@ publicación será posterior. Recibos privados en `ci030/run02/` y owners disjun
 - Tener todas las casillas de implementación no sustituye aceptación externa,
   revisión de candidata y comprobación del artefacto distribuido.
 
-La versión nominal sigue siendo1.3.0; este plan no hace bump ni publicación.
+La planificación comenzó con versión nominal1.3.0; la preparación de publicación
+2026-10-03 pasa a2.0.0. La versión por sí sola no acredita publicación.
 R0–R9 sustituyen H1–H6/H3.0. El plan y alcance anteriores, con evidencia intacta,
 están en `docs/archive/2026-09-release-{roadmap,scope}.md`.
 
@@ -243,7 +255,7 @@ están en `docs/archive/2026-09-release-{roadmap,scope}.md`.
 | R6 | Composición multi-agente coherente | R3; R4/R5 para pausa durable | Implementado y revisado: secuencia9/delegación10/Flow11. Final00973+11; recetas públicas PASS y A8 SQL entreVMs sobre019. FULL2157sin fallos; guards generales no demostrados siguen cerrados |
 | R7 | Observabilidad e integraciones utilizables | R1/R2; cierre sobre R5/R6 | MCP SDK5/5, binding, retrieval/job y LiveView/Oban6/6; Langfuse y Opik A10 nativo/API/UI aceptados con los mismos criterios por mandato2026-10-02 |
 | R8 | Cualificación externa, consumidores, carga y CI | R1–R7 pertinentes | G2mínimo/G3/G6 aceptados; ocho grafos56contratos pasan también remotamente. E2E app27aceptados por modelo reutilizando26+08con required header; nullable previo sigue rojo. Cuatro complejos4/4por modelo. CI030 funcional aceptado; strictdeps RED upstream |
-| R9 | Revisión final, candidata y release2.0.0 | R0–R8 aceptados | Revisión única cerrada y candidata029 preparada; PR1 borrador autorizado. CI030 funcional aceptado; run global failure sólo por diagnóstico strictdeps upstream. G5strict abierto, sin versionar ni publicar |
+| R9 | Revisión final, candidata y release2.0.0 | R0–R8 aceptados | Revisión única cerrada. Versión2.0.0 y workflow preparados; PR1 pendiente de merge. G5strict rojo upstream aceptado como deuda externa por el usuario2026-10-03. Publicación diferida, aún sin tag/release/Hex |
 
 ```text
 R0 → R1 → R2 → R3 ───────→ R6 ──┐

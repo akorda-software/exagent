@@ -397,7 +397,7 @@ la workflow en la rama por defecto para habilitar la
 |---|---|---|
 | Suites en Elixir 1.18.4/OTP 28 y 1.20.0/OTP 29 | Compilación estricta y pruebas offline del runtime, herramientas, límites, streaming, persistencia y recuperación; formato canónico en 1.20 | Dos jobs; los casos de proveedores reales y Postgres quedan excluidos explícitamente |
 | Harness finito en 1.20 | C0, ejemplos documentados, observabilidad aislada, evaluaciones y carga de humo | Dobles deterministas y transporte local, sin aceptación de servicios cloud |
-| Construcción del paquete | Un TAR de Hex con checksum e identidad de los archivos distribuidos | Preview de la versión nominal, sin publicar |
+| Construcción del paquete | Un TAR de Hex con checksum e identidad de los archivos distribuidos | Preview de la versión del checkout, sin publicar |
 | Consumidores del TAR en ambos runtimes | Instalación desde esos bytes y siete contratos por combinación sin OTel/API/SDK/exporter | Ocho grafos, 56 contratos; diagnósticos de dependencias registrados aparte |
 
 CI descarga herramientas y dependencias; `EXAGENT_OFFLINE=1` evita las pruebas

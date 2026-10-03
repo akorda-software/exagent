@@ -1,8 +1,9 @@
 # ExAgent v2 — estado vigente, 2026-10-03
 
-Implementación autorizada en /home/kukapu/dev/projects/exAgent.
-Rama: `codex/v2-candidate-029`, [PR1 borrador](https://github.com/akorda-software/exagent/pull/1).
-El usuario autorizó commit/push/PR; sin bump, tag, merge ni publicación en Hex.
+Implementación autorizada; rama `codex/v2-candidate-029`, [PR1 borrador](https://github.com/akorda-software/exagent/pull/1).
+El usuario autorizó salida y luego pidió dejarla preparada para mañana.
+Versión2.0.0/workflow/docs preparados; commit/push de la preparación autorizado.
+No merge/tag/publicación esta noche; configurar HEX_API_KEY en la siguiente sesión.
 ReqLLM stock, R1.2/C7 aceptados, guards intactos; una revisión máxima, sin reruns rutinarios.
 
 ## Cierre operativo y aportaciones Dragonex
@@ -21,19 +22,22 @@ FULL120:2235/0/28,2001.6s. Rutina sale1 por enlace ExDoc callback sin c:;
 prosa corregida: cuatro fases finales0; TAR174files/94lib, sin rerun FULL.
 [OPERATIONAL-CLOSURE](OPERATIONAL-CLOSURE.md) conserva fuentes/rojos/alcance.
 Strictdeps TOML/WebSockex/gproc sigue rojo; no release stock compatible lo cierra.
-No hay nueva ola paid/cloud/SQL/R9 ni autorización de publicación.
+No hay nueva ola paid/cloud/SQL/R9. El usuario acepta deuda externa sin modificar upstream.
+
+## Preparación de publicación
+
+Workflow release:published estable; manual preview nunca publica/recibe secretos.
+Guard version/changelog/docs/tag/main; compilación/docs/TAR sin suites largas en CI.
+API key package:hexpm/exagent evita TOTP por envío; creación web puede pedir2FA.
+Sin --replace; TAR ya publicado sólo permite docs si es idéntico. Readback compara
+bytes y docs versionadas.17guards/18doc y compile/docs/TAR pasan; consumidor2.0:
+8contratos0fallos/strictRED38warnings.94lib/lock intactos; [RELEASE-PREPARATION](RELEASE-PREPARATION.md).
 
 ## Operación prolongada — recibo anterior
 
-Maintenance opt-in supervisado; TTL mayor que duración de todos los requests.
-94casos por runtime;32 owner deaths/4sanos loopback, scope/restart/stop preservados.
-FULL1202208/0/28; bin/check9fases0; oráculo4/4 separado en ese freeze.
-Budget exporter0/1 acota reinicios; HTTP directo conserva socket upstream vivo.
-El cierre anterior excluía Dragonex y métricas; el cierre operativo de arriba
-incorpora ambos y añade la alternativa HTTP VM, sin reetiquetar aquel recibo.
-[OBSERVABILITY-LIFECYCLE](OBSERVABILITY-LIFECYCLE.md); consumers32PASS/strictdeps rojo.
-Native08/coverage27ambos: [KNOWN-LIMITS](KNOWN-LIMITS.md),
-[RELEASE-READINESS](RELEASE-READINESS.md). Smokefases53/57, precommit20/0/27excl.
+Maintenance/budget/94focales por runtime: [OBSERVABILITY-LIFECYCLE](OBSERVABILITY-LIFECYCLE.md).
+FULL previo2208/0/28 y32contratos conservan identidad; no incluían Dragonex/métricas.
+Native08/coverage27ambos: [KNOWN-LIMITS](KNOWN-LIMITS.md) y [RELEASE-READINESS](RELEASE-READINESS.md).
 
 ## Recibos anteriores, sin reactivar tareas
 
@@ -47,14 +51,9 @@ el required-header posterior está en KNOWN-LIMITS, sin nueva ola27casos complet
 
 ## Dependencias — verificación cerrada
 
-43paquetes consultados:11actualizados,42últimas estables/gproc bloqueado por grpcbox.
-El cierre operativo suma API experimental0.6 opt-in y SDK0.6 sólo de tests;
-lock45, los otros43paquetes permanecen idénticos.
-Finch0.24/Mint1.11/HPAX1.1,JSV0.25,Ecto3.14.2,exporter test1.11,ExDoc0.40.4.
-76schema/MCP+7OTLP pasan; guards intactos. G2:12pases y2controles length tras
-refusal inicial,14escenarios/18admisiones/3efectos. PG17.4:14fases/cleanup.
-FULL ambos2177/0/28; bin/check9fases0;8grafos56contratos/46comandos0,strictdeps rojo.
-[DEPENDENCIES](DEPENDENCIES.md) conserva fuentes/recibos/documentación/TAR/rojos.
+Lock45: revisión43paquetes/11actualizaciones y dos paquetes metric0.6 añadidos.
+Gproc bloqueado por grpcbox; warnings upstream intactos. [DEPENDENCIES](DEPENDENCIES.md)
+conserva fuentes/recibos/TAR/rojos, FULL previo y G2/PG anteriores.
 
 ExDoc tiene portada, guías, mapa API para agentes y llms.txt/Markdown/EPUB;
 `bin/check` verifica enlaces. [DOCUMENTATION](DOCUMENTATION.md) conserva su recibo.
@@ -97,5 +96,5 @@ Roadmap único: docs/development/roadmap.md. [FINAL-CANDIDATE](FINAL-CANDIDATE.m
 [OPIK](OPIK-ACCEPTANCE.md) conservan identidad y límites de las candidatas previas.
 ROOT/_build exclusivo padre; workers con fuentes/deps/build/tooling privados.
 Offline EXAGENT_OFFLINE=1 MIX_ENV=test, dotenv deshabilitado.
-Hex posterior: APIkey de publicación en HEX_API_KEY permite CI sin TOTP por envío;
-no crear clave, cambiar2FA, publicar o versionar en este objetivo.
+Próxima sesión: crear clave en el navegador, guardar secreto GitHub, merge,
+preview del tag estable y publicación oficial. No crear clave ni cambiar2FA esta noche.

@@ -1,6 +1,6 @@
 # Documentation map
 
-These pages describe the **unreleased v2 candidate**, nominal version **1.3.0**.
+These pages describe **ExAgent 2.0.0**; see [release status](status.md) for availability.
 Published 1.x releases have older contracts. Start with a task guide; use the API
 reference to inspect exact options, return values and errors.
 
@@ -47,7 +47,7 @@ distinguish offline demos from real provider, SQL and backend acceptance.
 | How do the layers fit together? | [Architecture](architecture/overview.md) |
 | Why were these contracts selected? | [Design decisions](architecture/design.md) |
 | What changes from 1.x? | [Migration](guides/migration.md) |
-| What changed in this candidate? | [Changelog](changelog.md) |
+| What changed in 2.0? | [Changelog](changelog.md) |
 
 The [project README](../README.md) preserves the compact API tour. The ExDoc
 **Modules** tab and search provide function-level reference.
@@ -62,6 +62,7 @@ las guías anteriores son la entrada habitual.
 | Estado y orden de trabajo R0–R9 | [Roadmap](development/roadmap.md) |
 | Alcance de v2 y oráculos de producción | [Release scope](development/release-scope.md), [Acceptance](development/production-acceptance.md) |
 | Rutina local, exclusiones y gates | [Verificación](development/verification.md) |
+| Publicar una versión oficial desde GitHub | [Publicación en Hex](development/releasing.md) |
 | Versiones actuales y actualizaciones compatibles | [Dependencias](development/dependencies.md) |
 | Causa y tratamiento de límites conocidos | [Límites conocidos](development/known-limits.md) |
 | Tooling por proyecto | [Entorno](development/environment.md) |

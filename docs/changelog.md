@@ -6,6 +6,23 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.0.0]
+
+### Release preparation — 2026-10-03
+
+- Prepare version2.0.0 and align the installation guides and documentation footer.
+  Publication is deferred to the next session; a version bump is not proof of a
+  published package. The migration guide covers the breaking runtime, model,
+  error, event, snapshot and continuation contracts consolidated below.
+- Add a GitHub release workflow: stable published releases build and publish
+  package/docs with a package-scoped Hex API key. Manual runs preview only.
+  Validate version/changelog/documentation, exact tag and main ancestry; preserve
+  artifacts and verify published TAR bytes. Keep long test suites local.
+- Record the user's acceptance of external stock dependency diagnostics without
+  upstream changes, warning suppression or broader runtime guarantees. Direct
+  native in-process HTTP remains limited; the owned disposable-VM recipe is
+  qualified. Existing runtime acceptance retains its source identity and scope.
+
 ### Integrated Dragonex and operational observability — 2026-10-03
 
 - Bind OpenRouter routing in both disabled and none modes before the first

@@ -3,17 +3,19 @@
 Run an agent without credentials first. This gives you a working application and
 the result contract before introducing a provider, streaming or persistence.
 
-## Install the candidate
+## Install ExAgent 2.0
 
-This guide targets the **unreleased v2 checkout**, whose nominal version is
-still 1.3.0. Published 1.x releases have older contracts. With the clone beside
-your application, add a source dependency:
+This guide targets **ExAgent 2.0.0**. Published 1.x releases have older contracts.
+After the official 2.0 release is available on Hex, add:
 
 ```elixir
 def deps do
-  [{:exagent, path: "../exAgent"}]
+  [{:exagent, "~> 2.0"}]
 end
 ```
+
+Before publication, use `{:exagent, path: "../exAgent"}` with the clone beside
+your application. [Release status](../status.md) records the accepted scope.
 
 Run `mix deps.get`, then `iex -S mix` in your application. The supported runtime
 targets are Elixir 1.18 / OTP 28 and Elixir 1.20 / OTP 29. ExAgent starts its own

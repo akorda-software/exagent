@@ -4,7 +4,7 @@ defmodule ExAgent.MixProject do
   use Mix.Project
 
   @source_url "https://github.com/akorda-software/exagent"
-  @version "1.3.0"
+  @version "2.0.0"
 
   def project do
     [
@@ -138,6 +138,7 @@ defmodule ExAgent.MixProject do
         "docs/development/testing-audit.md",
         "docs/development/execution-flow.md",
         "docs/development/environment.md",
+        "docs/development/releasing.md",
         "docs/development/backend-evaluation.md",
         "docs/development/handoff.md",
         "docs/changelog.md",
@@ -255,5 +256,5 @@ defmodule ExAgent.MixProject do
 
   defp docs_footer(:html),
     do:
-      ~s(<p class="exagent-release-note">Unreleased v2 candidate · nominal v#{@version} · <a href="status.html">Support and release status</a> · <a href="llms.txt">View llms.txt</a></p>)
+      ~s(<p class="exagent-release-note">ExAgent v#{@version} · <a href="status.html">Support and release status</a> · <a href="llms.txt">View llms.txt</a></p>)
 end

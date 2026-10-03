@@ -7,9 +7,9 @@
 
 <!-- MDOC -->
 
-> **Unreleased consolidation major:** these source docs describe the current
-> development checkout, not the published 1.x package. Use a local path dependency
-> to try it, and read the [migration guide](docs/guides/migration.md) before upgrading a consumer.
+> **ExAgent 2.0:** these docs describe the consolidation major. Published 1.x
+> packages have older contracts. Read the [migration guide](docs/guides/migration.md)
+> before upgrading and check [release status](docs/status.md) for acceptance and availability.
 
 **An agent framework for Elixir** — structured output, tool-calling, streaming,
 stateful agents, multi-agent sessions and durable persistence, powered by the
@@ -84,18 +84,20 @@ hard-RAM/predecode promise. See the migration guide and roadmap for exact limits
 durable C7 has real PostgreSQL/VM qualification in its declared profile. Langfuse
 and Opik have equivalent native/API/UI acceptance for the finite A10 scenario.
 The status page records the current runtime checks and corrective tests.
-Strict stock-dependency diagnostics, versioning and publication remain pending.
+Strict stock-dependency diagnostics remain red and documented as upstream debt.
 
 ## Installation
 
-For this unreleased checkout, point your application at the source directory
-(adjust the path to your clone). The published 1.x package has older contracts.
+For the official 2.0 package, after its release is available on Hex:
 
 ```elixir
 def deps do
-  [{:exagent, path: "../exAgent"}]
+  [{:exagent, "~> 2.0"}]
 end
 ```
+
+To use this source checkout before publication, replace that dependency with
+`{:exagent, path: "../exAgent"}` and adjust the path to your clone.
 
 The library starts its own supervised `ExAgent.Finch` HTTP pool, a `Registry`
 (`ExAgent.PubSub.Local`), a `Task.Supervisor`, an `ExAgent.Store.ETS` table and

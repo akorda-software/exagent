@@ -1,7 +1,7 @@
 # Integration notes for coding agents
 
 This is a compact entry point for agents implementing an **application using
-ExAgent**. It describes the unreleased v2 checkout, not the published 1.x API.
+ExAgent**. It describes the 2.0 contracts; published 1.x packages have older APIs.
 Repository-maintenance instructions live in `AGENTS.md` in the source checkout;
 archived execution prompts are not application integration tasks.
 

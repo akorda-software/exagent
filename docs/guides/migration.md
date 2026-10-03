@@ -1,13 +1,12 @@
 # Migration to the consolidation major
 
-Migration reference for the unreleased v2 candidate. No version has been bumped
-or published. [Design decisions](../architecture/design.md) record the selected
+Migration reference for ExAgent 2.0. [Design decisions](../architecture/design.md) record the selected
 contracts; [project status](../status.md) distinguishes accepted behavior and
 pending gates. Do not infer real-backend or consumer compatibility from this guide.
 
 ## ReqLLM 1.26 dependency update
 
-The current candidate requires `req_llm ~> 1.26.0` and resolves the required
+ExAgent2.0 requires `req_llm ~> 1.26.0` and resolves the required
 `llm_db` catalogue to 2026.9.8. Update your application's dependency lock and run
 its integration checks. The older 1.24 qualification records below remain dated
 evidence; they do not certify the newer dependency graph.
@@ -43,7 +42,8 @@ not additional work an application must execute.
 The [task guides](../README.md) provide shorter integration examples.
 [Support status](../status.md) is the current evidence summary: integrated reviews,
 real SQL and both backend UI gates are closed in their declared profiles; strict
-stock dependency diagnostics and release publication remain open. Historical
+stock dependency diagnostics remain red as documented upstream debt. Publication
+is verified separately through the [release workflow](../development/releasing.md). Historical
 fixture-only evidence is not a substitute for those later receipts.
 
 ## Final tool arguments and streaming diagnostics

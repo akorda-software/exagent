@@ -1,0 +1,75 @@
+#!/usr/bin/env python3
+"""Check release metadata; strict mode also binds it to a merged stable tag."""
+
+import argparse
+import json
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+
+def fail(message):
+    raise ValueError(message)
+
+
+def git(*args):
+    result = subprocess.run(["git", *args], text=True, capture_output=True)
+    if result.returncode:
+        fail(f"git {' '.join(args)} failed: {result.stderr.strip()}")
+    return result.stdout.strip()
+
+
+def check(tag, prepare=False):
+    if not re.fullmatch(r"v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)", tag):
+        fail("Use a stable tag vMAJOR.MINOR.PATCH, without prerelease/build suffixes.")
+    version = tag[1:]
+    mix = Path("mix.exs").read_text()
+    versions = re.findall(r'^\s*@version\s+"([^"]+)"\s*$', mix, re.MULTILINE)
+    if versions != [version]:
+        fail(f"Tag {tag} must match the single @version in mix.exs.")
+    changelog = Path("docs/changelog.md").read_text()
+    if not re.search(rf"^## \[{re.escape(version)}\](?:\s.*)?$", changelog, re.MULTILINE):
+        fail(f"docs/changelog.md needs a release heading ## [{version}].")
+
+    # Inspect current introductions, not dated historical acceptance records.
+    stale = re.compile(
+        r"unreleased (?:v2|consolidation)|nominal (?:package )?version|"
+        r"nominal v#|no version has been bumped", re.IGNORECASE
+    )
+    for name in ["README.md", "docs/home.md", "docs/README.md", "docs/status.md",
+                 "docs/guides/getting-started.md", "docs/guides/agents.md",
+                 "docs/guides/migration.md"]:
+        introduction = "\n".join(Path(name).read_text().splitlines()[:20])
+        if stale.search(introduction):
+            fail(f"Update the candidate/nominal-version introduction in {name}.")
+    if stale.search(mix):
+        fail("Update the candidate/nominal-version documentation footer in mix.exs.")
+
+    commit = git("rev-parse", "HEAD")
+    if not prepare:
+        if git("status", "--porcelain"):
+            fail("The release checkout must be clean.")
+        if git("rev-parse", f"refs/tags/{tag}^{{commit}}") != commit:
+            fail("The selected tag must identify the checked-out commit.")
+        git("merge-base", "--is-ancestor", commit, "refs/remotes/origin/main")
+    return {"tag": tag, "version": version, "commit": commit,
+            "mode": "metadata-only" if prepare else "merged-tag"}
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("tag")
+    parser.add_argument("--prepare", action="store_true",
+                        help="Check metadata before commit/tag; does not approve publication")
+    args = parser.parse_args()
+    try:
+        print(json.dumps(check(args.tag, args.prepare), sort_keys=True))
+    except (ValueError, OSError) as error:
+        print(f"Release check failed: {error}", file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -155,8 +155,10 @@ con un runtime futuro que retire esos comportamientos.
 No hay una actualización oficial compatible que deje limpio este grafo hoy.
 Se mantiene el lock y no se introduce fork, parche, override ni supresión.
 Los contratos funcionales de consumidores pasan; el diagnóstico estricto sigue
-rojo. Esta investigación no cambia su criterio ni concede una excepción de
-publicación. No hay warning de compilación ExAgent en esos recibos.
+rojo. La investigación no cambió su criterio. Decisión posterior del usuario,
+2026-10-03: preparar publicación conservando esta deuda externa y sin modificar
+los proyectos upstream. No hay warning de compilación ExAgent en esos recibos;
+esta decisión no convierte el diagnóstico en verde.
 
 ### Siguiente acción verificable
 

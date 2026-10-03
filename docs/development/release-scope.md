@@ -4,7 +4,8 @@
 para aplicaciones Elixir y confirma incluir aprobación humana persistida (C7).
 La estrategia es ExAgent sobre una release oficial ReqLLM stock, sin fork,
 vendoring, patch, monkeypatch, parser wire privado ni runtime Jido. El número objetivo es
-**2.0.0**; la versión del checkout sigue en1.3.0 hasta el paso autorizado de release.
+**2.0.0**; la preparación autorizada2026-10-03 ya fija esa versión en el checkout.
+Tag oficial, merge y publicación siguen siendo pasos separados.
 
 Este documento define el producto. [Roadmap](roadmap.md) mantiene tareas/estados;
 [aceptación](production-acceptance.md) define pruebas y evidencia. El alcance H1
@@ -175,7 +176,9 @@ paused de R2 no representa el estado actual de C7.
 Las descripciones objetivo anteriores no sustituyen el tablero único del
 [roadmap](roadmap.md) ni los recibos de cada gate. G5 conserva el diagnóstico
 estricto rojo de dependencias stock; los contratos funcionales del TAR pasan.
-La candidata no es una versión publicada: quedan la decisión explícita sobre
-ese diagnóstico y el paso autorizado de versión/notas/tag/Hex. La release será
+El usuario acepta conservar esa deuda externa sin modificar upstream y solicita
+preparar la publicación automática para la siguiente sesión. Versión2.0.0,
+documentación y workflow quedan preparados; merge/tag/release/Hex aún pendientes
+en el checkpoint2026-10-03. Ver [publicación](releasing.md). La release será
 **publicada** sólo tras verificar el artefacto Hex2.0.0. Los perfiles adicionales
 no cualificados y los tests excluidos no se presentan como garantías aceptadas.

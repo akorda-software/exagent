@@ -12,14 +12,14 @@
 
 > #### About this checkout {: .info}
 >
-> These pages describe the **unreleased v2 candidate**. Its nominal package version
-> is still **1.3.0**; published 1.x packages have older contracts. Use the source
-> dependency in [Getting started](guides/getting-started.md), or read
+> These pages describe **ExAgent 2.0.0**; published 1.x packages have older
+> contracts. Check [release status](status.md), use the dependency in
+> [Getting started](guides/getting-started.md), or read
 > [Migration](guides/migration.md) when upgrading an existing application.
 
 ## A small, working beginning
 
-Run this inside an application that depends on this checkout. No credentials or
+Run this inside an application that depends on ExAgent2.0. No credentials or
 network are needed:
 
 ```elixir

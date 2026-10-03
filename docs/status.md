@@ -1,8 +1,19 @@
 # Support and release status
 
-Updated **2026-10-03**. These docs describe the unreleased v2 candidate on
-`codex/v2-candidate-029`. The nominal version remains **1.3.0**. No v2 version
-bump, tag, merge to `main` or Hex publication has been performed.
+Updated **2026-10-03**. These docs describe **ExAgent 2.0.0**. At this dated
+checkpoint, release metadata and the GitHub publication workflow are prepared on
+`codex/v2-candidate-029`; merge, official release and Hex publication are pending
+the next session. Availability is established by the
+[Hex release](https://hex.pm/packages/exagent/2.0.0) and its versioned HexDocs,
+not by the version string alone. See [publishing](development/releasing.md).
+
+Release preparation verifies17 offline Git/loopback guards,18 executable
+documentation cases, strict dev/test compilation and ExDoc/site/TAR checks.
+A fresh installed2.0.0 minimal graph passes8 contracts; its aggregate diagnostic
+remains exit1 from38 upstream warning lines. All94 library source files and the
+dependency lock match the accepted runtime freeze. The
+[preparation receipt](https://github.com/akorda-software/exagent/blob/codex/v2-candidate-029/docs/orchestration/2026-10-01-v2-codex/RELEASE-PREPARATION.md)
+distinguishes the installed staging TAR from the final documentation artifact.
 
 The requested operational closure now integrates the Dragonex extensions, opt-in
 metrics through official experimental0.6 APIs and the stock HTTP disposable-VM
@@ -62,7 +73,10 @@ native extraction to the caller's optional header contract. The final E2E schema
 requires merchant/currency and case08 passes with both models, while reverting
 to nullable reproduces DeepSeek's failure. ExAgent runtime and dependency lock
 remain unchanged. Stock warnings have identified upstream fixes/release blockers;
-the strict diagnostic remains red, without a suppression or publication waiver.
+the strict diagnostic remains red. On2026-10-03 the user chose to proceed with
+publication while retaining these external limitations, without changing upstream
+projects or suppressing their diagnostics. This is a release decision, not a
+new green diagnostic or an expansion of qualified profiles.
 
 ## Read the CI result accurately
 
