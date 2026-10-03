@@ -154,12 +154,29 @@ third-party instrumentations and runtime handler reconfiguration are outside
 this check. Explicit `observability: false` leaves host tracing to the host.
 
 ReqLLM's own in-flight ETS tracking survives in this integration. A worker death
-without a terminal event can leave an entry; schedule
-`ExAgent.Observability.ReqLLM.prune_stale_spans(ttl_ms)` from the host's maintenance
-process. Choose a TTL longer than allowed live requests and prune periodically.
+without a terminal event can leave an entry. Add this optional child to the
+application's supervision tree after configuring its integrated bridge:
+
+```elixir
+{ExAgent.Observability.ReqLLM.Maintenance,
+ ttl_ms: 120_000, interval_ms: 30_000}
+```
+
+Both durations are explicit. **The TTL must exceed every allowed live ReqLLM
+request**, including standalone calls, streaming and retries. Cleanup uses age,
+not process liveness; a TTL that is too short can remove active tracking and lose
+terminal diagnostics. If any permitted request can run indefinitely, no finite TTL
+satisfies this precondition: bound those requests before enabling maintenance.
+The worker does not set request deadlines. It has one non-overlapping timer,
+stays dormant without the integrated handler, and exposes
+numeric generation-local counters through
+`ExAgent.Observability.ReqLLM.Maintenance.stats/0`. It does not
+attach/detach bridges or start an SDK. An application with its own maintenance job
+can continue calling `ExAgent.Observability.ReqLLM.prune_stale_spans(ttl_ms)`.
 Prune removes entries, not spans: ExAgent's watcher closes its own span separately.
-`detach/0` removes only this integrated handler/entries. No global attach/detach
-around concurrent requests or hidden maintenance process is installed.
+`detach/0` removes only this integrated handler/entries. No maintenance process is
+installed automatically. Request admission and total upstream table size remain
+host-owned; a periodic scan is not a hard memory bound.
 
 The original negative control demonstrated two generations/4 output tokens for
 one request/2 actual fixture tokens with independent bridges. The current matrix
@@ -304,6 +321,15 @@ application attributes or exporter allocations; SDK storage for active spans is
 another boundary. Slots do not promise FIFO ordering. An exporter timeout/error drops
 its batch without implicit retry; cancellation does not imply remote rollback.
 
+`max_exporter_restarts: n` limits automatic worker replacements per processor
+instance. Zero permits only the initial worker; `:infinity` keeps the previous
+default. At exhaustion the processor stays alive with status `:unavailable`,
+discards queued spans and drops further admission. Counters `exporter_restarts`
+and `restart_limit_reached` make this visible; completed error callbacks do not
+spend the restart budget. Application/SDK restart resets it. Choose a finite
+budget when repeated initialization can retain exporter-owned resources. This
+does not reclaim native HTTP sockets/profiles or make that lifecycle accepted.
+
 `BoundedProcessor.stats(:exagent_export)` exposes local scalar counters. Its
 `force_flush/1` is a coalesced asynchronous request, **not a delivery ACK**. A
 successful exporter callback also does not certify durable backend reception or
@@ -354,7 +380,7 @@ by changing an endpoint. Their integrations belong outside the critical run path
 N01–N03 use the real `opentelemetry_exporter`1.11.0 as a **test-only** dependency.
 The [dependency review](../development/dependencies.md) records its upgrade from
 1.10.0; historical receipts retain their original versions and observations.
-Four isolated-VM tests use SDK1.7/API1.5, a controller-gated receiver bound to
+Five isolated-VM tests use SDK1.7/API1.5, a controller-gated receiver bound to
 127.0.0.1 on a dynamic port, and the exporter's official protobuf decoder. They
 inspect POST, full/generic path mapping, content type, resource/scope, nonzero
 trace/span/parent IDs, operation attributes and usage. A two-request run with one
@@ -428,6 +454,16 @@ boundary with its own acceptance. Other transports/exporters require separate
 tests. ExAgent does not inspect private profile names, close shared inets services,
 or implement a second OTLP client to hide this limitation. Platform API/UI
 comparison and production-like acceptance remain open.
+
+The new restart-budget control uses `max_exporter_restarts: 0` with exporter1.11.
+After one held HTTP request times out, the worker dies, the processor becomes
+unavailable, and three later admissions are dropped. Exactly one native profile
+is created; no replacement POST/profile appears. The original socket survives,
+so this is a bound on automatic recreation per instance, not a cleanup fix.
+The probe cancels its exclusively owned request and removes its profile only
+inside that disposable VM. Existing unlimited-restart negative controls remain.
+See [known limits](../development/known-limits.md) for the upstream follow-up and
+the separate experimental-metrics API incompatibility.
 
 ### Composed scenario for later platform comparison
 

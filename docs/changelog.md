@@ -6,6 +6,19 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Long-lived observability polish — 2026-10-03
+
+- Add opt-in supervised ReqLLM tracking maintenance with explicit TTL/cadence,
+  numeric counters, handler isolation and no implicit bridge/SDK installation.
+  The host must choose TTL longer than all live request durations.
+- Add a per-instance exporter worker restart budget to BoundedProcessor, retaining
+  the existing infinity default. Exhaustion disables admission and discards queued
+  spans; additive counters expose replacements/exhaustion. Completed error callbacks
+  do not spend the budget. Native OTLP verifies bounded profile recreation while
+  retaining the unresolved socket/profile cleanup limitation.
+- Identify ReqLLM's metrics arity mismatch with published experimental0.6 APIs;
+  no dependency patch, meter shim or metrics-export acceptance is introduced.
+
 ### Known-limit investigation — 2026-10-03
 
 - Qualify the consumer's native receipt scenario with an explicit required

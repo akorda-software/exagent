@@ -24,6 +24,11 @@ defmodule ExAgent.Observability.NativeOTLPTest do
     probe("lifecycle")
   end
 
+  @tag timeout: 30_000
+  test "native HTTP restart budget limits profile recreation while preserving the socket limitation" do
+    probe("restart_budget")
+  end
+
   defp probe(scenario) do
     paths = :code.get_path() |> Enum.flat_map(&["-pa", to_string(&1)])
     script = Path.expand("../../support/native_otlp_probe.exs", __DIR__)

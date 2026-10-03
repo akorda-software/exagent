@@ -233,6 +233,7 @@ defmodule ExAgent.MixProject do
         Observability: [
           ExAgent.Observability.OpenTelemetry,
           ExAgent.Observability.ReqLLM,
+          ExAgent.Observability.ReqLLM.Maintenance,
           ExAgent.Observability.BoundedProcessor
         ],
         Exceptions: [

@@ -5,6 +5,7 @@ defmodule ExAgent.Observability.ReqLLMBridgeTest do
 
   alias ExAgent.Observability.OpenTelemetry
   alias ExAgent.Observability.ReqLLM, as: Integration
+  alias ExAgent.Observability.ReqLLM.Maintenance
   @owner :exagent_req_llm_bridge_owner
   @handler "exagent-req-llm-bridge-negative-control"
 
@@ -17,6 +18,16 @@ defmodule ExAgent.Observability.ReqLLMBridgeTest do
     end
 
     def force_flush(_), do: :ok
+  end
+
+  defmodule ForeignAdapter do
+    @behaviour ReqLLM.OpenTelemetry.Adapter
+    def available?, do: true
+    def start_span(_, _, _), do: :foreign_span
+    def set_attributes(_, _, _), do: :ok
+    def add_event(_, _, _, _), do: :ok
+    def set_status(_, _, _, _), do: :ok
+    def end_span(_, _), do: :ok
   end
 
   setup_all do
@@ -185,6 +196,156 @@ defmodule ExAgent.Observability.ReqLLMBridgeTest do
       assert Enum.all?(spans, &(&1.attrs["exagent.status"] == "failed"))
       refute_receive {:bridge_span, _}, 0
     end
+  end
+
+  for surface <- [:sync, :stream] do
+    @surface surface
+    test "#{surface}: supervised maintenance clears repeated owner deaths and preserves live requests" do
+      assert :ok == Integration.attach()
+      worker = start_supervised!({Maintenance, ttl_ms: 2_000, interval_ms: 20})
+      journal = {__MODULE__, :maintenance, make_ref()}
+
+      assert :ok ==
+               :telemetry.attach_many(
+                 journal,
+                 for(kind <- [:start, :stop, :exception], do: [:req_llm, :request, kind]),
+                 &__MODULE__.journal/4,
+                 self()
+               )
+
+      on_exit(fn -> :telemetry.detach(journal) end)
+
+      for wave <- 1..2 do
+        owners =
+          for _ <- 1..8 do
+            {url, peer} = peer(@surface, barrier: true)
+
+            agent =
+              ExAgent.new(
+                model: model(url, total_timeout: 1_000),
+                observability: OpenTelemetry.new()
+              )
+
+            {owner, monitor} =
+              spawn_monitor(fn ->
+                case @surface do
+                  :sync -> ExAgent.run(agent, "maintenance cancelled")
+                  :stream -> Enum.to_list(ExAgent.run_stream(agent, "maintenance cancelled"))
+                end
+              end)
+
+            on_exit(fn -> if Process.alive?(owner), do: Process.exit(owner, :kill) end)
+            {owner, monitor, peer}
+          end
+
+        for {_, _, peer} <- owners do
+          peer_pid = peer.pid
+          assert_receive {:fixture_waiting, ^peer_pid}, 5_000
+        end
+
+        request_ids =
+          for _ <- owners do
+            assert_receive {:req_journal, :start, %{request_id: id}}
+            id
+          end
+
+        assert length(Enum.uniq(request_ids)) == 8
+        ready_at = System.monotonic_time(:millisecond)
+
+        for {owner, monitor, peer} <- owners do
+          Process.exit(owner, :kill)
+          assert_receive {:DOWN, ^monitor, :process, ^owner, :killed}
+          Task.shutdown(peer, :brutal_kill)
+        end
+
+        spans = collect(16)
+        assert length(Enum.filter(spans, &(&1.attrs["exagent.operation"] == "model"))) == 8
+        assert length(Enum.filter(spans, &(&1.attrs["exagent.operation"] == "run"))) == 8
+        # Stream shutdown can emit an exception and remove tracking itself.
+        # Wait for a completed pruning pass after every old entry has expired;
+        # the public zero-TTL check must then find nothing left to remove.
+        await_maintenance(fn _ -> System.monotonic_time(:millisecond) >= ready_at + 2_000 end)
+        after_expiry = Maintenance.stats().passes
+        stats = await_maintenance(&(&1.passes > after_expiry))
+        assert Integration.prune_stale_spans(0) == 0
+        assert stats.pruned_entries in 0..(wave * 8)
+        if @surface == :sync, do: assert(stats.pruned_entries == wave * 8)
+        assert stats.status == :active and Process.alive?(worker)
+
+        # This request's 1000ms total deadline is shorter than the cleanup TTL.
+        {url, peer} = peer(@surface, barrier: true)
+
+        agent =
+          ExAgent.new(model: model(url, total_timeout: 1_000), observability: OpenTelemetry.new())
+
+        run =
+          Task.async(fn ->
+            case @surface do
+              :sync -> ExAgent.run(agent, "maintenance live")
+              :stream -> Enum.to_list(ExAgent.run_stream(agent, "maintenance live"))
+            end
+          end)
+
+        peer_pid = peer.pid
+        assert_receive {:fixture_waiting, ^peer_pid}, 5_000
+        assert_receive {:req_journal, :start, %{request_id: healthy_id}}
+        after_ticks = await_maintenance(&(&1.passes >= stats.passes + 2))
+        assert after_ticks.pruned_entries == stats.pruned_entries
+        refute_receive {:req_journal, :stop, %{request_id: ^healthy_id}}, 0
+        refute_receive {:req_journal, :exception, %{request_id: ^healthy_id}}, 0
+        send(peer.pid, :reply)
+
+        case @surface do
+          :sync ->
+            assert {:ok, %{output: "TRACE_OK"}} = Task.await(run, 5_000)
+
+          :stream ->
+            assert [{:result, %{output: "TRACE_OK"}}] =
+                     Enum.reject(Task.await(run, 5_000), fn {kind, _} -> kind == :delta end)
+        end
+
+        assert :ok == Task.await(peer, 5_000)
+        assert_receive {:req_journal, :stop, %{request_id: ^healthy_id}}
+        completed = collect(2)
+        [model_span] = Enum.filter(completed, &(&1.attrs["exagent.operation"] == "model"))
+        assert model_span.attrs["exagent.req_llm.request_id"] == healthy_id
+        assert model_span.attrs["gen_ai.usage.output_tokens"] == 2
+        assert Integration.prune_stale_spans(0) == 0
+        refute_receive {:bridge_span, _}, 0
+      end
+
+      assert Maintenance.stats().pruned_entries in 0..16
+      assert :ok == stop_supervised(Maintenance)
+      refute Process.alive?(worker)
+      assert {:error, :already_exists} == Integration.attach()
+    end
+  end
+
+  test "maintenance prunes only integrated tracking and stopping it leaves the bridge intact" do
+    assert :ok == Integration.attach()
+    assert :ok == ReqLLM.OpenTelemetry.attach(@handler, adapter: ForeignAdapter)
+    start_supervised!({Maintenance, ttl_ms: 30, interval_ms: 10})
+    operation = OpenTelemetry.start(OpenTelemetry.new(), :model, %{})
+
+    OpenTelemetry.within(operation, fn ->
+      :telemetry.execute([:req_llm, :request, :start], %{}, %{request_id: "maintenance-scope"})
+    end)
+
+    assert await_maintenance(&(&1.pruned_entries == 1)).status == :active
+    assert ReqLLM.OpenTelemetry.prune_stale_spans(@handler, 0) == 1
+    assert Integration.prune_stale_spans(0) == 0
+    refute_receive {:bridge_span, _}, 0
+    assert :ok == stop_supervised(Maintenance)
+
+    OpenTelemetry.within(operation, fn ->
+      :telemetry.execute([:req_llm, :request, :start], %{}, %{request_id: "maintenance-stopped"})
+    end)
+
+    assert Integration.prune_stale_spans(0) == 1
+    assert ReqLLM.OpenTelemetry.prune_stale_spans(@handler, 0) == 1
+    OpenTelemetry.finish(operation, {:ok, %{}})
+    assert length(collect(1)) == 1
+    refute_receive {:bridge_span, _}, 0
   end
 
   test "attach refuses a foreign bridge without detaching it" do
@@ -484,7 +645,7 @@ defmodule ExAgent.Observability.ReqLLMBridgeTest do
     )
   end
 
-  defp model(url) do
+  defp model(url, opts \\ []) do
     ExAgent.Models.ReqLLM.new(
       model: %{
         provider: :openai,
@@ -495,8 +656,29 @@ defmodule ExAgent.Observability.ReqLLMBridgeTest do
       api_key: "SYNTHETIC_BRIDGE_KEY",
       base_url: url,
       tool_profile: :chat_tools_v1,
-      total_timeout: 5_000
+      total_timeout: Keyword.get(opts, :total_timeout, 5_000)
     )
+  end
+
+  defp await_maintenance(predicate) do
+    deadline = System.monotonic_time(:millisecond) + 4_000
+    await_maintenance(predicate, deadline)
+  end
+
+  defp await_maintenance(predicate, deadline) do
+    stats = Maintenance.stats()
+
+    cond do
+      is_map(stats) and predicate.(stats) ->
+        stats
+
+      System.monotonic_time(:millisecond) >= deadline ->
+        flunk("maintenance condition timed out")
+
+      true ->
+        Process.sleep(5)
+        await_maintenance(predicate, deadline)
+    end
   end
 
   defp collect(0), do: []

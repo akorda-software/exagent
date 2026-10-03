@@ -3,17 +3,18 @@
 Implementación autorizada en /home/kukapu/dev/projects/exAgent.
 Rama: `codex/v2-candidate-029`, [PR1 borrador](https://github.com/akorda-software/exagent/pull/1).
 El usuario autorizó commit/push/PR; sin bump, tag, merge ni publicación en Hex.
-ReqLLM oficial stock, R1.2 aceptado, C7 incluido, guards intactos.
-Una revisión máxima por objetivo; sin re-review ni reruns rutinarios del padre.
+ReqLLM stock, R1.2/C7 aceptados, guards intactos; una revisión máxima, sin reruns rutinarios.
 
-## Límites conocidos — tratamiento verificado
+## Operación prolongada — pulido verificado
 
-NativeReceipt08 required header pasa por modelo; nullable reversal reproduce null.
-5requests/USD0.125reserva; smoke Luna53/DeepSeek57; precommit20/0/27excl.
-Coverage27/27por modelo reutiliza26+08nuevo; rojos previos conservados.
-Warnings categorizados/upstream: TOMLfix sin release, gproc1.3 bloqueado por grpcbox.
-Strictdeps rojo, sin waiver/patch/override. [KNOWN-LIMITS](KNOWN-LIMITS.md).
-La alineación anterior conserva18doccases/146focales en [RELEASE-READINESS](RELEASE-READINESS.md).
+Maintenance opt-in supervisado; TTL mayor que duración de todos los requests.
+94casos por runtime;32 owner deaths/4sanos loopback, scope/restart/stop preservados.
+FULL1202208/0/28; bin/check9fases0; oráculo4/4 separado. WIP Dragonex excluido.
+Budget exporter0/1 acota reinicios; HTTP0 crea1perfil, socket upstream sigue vivo.
+Métricas stock/experimental0.6 incompatibles; no nuevo paid/cloud/SQL/R9/Hex.
+[OBSERVABILITY-LIFECYCLE](OBSERVABILITY-LIFECYCLE.md); consumers32PASS/strictdeps rojo.
+Native08/coverage27ambos y alineación previos: [KNOWN-LIMITS](KNOWN-LIMITS.md),
+[RELEASE-READINESS](RELEASE-READINESS.md). Smokefases53/57, precommit20/0/27excl.
 
 ## Ownership de observabilidad — combinación implementada y verificada
 

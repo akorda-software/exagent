@@ -36,7 +36,8 @@ incluidas tres regresiones del contrato: rechazo del fallo observado, schema
 requerido y valores completos aceptados sin completar datos ausentes.
 Los52 inputs ejecutables/config/lock del WIP coinciden con la copia probada;
 los95 inputs de biblioteca coincidían en el freeze previo a añadir esta página
-a ExDoc. El cambio de ExAgent es documental.
+a ExDoc. Esa corrección08 no cambió el runtime; las mejoras de operación
+posteriores se describen abajo con sus propias pruebas.
 
 La cobertura conjunta pasa a **27/27 por modelo** reutilizando los26 casos
 inalterados y cualificando sólo el08 nuevo. No es una nueva ola completa27/27.
@@ -50,6 +51,71 @@ Para una integración, declarar en el changeset los datos que realmente exige
 la aplicación. Mantener la validación semántica independiente: un string presente
 todavía puede contener un comercio equivocado. Ver [Tools and output](../guides/tools-and-output.md)
 y [E2E del consumidor](real-consumer-e2e.md).
+
+## Tracking abandonado ReqLLM: mantenimiento supervisado
+
+Ahora la aplicación puede añadir `ExAgent.Observability.ReqLLM.Maintenance` a
+su supervisor con `ttl_ms:` e `interval_ms:` explícitos. Ambos son enteros
+positivos; el intervalo admite1..4_294_967_295ms. El child usa únicamente el prune
+público del bridge integrado y queda dormido cuando éste no está instalado.
+No inicia SDK ni handlers, no termina spans y no retira entradas de otro bridge.
+Parar o reiniciar el child conserva la configuración de tracing del host.
+
+**Precondición:** TTL mayor que la duración máxima de todas las peticiones
+ReqLLM permitidas, incluidas standalone/stream/retries. Si alguna puede durar
+indefinidamente, ningún TTL finito cumple: acotar esas peticiones antes de activar
+el mantenimiento. La edad no demuestra muerte; un TTL corto puede eliminar
+tracking activo. No es un límite duro de RAM
+ni de la tabla upstream. `stats/0` devuelve ticks, pases y entradas retiradas,
+sin IDs/contenido/spans; sus contadores se reinician con el proceso.
+
+Las pruebas hacen32 cancelaciones por owner kill y4 requests sanos sobre
+HTTP/SSE local, en dos oleadas por superficie. Tras una pasada posterior al TTL,
+no queda tracking abandonado; las peticiones activas más cortas que el TTL
+conservan su ID/terminal y una única generación. Streaming puede retirar entradas
+por su propio evento de excepción: no atribuir todas las bajas al mantenimiento.
+También se comprueban configuración, supervisión, timer obsoleto, otro handler y
+parada sin detach. Ver [guía](../guides/observability.md).
+
+## Exporter HTTP: reinicios acotados, limpieza upstream aún abierta
+
+`BoundedProcessor` añade `max_exporter_restarts`: entero no negativo, o infinity
+para conservar el default anterior. Al agotar el presupuesto de reinicios
+por instancia, desactiva admisión, descarta spans pendientes y permanece
+unavailable. No reejecuta batches ni efectos. Un callback de error terminado no
+recrea worker; los nuevos contadores exporter_restarts/restart_limit_reached son
+numéricos y acumulativos sólo en esa instancia. Reiniciar SDK/app/VM lo resetea.
+
+El control nativo con presupuesto0 y exporter1.11 crea **un solo perfil**.
+Un POST retenido agota su deadline y tres admisiones posteriores se descartan,
+sin nuevo worker/perfil/POST. El socket original sigue vivo: limitar recreaciones
+no lo libera, ni elimina átomos existentes. Sólo el probe, dentro de su VM
+exclusiva, cancela su petición y cierra el perfil mediante APIs públicas OTP.
+Los controles ilimitados anteriores conservan su resultado negativo.
+
+La consulta Hex confirma1.11; su shutdown HTTP no libera el perfil. Las fuentes
+oficiales main inspeccionadas también conservan perfil derivado de PID y shutdown
+sin limpieza HTTP. La solución completa requiere un lifecycle upstream o una
+frontera de exporter VM propia cualificada; no introducir inspección privada de
+perfiles ni cerrar inets compartido desde la biblioteca.
+
+## Métricas: incompatibilidad concreta de las APIs opcionales
+
+El bridge stock ReqLLM1.26 requiere `otel_meter_provider.get_meter/3` y
+`otel_histogram.record/4`. El [API experimental0.6 publicado](https://hex.pm/packages/opentelemetry_api_experimental/0.6.0)
+exporta get_meter/1–2 y record/5; create_histogram/3 sí coincide. Añadir solamente
+ese paquete no satisface el detector de capacidades stock. El API estable1.5
+del lock no incluye esas APIs de métricas.
+
+Se verifican fuentes oficiales de ambos paquetes experimentales0.6 y checksums
+de sus TAR; sólo inspección, sin instalarlos o cambiar el lock. La aceptación de
+trazas no cubre histogramas/exportación de métricas. Un adapter público compatible
+o una corrección upstream necesita su propia aceptación de API, unidades,
+atributos/cardinalidad y reader/exporter. No se añade un shim ni se declara verde.
+
+Observabilidad integrada:94casos pasan en ambos runtimes1.18/28 y1.20/29,
+incluidos los nuevos controles de mantenimiento y presupuesto. Los recibos cloud,
+SQL, paid y FULL anteriores mantienen sus identidades y perfiles.
 
 ## Avisos estrictos de dependencias: compatibles, pendientes upstream
 

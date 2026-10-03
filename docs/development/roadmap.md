@@ -19,6 +19,20 @@ conservan contexto fechado. Su lectura como contexto no amplía un encargo.
 y [flujo simplificado](execution-flow.md). Los siguientes hitos fechados conservan
 evidencia, no reactivan investigaciones, revisiones ni probes del padre ya cerrados.
 
+**Operación prolongada,2026-10-03 — pulido solicitado:** Maintenance opt-in con
+TTL/cadencia explícitos, stats numéricas y scope del bridge; no SDK/attach ocultos.
+32 owner deaths HTTP/SSE y4 sanos verifican cierre/tracking sin borrar peticiones
+que duran menos que TTL. Presupuesto de reinicios0/1, muerte idle y errores normales
+probados. Control OTLP con presupuesto0 limita perfiles a1 y conserva socket vivo;
+no fix de cleanup upstream. Copia aislada94casos por runtime1.18/28 y1.20/29;
+FULL1.20:2208/0/28,1995.2s; bin/check9fases0 en2035.684s. Cuatro consumidores
+32contratos pasan. Oráculo actualizado a8casos tras añadir el child; regresión4/4
+separada del FULL, siete-casos previo y strictdeps rojo conservados.
+Stock ReqLLM metrics espera get_meter/3 y record/4; experimental0.6 publica1–2/5,
+no aceptación de métricas. Runtime aditivo: child y opción/default infinity/stats;
+snapshots/guards/lock intactos, sin paid/cloud/SQL/R9 nuevos.
+[Guía](known-limits.md) y [recibo](https://github.com/akorda-software/exagent/blob/codex/v2-candidate-029/docs/orchestration/2026-10-01-v2-codex/OBSERVABILITY-LIFECYCLE.md).
+
 **Límites conocidos,2026-10-03 — tratamiento solicitado:** NativeReceipt expresa
 merchant/currency required; demo parcial intacta, mismo prompt/oráculo y retries0.
 Final08 pasa por modelo; reversal nullable DeepSeek reproduce null. Cinco controles

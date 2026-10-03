@@ -2,7 +2,7 @@
 # Also runnable after compilation:
 # EXAGENT_OFFLINE=1 elixir --erl '+S 2:2' -pa '_build/test/lib/*/ebin' \
 #   test/support/native_otlp_probe.exs wire
-# Scenarios: wire | generic_endpoint | failures | lifecycle
+# Scenarios: wire | generic_endpoint | failures | lifecycle | restart_budget
 
 defmodule ExAgent.Test.NativeOTLPProbe do
   import ExUnit.Assertions
@@ -273,6 +273,54 @@ defmodule ExAgent.Test.NativeOTLPProbe do
     report(%{phase: "lifecycle_final", baseline: bounded_baseline, resources: resources(port)})
     Receiver.stop(receiver)
     stop_profiles([{unrelated, :native_otlp_unrelated}])
+  end
+
+  def restart_budget do
+    {:ok, receiver} = Receiver.start_link()
+    port = Receiver.port(receiver)
+    configure_exporter("http://127.0.0.1:#{port}", false)
+    baseline_profiles = profiles()
+    config = Map.put(processor_config(250), :max_exporter_restarts, 0)
+    {:ok, processor, handle} = BoundedProcessor.start_link(config)
+    wait_stats(&(&1.status == :ready))
+    original_worker = :sys.get_state(processor).worker
+    monitor = Process.monitor(original_worker)
+    assert length(profiles() -- baseline_profiles) == 1
+    assert BoundedProcessor.on_end(native_span(), handle) == true
+    assert :ok == BoundedProcessor.force_flush(handle)
+    {handler, _request} = request(receiver)
+    assert_receive {:DOWN, ^monitor, :process, ^original_worker, :killed}, 1500
+    stats = wait_stats(&(&1.status == :unavailable))
+    assert stats.export_timed_out == 1 and stats.exporter_restarts == 0
+    assert stats.restart_limit_reached == 1 and stats.retained == 0
+    assert Process.alive?(processor)
+
+    # Observe several scheduled opportunities without automatic reinitialization.
+    for _ <- 1..3 do
+      assert BoundedProcessor.on_end(native_span(), handle) == :dropped
+      assert :ok == BoundedProcessor.force_flush(handle)
+      :sys.get_state(processor)
+      assert length(profiles() -- baseline_profiles) == 1
+    end
+
+    final = BoundedProcessor.stats(handle)
+    assert final.dropped_unavailable == 3
+    assert final.exporter_restarts == 0 and final.restart_limit_reached == 1
+    refute_receive {:native_otlp_request, _, _, _}, 40
+    assert length(client_sockets(port)) == 1
+    refute_receive {:native_otlp_peer_closed, ^handler}, 0
+    assert {:ok, _} = BoundedProcessor.shutdown(handle)
+
+    # The circuit stops recreation, while the upstream socket still survives.
+    # Cancel only the resources proved exclusive to this disposable fixture VM.
+    assert length(profiles() -- baseline_profiles) == 1
+    cancel_requests(profiles() -- baseline_profiles)
+    assert_receive {:native_otlp_peer_closed, ^handler}, 1000
+    stop_profiles(profiles() -- baseline_profiles)
+    eventually(fn -> client_sockets(port) == [] end)
+    assert MapSet.new(profiles()) == MapSet.new(baseline_profiles)
+    report(%{phase: "native_restart_budget", profiles_created: 1, stats: final})
+    Receiver.stop(receiver)
   end
 
   defp direct_native_export(receiver) do
@@ -671,6 +719,7 @@ case scenario do
   "generic_endpoint" -> ExAgent.Test.NativeOTLPProbe.wire(true)
   "failures" -> ExAgent.Test.NativeOTLPProbe.failures()
   "lifecycle" -> ExAgent.Test.NativeOTLPProbe.lifecycle()
+  "restart_budget" -> ExAgent.Test.NativeOTLPProbe.restart_budget()
 end
 
 IO.puts("NATIVE_OTLP_OK #{scenario}")

@@ -23,6 +23,7 @@ defmodule ExAgent.TestingAuditHarness do
   @saturation ~w(runs_finished_while_export_held finite_retention finite_batch loss_observed complete_local_accounting accepted_callbacks_completed observer_saw_bound cleanup)
   @package_common [
     "test consumer runtime contains only requested optional applications",
+    "test optional ReqLLM maintenance runs without attaching handlers or starting optional apps",
     "test one-shot, typed tool, lazy stream and ETS checkpoint restore from package",
     "test typed invalid input has zero effects and is not coerced",
     "test Ecto remains the final structured-output authority",
@@ -78,12 +79,12 @@ defmodule ExAgent.TestingAuditHarness do
   def package_result(%{stats: stats, tests: tests}, mode) when is_map(stats) and is_list(tests) do
     check(
       Map.take(stats, [:total, :failures, :excluded, :skipped]) ==
-        %{total: 7, failures: 0, excluded: 0, skipped: 0},
+        %{total: 8, failures: 0, excluded: 0, skipped: 0},
       "consumer ExUnit totals"
     ) ++
       check(
         Enum.sort(Enum.map(tests, &Map.get(&1, :name))) == package_names(mode),
-        "consumer seven-name manifest"
+        "consumer eight-name manifest"
       ) ++
       check(
         Enum.sort(Enum.map(tests, &Map.take(&1, [:name, :module, :state]))) ==

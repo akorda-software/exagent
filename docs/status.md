@@ -8,15 +8,28 @@ bump, tag, merge to `main` or Hex publication has been performed.
 
 | Boundary | Evidence | Scope |
 |---|---|---|
-| Offline runtime | Latest 1.20 suite: 2,198 passes / zero failures / 28 exclusions. Earlier dependency-baseline FULL: 2,177/0/28 on both runtimes. Latest 146 integrated cases pass on both. | The new 1.18 focal is not a new complete 1.18 run. Preserve the previous ReqLLM-only failure below. TestModel and fixtures, not real-provider compatibility. |
+| Offline runtime | Lifecycle FULL1.20:2,208 passes /0 failures /28 exclusions; all nine local phases pass.94 integrated observability cases pass on each runtime, including32 owner deaths and4 healthy loopback requests. | The package-oracle regression passes separately,4/4, after the FULL freeze. No new complete1.18 run. Prior2,198 and dependency-baseline2,177 receipts retain their identities. Preserve the previous ReqLLM-only failure below. TestModel/loopback fixtures, not real-provider compatibility. |
 | Runtime targets | Elixir 1.18 / OTP 28 and Elixir 1.20 / OTP 29; strict test compile passes on both. | Tested combinations, not every patch release or dependency graph. |
 | Real model | Updated dependencies: 12 scenarios pass initially; length sync/stream pass after correcting the stimulus. All 14 scenarios covered, 18 admissions / 3 effects. | Original refusal/stop failure retained; not a single new 14/14 wave. GPT-4o-mini/OpenRouter Chat tools profile only. |
 | Real consumer | October 3: 27 scenarios accepted per model, reusing 26 unchanged cases plus the newly qualified required-header native case08. Consumer precommit: 20 offline passes /27 opt-in exclusions. Complex workflows retain their 4/4 receipts,46 requests /15 effects per model. | OpenRouter Chat, reasoning disabled. The old nullable extraction still fails. Smoke phases now Luna53/DeepSeek57; complex phases retain70/53. Invoice unobserved. No new complete27-case wave or universal provider qualification. |
 | Durable recovery | October 3 PostgreSQL 17.4: 14 phases, including lost COMMIT ACK, competing resumers, fresh-VM resume, explicit recovery and backup/restore; cleanup confirmed. | Declared single-database/host profile, not universal HA or external exactly-once effects. |
 | Langfuse and Opik | Each: prior native/API 33/33 observations, 667 attributes, 12 model usages; UI 12 cases / 248 attributes. Exporter 1.11 booleans newly verified locally. | Same finite A10 criteria. No fresh cloud/API/UI wave. Content off; synthetic TestModel tokens. |
-| Package consumers | Dependency baseline: eight clean graphs/two runtimes, 56 contracts. After the bridge change: four clean 1.20 graphs, 28 contracts and 23 commands pass. | Each identified TAR retains its own receipt. Functional acceptance; upstream strict warnings remain red. |
+| Package consumers | Latest lifecycle staging TAR: four clean1.20 graphs,32 contracts, including maintenance without implicit SDK/handlers. Earlier bridge28 and dependency-baseline56 retain their receipts. | New eight-case manifest validates actual ExUnit records after correcting the stale seven-case checker; initial rejection retained. Functional acceptance; upstream strict warnings remain red. |
 | Integrations | Official MCP SDK 2.2.0: five profiles; LiveViewTest/Oban SQL: six cases plus crash/recovery. | Qualified recipes, not every deployment combination. |
 | Load and cleanup | Finite TestModel load/soak/saturation and owned-resource cleanup. | No LLM latency SLO, cloud availability or upstream predecode RAM guarantee. |
+
+The subsequent observability lifecycle polish adds an optional application-supervised
+ReqLLM maintenance child and a per-instance exporter worker restart budget.
+Its complete1.20 suite takes1,995.2 seconds; the nine-phase routine takes2,035.684
+seconds. The final documentation/tooling correction preserves all92 library
+sources from that freeze; parallel Dragonex WIP is outside this acceptance.
+TTL must exceed live request durations. A finite budget closes admission after
+exhaustion; its default remains infinity and restarting the processor resets it.
+Native HTTP verifies one-profile recreation containment with budget0 while
+retaining the surviving-socket limit. Stock ReqLLM metric APIs also differ from
+published experimental0.6 arities; no metric-export qualification follows.
+See [known limits](development/known-limits.md) and the
+[lifecycle receipt](https://github.com/akorda-software/exagent/blob/codex/v2-candidate-029/docs/orchestration/2026-10-01-v2-codex/OBSERVABILITY-LIFECYCLE.md).
 
 The critical review's one P1/four P2 findings were corrected and verified.
 The single final R9 integration/distribution review is closed. No known

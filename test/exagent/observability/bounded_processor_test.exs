@@ -215,6 +215,73 @@ defmodule ExAgent.Observability.BoundedProcessorTest do
     assert Processor.stats(config).retained == 0
   end
 
+  for limit <- [0, 1] do
+    @limit limit
+    test "restart budget #{@limit} closes admission after worker timeouts without replay or further init" do
+      {manager, config} =
+        start_processor(
+          max_queue_size: 2,
+          max_export_batch_size: 1,
+          exporting_timeout_ms: 100,
+          max_exporter_restarts: @limit
+        )
+
+      for attempt <- 0..@limit do
+        assert Processor.on_end(make_span(attempt * 2 + 1), config) == true
+        assert Processor.on_end(make_span(attempt * 2 + 2), config) == true
+        assert :ok == Processor.force_flush(config)
+        assert_receive {:bounded_export, worker, _, _, [_]}, 1000
+        monitor = Process.monitor(worker)
+
+        if attempt < @limit do
+          assert_receive {:DOWN, ^monitor, :process, ^worker, :killed}, 1000
+          assert_receive {:bounded_init, replacement}, 1000
+          assert replacement != worker
+          assert_receive {:bounded_export, ^replacement, _, _, [_]}, 1000
+          send(replacement, {:bounded_reply, :ok})
+          assert eventually(fn -> Processor.stats(config).exported == attempt + 1 end)
+        else
+          assert_receive {:DOWN, ^monitor, :process, ^worker, :killed}, 1000
+          assert eventually(fn -> Processor.stats(config).status == :unavailable end)
+        end
+      end
+
+      assert Process.alive?(manager)
+      stats = Processor.stats(config)
+      assert stats.exporter_restarts == @limit
+      assert stats.restart_limit_reached == 1
+      assert stats.batches_timed_out == @limit + 1
+      assert stats.exported == @limit and stats.export_timed_out == @limit + 1
+      assert stats.dropped_unavailable == 1
+      assert stats.retained == 0 and stats.in_flight == 0
+      assert Processor.on_end(make_span(99), config) == :dropped
+      assert Processor.stats(config).dropped_unavailable == 2
+      assert :ok == Processor.force_flush(config)
+      refute_receive {:bounded_init, _}, 120
+      refute_receive {:bounded_export, _, _, _, _}, 0
+      assert {:ok, final} = Processor.shutdown(config)
+      assert final.restart_limit_reached == 1
+    end
+  end
+
+  test "idle worker death uses the same restart budget and completed error callbacks do not" do
+    {manager, config} = start_processor(max_exporter_restarts: 0)
+    assert Processor.on_end(make_span(1), config) == true
+    assert :ok == Processor.force_flush(config)
+    assert_receive {:bounded_export, worker, _, _, [_]}, 1000
+    send(worker, {:bounded_reply, :failed_retryable})
+    assert eventually(fn -> Processor.stats(config).export_failed == 1 end)
+    assert Processor.stats(config).exporter_restarts == 0
+    assert Processor.stats(config).status == :ready
+    monitor = Process.monitor(worker)
+    Process.exit(worker, :kill)
+    assert_receive {:DOWN, ^monitor, :process, ^worker, :killed}, 1000
+    assert eventually(fn -> Processor.stats(config).status == :unavailable end)
+    assert Processor.stats(config).restart_limit_reached == 1
+    assert Process.alive?(manager)
+    refute_receive {:bounded_init, _}, 100
+  end
+
   test "initialization failures fail closed without retrying indefinitely or logging secrets" do
     for mode <- [:raise, :block] do
       config =
@@ -548,6 +615,9 @@ defmodule ExAgent.Observability.BoundedProcessorTest do
           %{max_export_batch_size: 100},
           %{exporting_timeout_ms: :infinity},
           %{shutdown_timeout_ms: 5000},
+          %{max_exporter_restarts: -1},
+          %{max_exporter_restarts: 1.0},
+          %{max_exporter_restarts: :unbounded},
           %{max_queu_size: 10}
         ] do
       assert Processor.start_link(Map.merge(options(), overrides)) == {:error, :invalid_config}

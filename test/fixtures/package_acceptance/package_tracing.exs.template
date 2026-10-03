@@ -104,7 +104,8 @@ defmodule PackageAcceptance.Tracing do
            max_queue_size: 128,
            max_export_batch_size: 128,
            scheduled_delay_ms: 60_000,
-           exporting_timeout_ms: 5000
+           exporting_timeout_ms: 5000,
+           max_exporter_restarts: 0
          }}
       ]
     }

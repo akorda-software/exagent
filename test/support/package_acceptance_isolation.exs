@@ -197,7 +197,7 @@ defmodule PackageAcceptance.Isolation do
           name == "smoke" ->
             # Deliberately synthetic diagnostic replay, not executed contracts.
             data = %{tests: ExAgent.TestingAuditHarness.package_manifest("none")}
-            stats = %{total: 7, failures: 0, excluded: 0, skipped: 0}
+            stats = %{total: 8, failures: 0, excluded: 0, skipped: 0}
             ~s|File.write!("runtime-results.etf", | <> inspect(:erlang.term_to_binary(data), limit: :infinity) <> "); " <>
               ~s|File.write!("runtime-stats.etf", | <> inspect(:erlang.term_to_binary(stats), limit: :infinity) <> "); "
           true -> ""

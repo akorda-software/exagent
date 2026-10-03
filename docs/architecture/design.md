@@ -13,6 +13,34 @@
 > Conserva sus reproducciones y guards como estado runtime, no como aceptación
 > del nuevo contrato. C7 y los contratos de autoridad/recuperación permanecen.
 
+## Operación prolongada de observabilidad (2026-10-03)
+
+**Problema demostrado:** owner death puede dejar tracking ReqLLM hasta prune;
+timeouts del exporter recrean workers y perfiles HTTP que upstream no libera.
+La limpieza manual es fácil de omitir en una app, y la cola finita no acota el
+número de reinicializaciones del exporter durante la vida de un processor.
+
+**Decisión/beneficio:** Maintenance es un child opt-in supervisado que llama al
+prune público sólo para el bridge integrado, con TTL/cadencia explícitos y stats
+sin datos de peticiones. BoundedProcessor añade `max_exporter_restarts` y contadores:
+al agotar el presupuesto deja de admitir, descarta pendientes y permanece
+unavailable. Un callback de error que termina no consume ese presupuesto.
+
+**Alternativas/impacto/migración:** un scheduler propio sigue siendo válido;
+no instalar mantenimiento oculto ni inferir que una petición antigua está muerta.
+La aplicación debe fijar TTL mayor que todas sus peticiones, incluyendo standalone
+y retries. No se inspeccionan perfiles privados, se parchea ReqLLM/exporter ni se
+cierra inets compartido. El default de reinicios sigue infinity; usar un entero
+para acotar recreaciones por instancia, sabiendo que un restart SDK/VM lo resetea.
+No se añaden transporte, cambios de snapshots o semántica de efectos. Los nuevos
+campos de stats/telemetry del processor son numéricos y aditivos.
+
+**Verificación:** lifecycle/scope del child,32 owner deaths HTTP/SSE y4 requests
+activos; presupuestos0/1 y muerte idle; control OTLP real con un perfil y socket
+superviviente explícito. Observabilidad94casos pasa en1.18/28 y1.20/29.
+La incompatibilidad de métricas ReqLLM/experimental0.6 y la limpieza HTTP upstream
+siguen separadas. Ver [límites conocidos](../development/known-limits.md).
+
 ## Contrato de extracción nativa del consumidor (2026-10-03)
 
 **Problema demostrado:** el caso08 DeepSeek devolvía comercio/moneda null, válidos
