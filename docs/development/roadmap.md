@@ -19,6 +19,15 @@ conservan contexto fechado. Su lectura como contexto no amplía un encargo.
 y [flujo simplificado](execution-flow.md). Los siguientes hitos fechados conservan
 evidencia, no reactivan investigaciones, revisiones ni probes del padre ya cerrados.
 
+**Alineación final,2026-10-03 — revisión del owner solicitada:** corregidas
+contradicciones de TestModel/script/type, contadores/identidad runtime, enlaces
+API a1.x y pendientes obsoletos C7/SQL/Langfuse/Opik. Ejemplo de agotamiento prueba
+un efecto confirmado y partial fallido;18casos documentales pasan por runtime y
+146críticos nuevos pasan. AST ejecutable y seis chunks runtime TestModel idénticos;
+no nueva suite FULL ni aceptación externa por este delta. Ver
+[recibo](https://github.com/akorda-software/exagent/blob/codex/v2-candidate-029/docs/orchestration/2026-10-01-v2-codex/RELEASE-READINESS.md).
+R9 permanece cerrada; strictdeps y DeepSeek08 conservan sus límites. Sin bump/Hex.
+
 **Ownership OTel,2026-10-03 — combinación autorizada e implementada:** tras la
 evaluación original37fed28 el usuario elige ExAgent productor y autoriza el reparto.
 Bridge host opt-in por Adapter público stock: enriquece el span Model con IDs/
@@ -189,7 +198,7 @@ están en `docs/archive/2026-09-release-{roadmap,scope}.md`.
 | R0 | Checkout, baseline y ejecución recuperables | Activación del agente | Verificada2026-09-21 |
 | R1 | ReqLLM stock cualificado y transporte duplicado retirado | R0 | Mínimo chat_tools_v1 aceptado offline y G2 real14/14 con GPT-4o-mini vía OpenRouter; otras capacidades siguen según su matriz |
 | R2 | Contratos del núcleo y extensiones cerrados | R1 | Aceptada offline2026-09-26; base y R2.3 con review independiente |
-| R3 | Runtime, contexto y coordinación operables | R2 | Aceptada offline2026-09-26 tras revalidación independiente R3.4; gates externos abiertos |
+| R3 | Runtime, contexto y coordinación operables | R2 | Aceptada offline2026-09-26 tras revalidación independiente R3.4; perfiles externos posteriores de G3/G4/frameworks aceptados según R4/R7/R8 y recibos fechados |
 | R4 | Persistencia y primitivas de continuación atómicas | R2; integración R3 | Base offline y G3 real14fases sobre candidata019: restart, ACK perdido, dos resumers, backup/restore y cleanup observados |
 | R5 | Aprobación persistida y recuperación de ejecución | R3 + R4 | C7 ordinario/composición/MCP integrado; G3/FlowA8 y Oban SQL prueban pausa/resume y recuperación explícita sin replay en sus perfiles |
 | R6 | Composición multi-agente coherente | R3; R4/R5 para pausa durable | Implementado y revisado: secuencia9/delegación10/Flow11. Final00973+11; recetas públicas PASS y A8 SQL entreVMs sobre019. FULL2157sin fallos; guards generales no demostrados siguen cerrados |

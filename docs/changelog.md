@@ -6,6 +6,18 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Documentation and test-contract alignment — 2026-10-03
+
+- Correct TestModel's exhausted-script documentation and the two-argument
+  callback type: it receives a message list, and a nonempty exhausted script
+  fails the request. Add an executed guide example that proves one confirmed
+  tool effect survives in the failed partial result; no runtime behavior changes.
+- Align current testing counts and runtime identities, C7/SQL/backend acceptance
+  labels, MCP HTTP availability and integrated tracing guidance. Resolve README
+  API references against the generated candidate instead of published 1.x pages.
+  Explain which checks establish offline, package or real-profile acceptance;
+  preserve failed diagnostics, historical receipts and unqualified profiles.
+
 ### Combined ReqLLM instrumentation — 2026-10-03
 
 - Add the host opt-in `ExAgent.Observability.ReqLLM` bridge using stock ReqLLM's

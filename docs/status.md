@@ -8,19 +8,28 @@ bump, tag, merge to `main` or Hex publication has been performed.
 
 | Boundary | Evidence | Scope |
 |---|---|---|
-| Offline runtime | Updated dependencies, October 3: both complete suites have 2,177 passes / zero failures / 28 exclusions. | Preserve the previous ReqLLM-only 1.18 failure below. TestModel and fixtures, not real-provider compatibility. |
+| Offline runtime | Latest 1.20 suite: 2,198 passes / zero failures / 28 exclusions. Earlier dependency-baseline FULL: 2,177/0/28 on both runtimes. Latest 146 integrated cases pass on both. | The new 1.18 focal is not a new complete 1.18 run. Preserve the previous ReqLLM-only failure below. TestModel and fixtures, not real-provider compatibility. |
 | Runtime targets | Elixir 1.18 / OTP 28 and Elixir 1.20 / OTP 29; strict test compile passes on both. | Tested combinations, not every patch release or dependency graph. |
 | Real model | Updated dependencies: 12 scenarios pass initially; length sync/stream pass after correcting the stimulus. All 14 scenarios covered, 18 admissions / 3 effects. | Original refusal/stop failure retained; not a single new 14/14 wave. GPT-4o-mini/OpenRouter Chat tools profile only. |
 | Real consumer | October 3: 23 smoke scenarios plus four combined SQL/application workflows. Combined receipts accept Luna 27/27 and DeepSeek 26/27; native receipt extraction remains red. New complex scenarios pass 4/4 per model, with 46 requests / 15 synthetic effects each. Consumer precommit: 17 offline passes / 27 opt-in exclusions. | OpenRouter Chat, reasoning disabled. Complex ledgers: 70/53 admissions including causal controls, USD1.75/1.325 reserved; prior smoke ledgers remain 51/54. Invoice unobserved. Marker failures retained; not a single new 27-case wave or universal provider qualification. |
 | Durable recovery | October 3 PostgreSQL 17.4: 14 phases, including lost COMMIT ACK, competing resumers, fresh-VM resume, explicit recovery and backup/restore; cleanup confirmed. | Declared single-database/host profile, not universal HA or external exactly-once effects. |
 | Langfuse and Opik | Each: prior native/API 33/33 observations, 667 attributes, 12 model usages; UI 12 cases / 248 attributes. Exporter 1.11 booleans newly verified locally. | Same finite A10 criteria. No fresh cloud/API/UI wave. Content off; synthetic TestModel tokens. |
-| Package consumers | October 3 updated dependencies: eight clean graphs across two runtimes, 56 contract checks and 46 commands pass. | Functional acceptance; upstream strict warnings remain red. |
+| Package consumers | Dependency baseline: eight clean graphs/two runtimes, 56 contracts. After the bridge change: four clean 1.20 graphs, 28 contracts and 23 commands pass. | Each identified TAR retains its own receipt. Functional acceptance; upstream strict warnings remain red. |
 | Integrations | Official MCP SDK 2.2.0: five profiles; LiveViewTest/Oban SQL: six cases plus crash/recovery. | Qualified recipes, not every deployment combination. |
 | Load and cleanup | Finite TestModel load/soak/saturation and owned-resource cleanup. | No LLM latency SLO, cloud availability or upstream predecode RAM guarantee. |
 
 The critical review's one P1/four P2 findings were corrected and verified.
 The single final R9 integration/distribution review is closed. No known
 unresolved finding from those scoped reviews is being hidden by this summary.
+
+The subsequent owner alignment pass corrects stale documentation rather than
+changing execution: exhausted TestModel scripts fail, SQL/C7 and both tracing
+backends have scoped acceptance, and API references resolve against the candidate.
+A fresh 146-case critical run passes; the documentation probe passes 18 cases on
+both runtimes. TestModel's executable AST and six runtime BEAM chunks are unchanged,
+so the earlier complete runtime evidence retains its scope. See the
+[alignment receipt](https://github.com/akorda-software/exagent/blob/codex/v2-candidate-029/docs/orchestration/2026-10-01-v2-codex/RELEASE-READINESS.md).
+This pass does not reopen the independent R9 review or expand provider guarantees.
 
 ## Read the CI result accurately
 
@@ -90,7 +99,8 @@ cancellation, using TestModel. A controlled 150 ms startup reproduces it; the
 existing 1,000 ms readiness barrier used by neighbouring ownership tests passes.
 The cancellation assertion and runtime remain unchanged. All 12 ownership cases
 plus that slow-start control pass on both runtimes; the original full-suite failure
-is retained, with no claim of a second green full run.
+is retained. This October 2 receipt contains no second green full run; the separate
+October 3 dependency-baseline runs above qualify their later sources.
 
 Argument, accounting, continuation and capability guards remain in place. Stock
 Anthropic now preserves redacted provider blocks; ExAgent rejects their unqualified

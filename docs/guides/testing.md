@@ -25,6 +25,38 @@ This is an application test: put it in your app's `test/` directory and run
 `mix test`. The model never accesses the network. Use `script:` for sequential
 responses, `{:tool_calls, calls}` for tool invocation, and a function
 `fn messages, params -> response end` when you need to inspect the actual request.
+`messages` is the message list, including the history supplied to that request.
+
+## Script every expected request
+
+An initially empty script uses `label:` or the generic response. A nonempty
+script must cover the complete loop: after a tool or a corrective-output retry,
+the agent may request another response. Exhaustion produces a model failure;
+it does not invent a successful final answer.
+
+This deliberately incomplete script records one simulated effect, then fails
+on the next request. The failure retains the confirmed progress:
+
+```elixir
+effects = :atomics.new(1, [])
+tool = ExAgent.Tool.new(
+  name: "record",
+  parameters_json_schema: %{"type" => "object", "properties" => %{}},
+  takes_ctx: false,
+  call: fn _args ->
+    :atomics.add(effects, 1, 1)
+    {:ok, "recorded"}
+  end
+)
+model = %ExAgent.Models.Test{script: [
+  {:tool_calls, [%ExAgent.Message.Part.ToolCall{
+    tool_name: "record", tool_call_id: "record-1", args: %{}}]}
+]}
+agent = ExAgent.new(model: model, tools: [tool])
+{:error, %ExAgent.RunError{partial: partial}} = ExAgent.run(agent, "Record once.")
+%{status: partial.status, requests: partial.request_count, effects: :atomics.get(effects, 1)}
+# => %{status: :failed, requests: 2, effects: 1}
+```
 
 ## Make effects observable
 
@@ -61,7 +93,9 @@ compatibility workflow is manual on the candidate branch and becomes manual on
 
 ## Read exclusions correctly
 
-The accepted offline suite has **2,176 passes, zero failures and 28 excluded tests**:
+The latest complete Elixir 1.20/OTP 29 run has **2,198 passes, zero failures and
+28 excluded tests**. This count identifies that run; it is not a fixed acceptance
+target. The [status page](../status.md) distinguishes each runtime and dated receipt.
 
 | Filter | Cases | Why excluded offline |
 |---|---|---|
@@ -71,6 +105,20 @@ The accepted offline suite has **2,176 passes, zero failures and 28 excluded tes
 An excluded test's body does not run. It is not a passing test, a timeout or a
 measurement of external compatibility. A timeout in a selected test is a failure.
 Real acceptance is recorded separately in [Support status](../status.md).
+
+## Choose verification by boundary
+
+| Boundary | Check | What a pass establishes |
+|---|---|---|
+| Agent loop, tools, accounting, ownership and recovery | Complete offline suite and relevant focal cases | Deterministic local contracts using TestModel or controlled transport fixtures. |
+| Documentation | Executed snippets, strict ExDoc and HTML/Markdown/EPUB link readback | Selected examples agree with public APIs; local navigation resolves. External setup blocks are checked separately. |
+| Installed package | TAR membership/isolation and clean none/API/SDK/exporter consumers | The identified package installs with its declared optional dependencies and passes its consumer contracts. |
+| Real models and application workflows | Explicit G2 and consumer E2E profiles | Only the named model/API/options and selected scenarios; retain unsuccessful attempts. |
+| SQL, MCP SDK and tracing backends | Their explicit acceptance runners and API/UI receipts | Only the declared database, SDK or backend profile. Offline exclusions provide no evidence here. |
+
+See [Support status](../status.md) for each result and limitation. A functional
+consumer pass and a failed strict dependency diagnostic are different results;
+neither should be relabelled to imply the other.
 
 ## Check documentation examples
 

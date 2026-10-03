@@ -6,8 +6,8 @@ son offline. No activar proveedores pagados o Postgres para conseguir un verde.
 
 Para v2.0.0, [producción y aceptación](production-acceptance.md) define los escenarios
 A1–A10 y gates G1–G6. El [roadmap](roadmap.md) decide cuándo ejecutarlos. Esta guía
-conserva los comandos del checkout; preparar el plan no añade todavía los runners
-de capacidades nuevas ni convierte los gates externos en pruebas offline.
+describe los comandos y runners actuales del checkout. Los gates externos tienen
+selección, credenciales y recibos propios; no se convierten en pruebas offline.
 
 **Cadencia vigente:** [flujo simplificado](execution-flow.md). Ejecutar focales por
 delta durante desarrollo y una suite integrada al estabilizar la vertical; no
@@ -120,7 +120,8 @@ ejecutar los casos. Con `EXAGENT_OFFLINE=1`, se excluyen siempre `integration`
 No son fallos ni casos que esperan a agotar un timeout: sus cuerpos no se
 ejecutan. Un caso que excede su timeout produce un fallo de test. Si falta Python,
 el helper también excluye `mcp_e2e`; por tanto28 describe esta ejecución, no un
-contador obligatorio para siempre. ExUnit1.18 imprimió2204tests/0failures/28excluded;
+contador obligatorio para siempre. En la primera ejecución del 2026-10-02,
+ExUnit1.18 imprimió2204tests/0failures/28excluded;
 1.20 imprimió2176passed/28excluded:2176ejecutados y28omitidos en ambos.
 
 Las pruebas con proveedores/DB son opt-in y conservan sus gates externos. La
@@ -211,8 +212,10 @@ python3 test/support/openrouter_qualification/run.py \
 
 Se puede omitir `--dotenv` si un lanzador privado ya inyectó sólo la clave requerida.
 Sin `--live`/`--offline-check`, el wrapper sale64 antes de leerla, crear artefactos o
-invocar Mix/red. GLM/DeepSeek sólo permiten text_sync; no se les fuerzan capabilities
-para tools. `--cases tools_stream,native_sync` selecciona explícitamente un subset,
+invocar Mix/red. Este runner G2 limita GLM/DeepSeek a text_sync; no les fuerza
+capabilities para tools. La matriz más amplia de la aplicación hermana tiene
+sus propios perfiles y recibos en [E2E consumidor](real-consumer-e2e.md).
+`--cases tools_stream,native_sync` selecciona explícitamente un subset,
 sin llamar a ese subset una matriz completa. La selección completa de Luna conserva
 el oráculo length real y **puede salir1**; nunca ocultar su rojo o repetir hasta verde.
 

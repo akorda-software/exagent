@@ -244,6 +244,16 @@ defmodule DocumentationProbe do
     apply(DocumentationAgentTest, :"test returns the validated final output", [%{}])
   end
 
+  test "testing guide preserves one effect and failed progress when a script is exhausted" do
+    {%{status: :failed, requests: 2, effects: 1}, bindings, diagnostics} =
+      evaluate(block("docs/guides/testing.md", "## Script every expected request"))
+
+    assert [%Part.ToolReturn{status: :succeeded, content: "recorded"}] =
+             returns(Keyword.fetch!(bindings, :partial))
+
+    clean!(diagnostics)
+  end
+
   test "README one-shot and streaming consume the actual selected codeblocks" do
     block = block("README.md", "## Layer 0 — the one-shot loop")
     {{:ok, %{output: "a test response"} = result}, bindings, warnings} = evaluate(block)

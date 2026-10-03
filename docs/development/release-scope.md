@@ -166,12 +166,16 @@ centrales que sólo funcionan en el camino feliz.
 
 ## 8. Estado y salida
 
-El mínimo R1.2–R1.8, R2 y R3 incluida retención R3.4 recibieron aceptación offline.
-La integración de primitivas R4 sobre esos bytes está en curso con gates propios.
-Los guards restantes siguen intactos.
-La aprobación persistida sigue R4/R5, no implementada por el ADR paused de R2.
-Las descripciones objetivo anteriores no sustituyen el tablero único roadmap§5
-ni la aceptación vigente en [estado](../status.md). G2 live y los demás gates
-externos permanecen abiertos. La release será **lista para versionar/publicar**
-cuando pasen sus gates y **publicada** sólo tras autorización y verificación del
-artefacto Hex2.0.0. Tener código generado o tests excluidos no cierra una integración.
+R1–R9 están implementados y aceptados en los perfiles delimitados del
+[estado vigente](../status.md), incluida aprobación persistida C7, coordinación,
+durabilidad SQL y observabilidad con igual aceptación de Langfuse y Opik.
+Los guards de perfiles no cualificados permanecen intactos. El ADR histórico
+paused de R2 no representa el estado actual de C7.
+
+Las descripciones objetivo anteriores no sustituyen el tablero único del
+[roadmap](roadmap.md) ni los recibos de cada gate. G5 conserva el diagnóstico
+estricto rojo de dependencias stock; los contratos funcionales del TAR pasan.
+La candidata no es una versión publicada: quedan la decisión explícita sobre
+ese diagnóstico y el paso autorizado de versión/notas/tag/Hex. La release será
+**publicada** sólo tras verificar el artefacto Hex2.0.0. Los perfiles adicionales
+no cualificados y los tests excluidos no se presentan como garantías aceptadas.

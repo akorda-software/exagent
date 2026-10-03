@@ -14,7 +14,11 @@ defmodule ExAgent.Models.Test do
       `Message.Response`, a string (wrapped as a text part), a `{:tool_calls,
       [ToolCall]}` tuple, or a function `fn messages, params -> item`.
 
-  When the script is exhausted, it falls back to the default response.
+  An initially empty script uses the label or generic response. A nonempty
+  script must cover every expected model request, including requests after tools
+  and corrective output. Exhausting it fails the request; it does not silently
+  supply a generic response. Two-argument functions receive the message list and
+  parameters.
   """
   @behaviour ExAgent.Model
 
@@ -32,7 +36,7 @@ defmodule ExAgent.Models.Test do
           Response.t()
           | String.t()
           | {:tool_calls, [Part.ToolCall.t()]}
-          | (ExAgent.Message.t(), ExAgent.ModelRequestParameters.t() ->
+          | ([ExAgent.Message.t()], ExAgent.ModelRequestParameters.t() ->
                script_item())
 
   @type t :: %__MODULE__{

@@ -51,11 +51,11 @@ Layer 0  ExAgent.run/3            the one-shot model ⇄ tools loop
   permissions (`allow` / `ask` / `deny`).
 - **Model-agnostic** — one stock ReqLLM backend with explicitly qualified profiles,
   custom specs/gateways and the public `ExAgent.Model` extension behaviour.
-- **External tools (MCP)** — consume stdio Model Context Protocol tools with
+- **External tools (MCP)** — consume stdio or opt-in Streamable HTTP tools with
   caller-owned timeouts, pending limits and transport cleanup.
 - **Observable** — `:telemetry`, app-level `ExAgent.Event` envelopes and opt-in
   native OpenTelemetry with content disabled by default.
-- **Offline-first testing** — a deterministic [`ExAgent.Models.Test`] model drives the
+- **Offline-first testing** — a deterministic `ExAgent.Models.Test` model drives the
   full loop with no API key and no network.
 
 ## Requirements
@@ -111,7 +111,7 @@ config :exagent, :finch_pools, %{:default => [size: 32]}
 ## Quick start
 
 The fastest way to try ExAgent is with [`Mix.install/2`] (Livebook or a script) —
-using the built-in [`ExAgent.Models.Test`] model, **no API key needed**:
+using the built-in `ExAgent.Models.Test` model, **no API key needed**:
 
 ```elixir
 Mix.install([
@@ -134,15 +134,6 @@ agent = ExAgent.new(model: model, instructions: "Be concise.")
 [hexdocs]: https://hexdocs.pm/exagent
 [source]: https://github.com/akorda-software/exagent
 [`Mix.install/2`]: https://hexdocs.pm/mix/Mix.html#install/2
-[`ExAgent.Model`]: https://hexdocs.pm/exagent/ExAgent.Model.html
-[`RunContext`]: https://hexdocs.pm/exagent/ExAgent.RunContext.html
-[`ExAgent.run/3`]: https://hexdocs.pm/exagent/ExAgent.html#run/3
-[`ExAgent.run_stream/3`]: https://hexdocs.pm/exagent/ExAgent.html#run_stream/3
-[`ExAgent.Server`]: https://hexdocs.pm/exagent/ExAgent.Server.html
-[`ExAgent.Session`]: https://hexdocs.pm/exagent/ExAgent.Session.html
-[`ExAgent.Models.Test`]: https://hexdocs.pm/exagent/ExAgent.Models.Test.html
-[`ExAgent.Event`]: https://hexdocs.pm/exagent/ExAgent.Event.html
-[`ExAgent.PubSub`]: https://hexdocs.pm/exagent/ExAgent.PubSub.html
 
 <!-- MDOC -->
 
@@ -223,7 +214,7 @@ end
 agent = ExAgent.new(model: chat_model, tools: MyApp.Tools.tools())
 ```
 
-`deftool` receives the [`RunContext`] as its first arg (named `ctx` by convention);
+`deftool` receives the `ExAgent.RunContext` as its first arg (named `ctx` by convention);
 `tool_plain` takes only parameters. Each parameter is `name :: Type`, so the JSON
 Schema is derived for you. A tool may return `value`, `{:ok, value}` or
 `{:error, reason}`. Arguments are validated locally before invocation, and results
@@ -289,7 +280,7 @@ end)
 |> Stream.run()
 ```
 
-[`ExAgent.run_stream/3`] uses the full loop, including tools, hooks, Ecto output
+`ExAgent.run_stream/3` uses the full loop, including tools, hooks, Ecto output
 validation and limits. Deltas are provisional across all model requests; the final
 result supplies the validated output. Each enumeration is a new run, so enumerate
 once. Halting closes owned resources; a deliberately suspended continuation must
@@ -321,7 +312,7 @@ owns its queue, database, authenticated decisions and uncertain-effect recovery.
 
 ## Layer 1 — a stateful, supervised agent
 
-[`ExAgent.Server`] keeps an agent alive across runs: it preserves history,
+`ExAgent.Server` keeps an agent alive across runs: it preserves history,
 accumulates usage, threads stateful models, and emits events.
 
 ```elixir
@@ -384,7 +375,7 @@ instead of starting empty; see the v1/v2 migration guidance.
 
 ## Layer 3 — multi-agent sessions
 
-[`ExAgent.Session`] coordinates participants (agents or humans) taking turns over
+`ExAgent.Session` coordinates participants (agents or humans) taking turns over
 a piece of shared state, through a pluggable `TurnPolicy`. The Session is the
 **single writer** of `shared_state`.
 
@@ -512,12 +503,15 @@ The client owns the stdio JSON-RPC connection (handshake, `tools/list`,
 `tools/call`, line buffering); transport exits and errors surface cleanly.
 Defaults are 128 pending requests and 8 MiB frames, configurable. A timeout/dead
 caller is cleaned up locally; that does not prove rollback of a remote effect.
+Streamable HTTP is opt-in and uses an application-owned HTTP1-only Finch pool.
+See [MCP setup](docs/guides/mcp.md) for protocol profiles, continuation binding
+and the qualified independent SDK scenarios.
 
 <a id="events--pubsub"></a>
 
 ## Events & PubSub
 
-Every layer emits versioned [`ExAgent.Event`] envelopes (distinct from
+Every layer emits versioned `ExAgent.Event` envelopes (distinct from
 `:telemetry`). Subscribe to drive a UI:
 
 ```elixir
@@ -529,7 +523,7 @@ receive do
 end
 ```
 
-[`ExAgent.PubSub`] is a behaviour: `None` (default, no-op), `Local` (Registry),
+`ExAgent.PubSub` is a behaviour: `None` (default, no-op), `Local` (Registry),
 `Phoenix` (delegates to `Phoenix.PubSub` dynamically — no hard dependency), or
 your own.
 
@@ -548,9 +542,17 @@ attributes reach the exporter. Request usage and inclusive run totals are kept
 separate to avoid double counting. The optional bounded processor provides an
 asynchronous export route with observable saturation and failures.
 
-See [observability](docs/guides/observability.md) for application configuration, context
-propagation, privacy and export limits. Langfuse/Opik comparison and external
-backend acceptance remain pending; neither platform is required or selected.
+For applications also tracing standalone ReqLLM calls, attach
+`ExAgent.Observability.ReqLLM.attach/1` once at host startup instead of the stock
+ReqLLM bridge. It enriches the existing ExAgent Model span and preserves standalone
+tracing. ExAgent keeps usage, cost, status, privacy and span lifecycle; conflicting
+stock bridges reject before provider IO. The host maintains ReqLLM's tracking TTL.
+
+See [observability](docs/guides/observability.md) for application configuration,
+context propagation, privacy and export limits. Langfuse and Opik have equivalent
+finite A10 native/API/UI acceptance. The integrated bridge's additional attributes
+have local SDK coverage, without a new cloud/UI or metric-export claim. Neither
+backend is a required dependency.
 
 ## Models
 
@@ -568,7 +570,7 @@ Strings alone resolve identity; they do not load credentials or enable tools/Cha
 Model structs remain unchanged through `resolve/1`. Unknown options reject.
 OpenCode Go/Zen require explicit endpoints; stock `zai:` means ZAI, **not** the old
 Anthropic gateway alias. See the exact migration recipes. Bring your own model by
-implementing [`ExAgent.Model`], without private ReqLLM APIs. Automatic retries and
+implementing `ExAgent.Model`, without private ReqLLM APIs. Automatic retries and
 redirects are disabled; stream limits are documented on `ExAgent.Models.ReqLLM`.
 Incomplete/invalid terminal responses fail before effects. Usage is normalized,
 provider presence unknown, and costs estimated; strict metric limits reject this

@@ -37,7 +37,7 @@ paths below are relative to `docs/guides/`; generated ExDoc pages are flattened.
 | Durable sequence/router/parallel | `Coordination.Composition`, `Coordination.Flow` | [Coordination](coordination.md) |
 | MCP tools | `MCP.Client.start_link/1`, `tools/1`, `close/1` | [MCP](mcp.md) |
 | Retrieval/jobs | Host-owned integration recipes | [Documentation map](../README.md) |
-| Traces | `ExAgent.Observability.OpenTelemetry` | [Observability](observability.md) |
+| Traces and mixed ReqLLM calls | `ExAgent.Observability.OpenTelemetry`, `ExAgent.Observability.ReqLLM.attach/1` | [Observability](observability.md) |
 | Offline verification | `%ExAgent.Models.Test{script: ...}` | [Testing](testing.md) |
 | Unexpected behavior | Sanitized reason + relevant boundary | [Troubleshooting](troubleshooting.md) |
 
@@ -61,7 +61,9 @@ paths below are relative to `docs/guides/`; generated ExDoc pages are flattened.
 - **Recovery:** reconcile uncertain effects explicitly. Do not turn every error,
   queue retry or restored message history into a fresh run.
 - **Observability:** optional, host-owned SDK/exporter, content off by default.
-  Sampled spans are not a billing ledger or guaranteed durable audit record.
+  Use the integrated ReqLLM bridge for mixed applications; attach once at startup
+  and maintain its upstream tracking TTL. Sampled spans are not a billing ledger
+  or guaranteed durable audit record.
 
 ## Verify the relevant boundary
 

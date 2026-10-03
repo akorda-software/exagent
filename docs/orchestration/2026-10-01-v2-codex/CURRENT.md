@@ -6,6 +6,13 @@ El usuario autorizó commit/push/PR; sin bump, tag, merge ni publicación en Hex
 ReqLLM oficial stock, R1.2 aceptado, C7 incluido, guards intactos.
 Una revisión máxima por objetivo; sin re-review ni reruns rutinarios del padre.
 
+## Alineación final — revisión del owner
+
+Corregidos TestModel/docs/type, contadores, links API1.x y pendientes C7/SQL/backend.
+18casos documentales por runtime y146críticos nuevos pasan; AST/chunks runtime
+idénticos, FULL/external anteriores conservan identidad. Strictdeps/DeepSeek08
+siguen limitados. [RELEASE-READINESS](RELEASE-READINESS.md); sin publicación/R9 nueva.
+
 ## Ownership de observabilidad — combinación implementada y verificada
 
 Usuario elige ExAgent productor y autoriza ejecutar reparto; integración host
@@ -41,12 +48,6 @@ Finch0.24/Mint1.11/HPAX1.1,JSV0.25,Ecto3.14.2,exporter test1.11,ExDoc0.40.4.
 refusal inicial,14escenarios/18admisiones/3efectos. PG17.4:14fases/cleanup.
 FULL ambos2177/0/28; bin/check9fases0;8grafos56contratos/46comandos0,strictdeps rojo.
 [DEPENDENCIES](DEPENDENCIES.md) conserva fuentes/recibos/documentación/TAR/rojos.
-
-## ReqLLM 1.26 — recibo anterior
-
-[REQ-LLM126](REQ-LLM126.md): FULL1202177/0/28 y FULL1182176/1/28, readiness
-corregido con13focales por runtime; G214/14 y app18/18, PG14fases y8grafos.
-Guard/cache/redacted blocks cualificados; conservar identidad de cada receipt.
 
 ## Documentación para personas y agentes
 
