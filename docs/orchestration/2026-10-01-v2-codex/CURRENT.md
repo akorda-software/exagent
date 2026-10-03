@@ -6,7 +6,23 @@ El usuario autorizó commit/push/PR; sin bump, tag, merge ni publicación en Hex
 ReqLLM oficial stock, R1.2 aceptado, C7 incluido, guards intactos.
 Una revisión máxima por objetivo; sin re-review ni reruns rutinarios del padre.
 
-## E2E Luna/DeepSeek — comparación cerrada
+## E2E complejos — cuatro nuevos escenarios cerrados
+
+Usuario pide tres combinaciones y un recorrido completo.24:seis etapas tipadas/
+C7;25:paralelo/doble delegación/fallo collect;26:VMmuerta tras efecto antes ACK/
+lease real/recover uncertain;27:memoria/Session/busy-abort/paralelo/delegación/
+dos approvals/restart PostgreSQL/nuevaVM/archivo/PubSubstream. TestModel4/4 y
+ambos modelos reales4/4,46requests/15efectos por modelo. Rojo DeepSeek27 Session
+conservado; copia ASCII explícita pasa sin relajar oráculo, control27 también Luna.
+Fases complex70/53requests/USD1.75/1.325reserva, factura null; smoke51/54intactas.
+Nueve grupos/clusters cerrados. Precommit17/0/27excl;52fuentes consumer/94runtime
+idénticas a las ejecutadas; rootlock intacto. Cobertura conjunta27/27Luna y
+26/27DeepSeek;08nativo rojo. Sin FULL/G2/G3/cloud ni revisión nueva.
+[E2E-COMPLEX](E2E-COMPLEX.md) conserva recibos, fuentes, límites y rojos.
+ExDoc117HTML/5204targets,115MD/847,115EPUB/2876,0linksrotos; build/isolation0.
+TAR168exactos/91runtime intactos, SHA8c5dc15a220ec353c42db7a6a6b11c7723f4a41402834e94811d0c7b7a490c9e.
+
+## E2E Luna/DeepSeek — recibo smoke anterior
 
 Usuario elige ambos modelos. 23casos ejecutados por modelo: Luna23aceptados,
 DeepSeek22/23; ticket JSON nativo reproduce merchant/currency null, no aceptado.
@@ -77,6 +93,7 @@ Run01/02 rojos y correcciones causales conservados en ci030/roadmap;
 | G2 real dependencias actuales |12pases iniciales y2length controles,14escenarios cubiertos;18requests/3efectos/USD0.45reserva; fallo inicial preservado |
 | E2E consumidor028 |18escenarios reales,40admisiones/USD1.00reserva; initial13/18 y cinco retries preservados |
 | E2E modelos actual |23por modelo; Luna23/DeepSeek22aceptados, caso08rojo;51/54admisiones |
+| E2E complejos adicional |4/4por modelo;46requests/15efectos; fases70/53admisiones; coverage conjunta27/26aceptados |
 | G3 SQL |PG17.4,14fases,ACKperdido/dosVMs/FlowA8/restart/recover/backup; cleanup observado |
 | G4 Langfuse y Opik |Cada uno mismoA10 nativo/API33/33,667attrs/12usage; UI12casos/248attrs |
 | G5 consumidores |8grafos×7=56PASS; strictdeps siguen rojos |

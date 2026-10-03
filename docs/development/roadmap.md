@@ -19,7 +19,23 @@ conservan contexto fechado. Su lectura como contexto no amplía un encargo.
 y [flujo simplificado](execution-flow.md). Los siguientes hitos fechados conservan
 evidencia, no reactivan investigaciones, revisiones ni probes del padre ya cerrados.
 
-**E2E de modelos, 2026-10-03 — comparación cerrada con limitación:** el usuario
+**E2E complejos,2026-10-03 — cuatro casos aceptados por modelo:** encargo explícito
+de tres combinaciones y un recorrido completo. Casos24–27: seis etapas tipadas
+con aprobación; paralelo con doble delegación y fallo collect; efecto sin ACK
+con VM nueva/lease real/recovery uncertain; y memoria/Session/busy-abort/paralelo/
+delegación/dos aprobaciones/reinicio PostgreSQL/archivo/streaming. TestModel pasa
+los cuatro, con rojos de montaje conservados; Luna y DeepSeek aceptan4/4,46requests/
+15efectos por modelo. Copia Session más explícita tras rojo DeepSeek27; control27
+pasa en ambos sin cambiar oráculos. Ledgers complex nuevos70/53admisiones y
+USD1.75/1.325reservado, factura null; los smoke anteriores quedan intactos.
+Nueve grupos/clusters cerrados, precommit17/0/27excl. Runtime94files/lock raíz
+idénticos; consumidor52fuentes ejecutables coinciden con los bytes probados.
+Cobertura conjunta27/27Luna y26/27DeepSeek;08nativo sigue rojo. No una ola única
+27/27 ni nueva aceptación universal. Ver [guía](real-consumer-e2e.md) y
+[recibo](https://github.com/akorda-software/exagent/blob/codex/v2-candidate-029/docs/orchestration/2026-10-01-v2-codex/E2E-COMPLEX.md).
+Sin nueva revisión R9 ni rerun FULL/G2/G3/cloud; sin bump/tag/Hex.
+
+**E2E smoke de modelos, 2026-10-03 — comparación cerrada con limitación:** el usuario
 selecciona GPT-6-Luna y DeepSeek V4.1 Flash. La app hermana tiene 23 casos por
 modelo: Luna acepta 23; DeepSeek 22, con ticket JSON nativo sin merchant/currency
 correctos en dos intentos. No se acepta ese caso ni el perfil nativo completo.
@@ -164,7 +180,7 @@ están en `docs/archive/2026-09-release-{roadmap,scope}.md`.
 | R5 | Aprobación persistida y recuperación de ejecución | R3 + R4 | C7 ordinario/composición/MCP integrado; G3/FlowA8 y Oban SQL prueban pausa/resume y recuperación explícita sin replay en sus perfiles |
 | R6 | Composición multi-agente coherente | R3; R4/R5 para pausa durable | Implementado y revisado: secuencia9/delegación10/Flow11. Final00973+11; recetas públicas PASS y A8 SQL entreVMs sobre019. FULL2157sin fallos; guards generales no demostrados siguen cerrados |
 | R7 | Observabilidad e integraciones utilizables | R1/R2; cierre sobre R5/R6 | MCP SDK5/5, binding, retrieval/job y LiveView/Oban6/6; Langfuse y Opik A10 nativo/API/UI aceptados con los mismos criterios por mandato2026-10-02 |
-| R8 | Cualificación externa, consumidores, carga y CI | R1–R7 pertinentes | G2mínimo/G3/G6 aceptados; ocho grafos56contratos pasan también remotamente. E2E app23casos: Luna23aceptados/DeepSeek22, ticket nativo rojo. CI030 funcional aceptado; strictdeps RED upstream |
+| R8 | Cualificación externa, consumidores, carga y CI | R1–R7 pertinentes | G2mínimo/G3/G6 aceptados; ocho grafos56contratos pasan también remotamente. E2E app27casos: Luna27aceptados/DeepSeek26, cuatro complejos4/4por modelo; ticket nativo rojo. CI030 funcional aceptado; strictdeps RED upstream |
 | R9 | Revisión final, candidata y release2.0.0 | R0–R8 aceptados | Revisión única cerrada y candidata029 preparada; PR1 borrador autorizado. CI030 funcional aceptado; run global failure sólo por diagnóstico strictdeps upstream. G5strict abierto, sin versionar ni publicar |
 
 ```text

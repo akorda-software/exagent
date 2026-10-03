@@ -1,6 +1,6 @@
 # E2E del consumidor Phoenix con OpenRouter
 
-El consumidor hermano `exAgentTest/chat_app` contiene **23 escenarios opt-in** que
+El consumidor hermano `exAgentTest/chat_app` contiene **27 escenarios opt-in** que
 recorren aplicación, API pública de ExAgent, ReqLLM stock y un modelo real. La
 suite offline habitual excluye estos casos. Datos, tickets y efectos son sintéticos;
 el modelo, transporte y herramientas locales usados en la ola live son reales.
@@ -84,12 +84,12 @@ y efectos de los fixtures; una cancelación sin resultado final deja el contador
 público de tools sin dato, no inventa cero.
 
 La cobertura adicional útil queda delimitada: navegador JavaScript real,
-proveedores con reasoning activado y errores de red/reintentos con incertidumbre
-externa requieren objetivos y oráculos propios. SQL entre VMs y pérdida de ACK
-ya tienen su aceptación G3; no se atribuyen a esta matriz de modelos.
+proveedores con reasoning activado y errores de transporte requieren objetivos
+y oráculos propios. Los cuatro escenarios complejos siguientes añaden SQL entre
+VMs y pérdida de ACK a la matriz del consumidor; G3 conserva su aceptación propia.
 
-Estos escenarios no aceptan navegador JavaScript, SQL duradero entre VMs, HA,
-facturación ni todos los modelos de OpenRouter. La matriz G2 anterior, G3 SQL,
+Estos escenarios no aceptan navegador JavaScript, HA, facturación ni todos los
+modelos de OpenRouter. La matriz G2 anterior, G3 SQL,
 G4 Langfuse/Opik y los controles críticos027 conservan sus propios perfiles y
 recibos. Los resultados efectivamente obtenidos viven en `E2E-RESULTS.md` del
 consumidor y en el recibo vigente del checkout; una exclusión nunca cuenta como pase.
@@ -124,6 +124,87 @@ afectados reutilizan sus bytes/recibos; los cuatro caminos de marcador cambiados
 se comprueban aparte. El [recibo fechado](https://github.com/akorda-software/exagent/blob/codex/v2-candidate-029/docs/orchestration/2026-10-01-v2-codex/E2E-MODELS.md)
 conserva olas, hashes, fallo de instrumentación y límites. No se repite FULL,
 G2, SQL ni Langfuse/Opik por estos cambios.
+
+## Flujos complejos 24–27
+
+La suite `complex` reúne tres combinaciones y un recorrido de aplicación completo.
+Cada caso usa su propia base de datos en un PostgreSQL temporal del runner, por
+socket Unix privado y sin TCP. No usa la base de datos ni el proyecto cloud del
+usuario. Los datos y efectos siguen siendo sintéticos; en `--live` las decisiones
+y respuestas del modelo se obtienen mediante ReqLLM stock y OpenRouter.
+
+| Caso | Combinación | Comprobaciones |
+|---|---|---|
+|24|Pedido con seis etapas: extracción, validación Ecto, precio, aprobación de publicación, archivo y resultado|Mappers y efectos una vez; ningún efecto antes de aprobar; decisión duplicada y lectura completed sin IO|
+|25|Tres ramas paralelas, dos niveles de delegación y una rama fallida|Barrera entre dos workers demuestra solapamiento; contadores incluyen hijos; merge conserva orden y fallo; efectos confirmados una vez|
+|26|Tres etapas con pérdida del ACK del pago|La VM sale justo después del efecto SQL; una VM nueva espera el lease real y recupera administrativamente; estado uncertain, sin repetir pago ni Model IO|
+|27|Preparación tipada, Server con memoria, Session por turnos, busy/abort, paralelo con delegación, dos aprobaciones, fallo de una rama, reinicio, archivo y stream por PubSub|Salida abrupta de VM y reinicio PostgreSQL; nueva VM restaura historial/estado/turno; aprobaciones separan efectos; trabajo confirmado y rama fallida no se repiten; deltas corresponden al terminal|
+
+El caso 27 combina las fronteras principales de la aplicación. Los permisos deny,
+la extracción nativa y la entrada de imagen conservan sus casos específicos:
+no se promete que una sola conversación ejercite todos los modos incompatibles.
+La aplicación enlaza raíces Composition/Flow/Server/Session mediante sus APIs;
+no introduce definiciones Composition/Flow anidadas. La propiedad de cada raíz
+y sus contadores permanece independiente. Un contador SQL de la aplicación
+admite como máximo **32 peticiones por caso**, también después de cambiar de VM.
+
+Primero comprobar el montaje sin proveedor; después ejecutar ambos perfiles:
+
+```bash
+mkdir -m 700 /tmp/chat-complex-offline /tmp/chat-complex-luna /tmp/chat-complex-deepseek
+e2e_source_sha=$(python3 scripts/run_live_e2e.py --fingerprint)
+EXAGENT_OFFLINE=1 MIX_ENV=test python3 scripts/run_complex_e2e.py --offline \
+  --pg-bin /ruta/absoluta/postgres/bin --source-sha256 "$e2e_source_sha" \
+  --phase-ledger /tmp/chat-complex-offline/phase.json \
+  --artifacts /tmp/chat-complex-offline/wave-01
+MIX_ENV=test python3 scripts/run_complex_e2e.py --live --model openai/gpt-6-luna \
+  --env-file .env --pg-bin /ruta/absoluta/postgres/bin \
+  --source-sha256 "$e2e_source_sha" --phase-ledger /tmp/chat-complex-luna/phase.json \
+  --artifacts /tmp/chat-complex-luna/wave-01
+MIX_ENV=test python3 scripts/run_complex_e2e.py --live --model deepseek/deepseek-v4.1-flash \
+  --env-file .env --pg-bin /ruta/absoluta/postgres/bin \
+  --source-sha256 "$e2e_source_sha" --phase-ledger /tmp/chat-complex-deepseek/phase.json \
+  --artifacts /tmp/chat-complex-deepseek/wave-01
+```
+
+La instalación PostgreSQL debe existir y tener una ruta física, sin symlinks.
+`mix precommit` prepara los módulos de soporte; cada fase ejecuta una BEAM nueva
+con `--no-compile` sobre esos mismos bytes. SQL es una dependencia sólo de test.
+Los cambios se limitan al consumidor autorizado y sus fixtures.
+
+Cada modelo abre una fase **complex de 120 admisiones / USD3 reservado**; es
+independiente de la fase smoke de 60 / USD1.50, cuyos recibos se conservan.
+Se mantienen las cotas de entrada/salida y los retries desactivados. Las tools
+complejas tienen un timeout finito de 60s para incluir el trabajo de los hijos
+y los checkpoints SQL; las raíces tienen plazo/tiempo activo de 360s.
+Los intentos fallidos consumen presupuesto y permanecen en la evidencia.
+`--cases 26,27` selecciona una continuación causal con el mismo ledger.
+El contador SQL observa todas las raíces; sus eventos son instrumentación del
+fixture, no una recomendación de que los mappers de producción tengan efectos.
+
+`--offline` usa TestModel explícitamente y comprueba el montaje, sin acreditar
+compatibilidad del proveedor. No se usa TestModel ni fallback en `--live`.
+La evidencia incluye las fases de VM, efectos SQL, decisiones, contadores,
+source SHA, cierre del grupo de procesos y parada del PostgreSQL propio.
+La suite habitual excluye los cuatro casos SQL y los 23 casos de proveedor.
+
+**Aceptación compleja 2026-10-03:** los cuatro casos pasan con TestModel y con
+cada modelo real. Los verdes de cada modelo suman **46 peticiones / 15 efectos**:
+24:9, 25:9, 26:4 y 27:24 peticiones. Luna pasa la ola completa y el control del
+prompt Session actualizado. DeepSeek pasa 24–26 en la primera ola; el fallo de
+copia literal de Session en 27 se conserva y el control causal pasa tras pedir
+copia ASCII explícita, con el mismo oráculo y sin reparar respuestas.
+Las fases complex acumulan **70/53 admisiones** y reservas **USD1.75/1.325** para
+Luna/DeepSeek, incluyendo todos los intentos; factura observada null.
+Todos los nueve grupos de escenarios y sus clusters PostgreSQL propios se cierran.
+Precommit final:17 pases offline, cero fallos,27 exclusiones opt-in.
+
+La cobertura conjunta alcanza **27/27 para Luna y 26/27 para DeepSeek** mediante
+recibos separados; el ticket JSON nativo 08 de la suite smoke sigue sin aceptar.
+No se repiten los otros 23 escenarios ni FULL/G2/G3/cloud. El runtime y lock raíz
+permanecen idénticos; SQL se añade sólo al montaje de test del consumidor.
+El [recibo complejo](https://github.com/akorda-software/exagent/blob/codex/v2-candidate-029/docs/orchestration/2026-10-01-v2-codex/E2E-COMPLEX.md)
+registra identidades, rojos de montaje y controles de ambos modelos.
 
 ## Recibos históricos
 

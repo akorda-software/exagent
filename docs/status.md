@@ -11,7 +11,7 @@ bump, tag, merge to `main` or Hex publication has been performed.
 | Offline runtime | Updated dependencies, October 3: both complete suites have 2,177 passes / zero failures / 28 exclusions. | Preserve the previous ReqLLM-only 1.18 failure below. TestModel and fixtures, not real-provider compatibility. |
 | Runtime targets | Elixir 1.18 / OTP 28 and Elixir 1.20 / OTP 29; strict test compile passes on both. | Tested combinations, not every patch release or dependency graph. |
 | Real model | Updated dependencies: 12 scenarios pass initially; length sync/stream pass after correcting the stimulus. All 14 scenarios covered, 18 admissions / 3 effects. | Original refusal/stop failure retained; not a single new 14/14 wave. GPT-4o-mini/OpenRouter Chat tools profile only. |
-| Real consumer | October 3, current dependencies: all 23 scenarios executed per model. GPT-6-Luna accepts 23; DeepSeek V4.1 Flash accepts 22, with native receipt extraction still failing. Consumer precommit: 17 offline passes / 23 live exclusions. | OpenRouter Chat, reasoning disabled; separate ledgers with 51/54 admissions including diagnostics. USD 1.275/1.35 reserved, invoice unobserved. Stronger marker controls pass; original failures retained. Not universal provider qualification. |
+| Real consumer | October 3: 23 smoke scenarios plus four combined SQL/application workflows. Combined receipts accept Luna 27/27 and DeepSeek 26/27; native receipt extraction remains red. New complex scenarios pass 4/4 per model, with 46 requests / 15 synthetic effects each. Consumer precommit: 17 offline passes / 27 opt-in exclusions. | OpenRouter Chat, reasoning disabled. Complex ledgers: 70/53 admissions including causal controls, USD1.75/1.325 reserved; prior smoke ledgers remain 51/54. Invoice unobserved. Marker failures retained; not a single new 27-case wave or universal provider qualification. |
 | Durable recovery | October 3 PostgreSQL 17.4: 14 phases, including lost COMMIT ACK, competing resumers, fresh-VM resume, explicit recovery and backup/restore; cleanup confirmed. | Declared single-database/host profile, not universal HA or external exactly-once effects. |
 | Langfuse and Opik | Each: prior native/API 33/33 observations, 667 attributes, 12 model usages; UI 12 cases / 248 attributes. Exporter 1.11 booleans newly verified locally. | Same finite A10 criteria. No fresh cloud/API/UI wave. Content off; synthetic TestModel tokens. |
 | Package consumers | October 3 updated dependencies: eight clean graphs across two runtimes, 56 contract checks and 46 commands pass. | Functional acceptance; upstream strict warnings remain red. |
@@ -66,6 +66,16 @@ currency despite schema validation. Its native extraction profile remains
 unqualified. No private parser, coercion, guard relaxation or model fallback is
 used to convert that failure to a pass. The library runtime and root lock are
 unchanged by this comparison; the earlier G2 Mini receipt remains historical.
+
+Four additional combined workflows now exercise six typed stages, two levels of
+delegation, failure collection, lost effect ACK with explicit uncertain recovery,
+and a complete application journey across fresh VMs and a PostgreSQL restart.
+The last combines memory, shared state/turns, cancellation, parallel delegation,
+two approvals, finalization and PubSub streaming. All four pass offline and with
+both real models. An initial DeepSeek Session-marker failure is retained; a
+clearer ASCII-copy instruction passes the unchanged oracle in both profiles.
+Owned processes and databases close; confirmed work is not replayed. These
+receipts extend the application matrix without rerunning unrelated qualifications.
 
 ## ReqLLM 1.26 qualification — October 2 receipt
 

@@ -6,6 +6,23 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Combined application workflows — 2026-10-03
+
+- Add four opt-in SQL consumer scenarios: six-stage typed approval pipeline;
+  parallel branches with two delegation levels and a collected failure; fresh-VM
+  recovery after an external synthetic effect loses its ACK; and a full workflow
+  combining persisted conversation/Session state, busy/abort, parallel delegation,
+  two approvals, abrupt VM exit, PostgreSQL restart, archive and PubSub stream.
+- Accept all four with TestModel and both real model profiles, 46 requests and
+  15 synthetic effects per model. Preserve fixture failures and DeepSeek's initial
+  Session marker failure; explicit ASCII-copy instructions pass the same oracle
+  in both profiles. Keep independent complex ledgers, finite SQL/host budgets and
+  owned process/database cleanup. Consumer precommit: 17 passes / 27 exclusions.
+- Reuse the unaffected smoke receipts: combined coverage is Luna 27/27 and
+  DeepSeek 26/27; native receipt case 08 remains unqualified. Library runtime,
+  root lock and published contracts are unchanged; SQL dependencies are test-only
+  additions to the authorized consumer. No version bump or publication.
+
 ### Application model comparison — 2026-10-03
 
 - Select GPT-6-Luna and DeepSeek V4.1 Flash explicitly in the authorized sibling
