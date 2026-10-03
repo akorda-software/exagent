@@ -19,14 +19,19 @@ conservan contexto fechado. Su lectura como contexto no amplía un encargo.
 y [flujo simplificado](execution-flow.md). Los siguientes hitos fechados conservan
 evidencia, no reactivan investigaciones, revisiones ni probes del padre ya cerrados.
 
-**Ownership OTel,2026-10-03 — evaluación previa a publicar:** comparar ReqLLM1.26
-stock con el perfil ExAgent. Cuatro controles sync/stream con SDK y HTTP/SSE local
-demuestran1request/1generación por defecto y1request/2generaciones al activar ambos
-bridges; sumar output duplica2→4 sin cambiar el ledger. Se recomienda un productor
-ExAgent para sus runs, manteniendo eventos nativos ReqLLM; sustitución parcial de
-generación valorada, no implementada. Diferencias de lifecycle/accounting/privacy
-y scope documentadas en [backend evaluation](backend-evaluation.md#reqllm-and-exagent-instrumentation-ownership).
-Sin runtime/lock/versión nuevos, FULL o cloud repetidos ni reapertura R9.
+**Ownership OTel,2026-10-03 — combinación autorizada e implementada:** tras la
+evaluación original37fed28 el usuario elige ExAgent productor y autoriza el reparto.
+Bridge host opt-in por Adapter público stock: enriquece el span Model con IDs/
+endpoint/request opts/TTFC, sin otro span ni cambiar accounting/status/contenido;
+standalone conserva callbacks stock. Conflicto/duplicado rechaza antes de IO,
+raw global no supera metadata-only. Los 21 controles están incluidos en 146
+focales que pasan en ambos runtimes con fuentes idénticas: concurrencia, sampler,
+tracer nombrado, pricing único, owner death y prune público. Rutina local 1.20:
+nueve fases exit 0, FULL2198/0/28; cuatro grafos limpios/28 contratos pasan,
+strictdeps rojo por TOML/WebSockex/gproc. Mantener límite TTL del tracking upstream
+y ausencia de métricas en API1.5/SDK1.7. Ver [reparto](backend-evaluation.md#reqllm-and-exagent-instrumentation-ownership)
+y [recibo](https://github.com/akorda-software/exagent/blob/codex/v2-candidate-029/docs/orchestration/2026-10-01-v2-codex/OBSERVABILITY-COMBINATION.md).
+Sin lock/versión/publicación/consumidor nuevos ni reapertura R9.
 
 **E2E complejos,2026-10-03 — cuatro casos aceptados por modelo:** encargo explícito
 de tres combinaciones y un recorrido completo. Casos24–27: seis etapas tipadas

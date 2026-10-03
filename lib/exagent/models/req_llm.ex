@@ -252,6 +252,11 @@ defmodule ExAgent.Models.ReqLLM do
       if mode == :preflight do
         :ok
       else
+        case ExAgent.Observability.ReqLLM.check_ownership() do
+          :ok -> :ok
+          {:error, reason} -> fail!(reason)
+        end
+
         case invoke(model, resolved, context, opts, mode) do
           {:ok, response} ->
             if response.finish_reason in [:stop, :tool_calls] do
@@ -518,6 +523,7 @@ defmodule ExAgent.Models.ReqLLM do
          tools: tools,
          tool_choice: if(params.allow_text_output, do: :auto, else: :required),
          max_retries: 0,
+         telemetry: [payloads: :none],
          json_repair: false,
          total_timeout: model.total_timeout,
          on_unsupported: :error,

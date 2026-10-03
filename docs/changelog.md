@@ -6,6 +6,20 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Combined ReqLLM instrumentation — 2026-10-03
+
+- Add the host opt-in `ExAgent.Observability.ReqLLM` bridge using stock ReqLLM's
+  public adapter behaviour. Reuse the ExAgent Model span for allowlisted request
+  attributes and streaming timing; keep accounting/status/content and lifecycle
+  with ExAgent. Preserve stock standalone tracing, child callbacks and optional
+  metrics without a second generation observation or overwriting the priced ledger.
+- Propagate runtime-only Model ownership across existing context/worker boundaries.
+  Force metadata-only telemetry on the ExAgent ReqLLM adapter, including when the
+  host enables raw capture. Reject incompatible/duplicate stock bridge configuration
+  before provider IO; document startup migration, host-owned attach/detach and
+  upstream in-flight TTL maintenance. No fork, exporter installation, snapshot
+  change, dependency update, version bump or publication.
+
 ### Combined application workflows — 2026-10-03
 
 - Add four opt-in SQL consumer scenarios: six-stage typed approval pipeline;

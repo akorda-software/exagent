@@ -89,11 +89,13 @@ no implica permiso para modificarlas o leer datos reales.
 
 ## ReqLLM and ExAgent instrumentation ownership
 
-**Evaluación2026-10-03, previa a publicación:** el usuario pide valorar si la
-instrumentación propia sigue siendo necesaria ahora que ReqLLM ofrece OTel.
-La inversión anterior no justifica conservar una responsabilidad duplicada.
-Esta comparación recomienda una configuración sobre el runtime existente;
-no activa una sustitución, nuevo modo, bump o publicación.
+**Decisión posterior2026-10-03:** el usuario elige ExAgent como único productor
+de spans en sus ejecuciones y autoriza implementar la combinación. Se añade
+`ExAgent.Observability.ReqLLM.attach/1` como adaptador público del bridge stock:
+ReqLLM enriquece el span Model existente y conserva spans standalone. Accounting,
+privacidad, identidad y lifecycle Model siguen en ExAgent. La evaluación anterior
+y su negativo se conservan abajo; no son el comportamiento actual del adapter.
+No se activa una publicación o bump por esta decisión.
 
 Fuentes oficiales fijadas a la dependencia instalada:
 [guía de telemetría ReqLLM1.26](https://github.com/agentjido/req_llm/blob/v1.26.0/guides/telemetry.md),
@@ -106,8 +108,8 @@ comparación; no se infiere comportamiento de una versión futura.
 
 | Responsabilidad | ReqLLM1.26 | ExAgent actual |
 |---|---|---|
-| Petición al modelo | Bridge opt-in: atributos de petición, respuesta, errores, tokens y costes disponibles. | Span del contrato Model, incluidos adapters ReqLLM y Models custom/Test. Hay solapamiento en las peticiones ReqLLM. |
-| Tiempo de primera salida y métricas | Timing de streaming, histogramas de duración/tokens/primera salida si el adaptador dispone de métricas; más detalle del cliente. | No ofrece ese conjunto de métricas ni promete equivalencia con el bridge ReqLLM. |
+| Petición al modelo | Bridge opt-in: atributos de petición, respuesta, errores, tokens y costes disponibles. | Span del contrato Model, incluidos adapters ReqLLM y Models custom/Test. El bridge integrado reutiliza ese span; los bridges independientes se solapaban. |
+| Tiempo de primera salida y métricas | Timing de streaming, histogramas de duración/tokens/primera salida si el adaptador dispone de métricas; más detalle del cliente. | La integración conserva el timing y delega métricas a ReqLLM si el host tiene sus meter APIs. El perfil API1.5/SDK1.7 observado no dispone de ellas; no se afirma exportación de métricas. |
 | Herramientas | Puede representar herramientas built-in ejecutadas por el proveedor; la ejecución de funciones del caller corresponde al caller. | Ejecución local, permisos, error, delegación y contexto de las herramientas del agente. |
 | Ejecución y coordinación | No conoce el loop, Server, Session, Composition o Flow de ExAgent. | Árbol de operaciones, IDs de run/paso/intento y contexto a través de workers. No se promete un span para cada API administrativa. |
 | Aprobación y recuperación | La petición termina; no observa el record durable ni la espera humana. | Pausa cierra el intento; resume abre otro con identidad durable, checkpoint y contadores de lifetime. |
@@ -118,10 +120,11 @@ comparación; no se infiere comportamiento de una versión futura.
 
 ### Qué hemos demostrado sobre el solapamiento
 
-`test/exagent/observability/req_llm_bridge_test.exs` usa **ReqLLM1.26 stock**, SDK
+El negativo original del commit37fed28 usa **ReqLLM1.26 stock**, SDK
 nativo, clave sintética y un servidor HTTP/SSE en loopback; no TestModel, API
 pagada ni Collector/backend cloud. Matriz sync/public run_stream × bridge ReqLLM
-desactivado/activado explícitamente: cuatro casos pasan.
+desactivado/activado explícitamente: cuatro casos pasaron. El test actual mantiene
+el servidor/SDK y comprueba la integración y el rechazo, no espera duplicación.
 
 | Configuración observada | Peticiones HTTP | Spans por ejecución | Suma de output tokens de generaciones | Resultado ExAgent |
 |---|---:|---|---:|---:|
@@ -147,20 +150,25 @@ disponibilidad de input GenAI en sync/stream. Se corrigieron esas expectativas
 según el contrato y los atributos observados, sin cambiar biblioteca/guards.
 Logs locales: `.exagent-local/prepublish-20261003/bridge-01..03.log`.
 
-### Alternativas y recomendación para v2
+### Alternativas y decisión para v2
 
 | Alternativa | Ventaja | Coste o pérdida |
 |---|---|---|
 | Sólo ReqLLM | Una instrumentación de cliente con buen detalle de petición y métricas. | Pierde las operaciones, identidad durable, host counters y Models no ReqLLM de ExAgent. No sustituye la observabilidad del framework. |
 | Sólo ExAgent para runs ExAgent | Un span Model por petición, mismo perfil para todos los Models, privacidad/lifecycle propios y aceptación A10 existente. | Mantiene la pequeña proyección Model y no incorpora automáticamente todas las métricas/atributos ReqLLM. |
 | ExAgent para orquestación + ReqLLM como único productor del span de generación | Puede reducir mapping propio y aprovechar detalle/metrics del cliente. | Requiere diseño de identidad, accounting, cancelación, Models custom, privacy y scope; no está implementado ni cualificado. |
+| ExAgent produce el span; adaptador ReqLLM lo enriquece | Conserva ownership y añade datos de cliente usando el mapper/behaviour público stock. ReqLLM standalone conserva sus spans. | Requiere attach host integrado y conserva el mantenimiento TTL del tracking upstream. Opción elegida e implementada. |
 
-**Recomendación:** publicar el perfil actual con **ExAgent como único productor
-de spans para sus ejecuciones**, sin activar además el bridge ReqLLM. Los eventos
-nativos ReqLLM siguen disponibles; la ejecución obtiene datos del Response
-público stock. No hay dos SDKs, conexiones específicas Langfuse/Opik ni tablas de
-precios propias. La guía explicita esta configuración y su control negativo.
-Es una recomendación de ingeniería; no se atribuye al usuario una decisión nueva.
+**Decisión ejecutada:** ExAgent conserva su span Model y el bridge integrado añade
+sólo request_id, response_id/model, server.address/port, max_tokens, stream y
+time_to_first_chunk en segundos, con labels256bytes y tipos/rangos comprobados.
+No exporta eventos/error messages/contenido upstream, no termina aquel span y no
+sobrescribe tokens, cache, uso/coste cualificado o estado del guard ExAgent.
+El perfil GenAI sigue fijado a b5d8440; estos atributos estándar de petición/
+respuesta/timing están en aquella revisión, sin schema URL inventado.
+ReqLLM normaliza y calcula sus propios datos; la proyección de ejecución sigue
+usando el Response/ledger público existente y un pricing callback como máximo.
+No se instala otro SDK, transporte Langfuse/Opik, pricing table o parser.
 
 Delegar sólo la generación es una alternativa razonable si demuestra una mejora
 de mantenimiento o diagnóstico. No basta con borrar el span Model: su estado
@@ -171,13 +179,32 @@ el contexto/tracer host, los IDs, la cualificación del uso, la muerte del worke
 y los Models que no utilizan ReqLLM. Tampoco puede prometer que nuestro redactor
 controle un span de otro productor.
 
-ReqLLM attach es global a eventos de petición y no ofrece una exclusión ExAgent.
-Una aplicación mixta no debe alternar attach/detach alrededor de llamadas
-concurrentes. Un futuro reparto necesita una frontera pública de ownership,
-sin fork/patch ni dependencia de su ETS privado. El mapper público puede valorarse
-para reducir código común, pero su schema/cache/availability no reemplaza el
-perfil cualificado automáticamente. No añadir ahora dos modos permanentes sin
-consumidor, migración y criterio de retirada concretos.
+ReqLLM attach sigue global; el reparto usa su Adapter público y contexto Model
+ephemeral ExAgent propagado por workers. El host hace un único attach integrado,
+sin alternar handlers por llamada. Fuera de aquel contexto delega todos los
+callbacks stock, incluidos child spans y métricas opcionales. NativeAPI sin SDK
+sigue no-op; el tracer/sampler elegido por ExAgent no se sustituye por el default
+de ReqLLM. El host con otro bridge recibe conflicting_req_llm_bridge al attach,
+sin perder su handler. El adapter ReqLLM observado rechaza también handlers
+incompatibles/duplicados antes de IO con observability_conflict. Models que no
+usan ReqLLM no se bloquean; instrumentación arbitraria ajena y cambios de
+handlers en caliente no se cualifican.
+
+El adapter fuerza telemetry payloads:none incluso ante raw global. Content/langfuse
+del bridge sólo afectan a llamadas standalone; el redactor ExAgent sigue siendo
+la frontera del Model observado. El bridge stock todavía almacena in-flight ETS:
+owner death sin terminal deja una entrada y el prune público la retira. La
+integración expone prune_stale_spans(ttl_ms) para mantenimiento periódico host,
+sin acceso al ETS privado ni prometer limpiar aquel estado desde nuestro watcher.
+TTL debe superar las peticiones activas permitidas. Es un límite upstream
+observado, no un span ExAgent abierto ni una garantía de memoria upstream dura.
+
+El test actual incorpora sync/public stream con y sin bridge integrado, llamadas
+standalone sync/stream, concurrencia por barrera, provider stop rechazado por
+ExAgent, sampling/named provider, proyección de atributos adversos, raw global,
+conflictos/no IO, y owner death/prune en ambas superficies. Estos controles
+qualifican la frontera local; los resultados finales quedan en roadmap/CURRENT.
+Los anteriores rojos y el recibo de duplicación mantienen su identidad.
 
 BoundedProcessor/exporter es otra responsabilidad: cambiar el productor de spans
 no elimina la necesidad de cola finita, pérdida observable y lifecycle de

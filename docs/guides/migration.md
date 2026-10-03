@@ -1178,6 +1178,28 @@ DBConnection patch are test-only updates; real Store acceptance stays separate.
 
 ## 8. Optional observability
 
+### One generation owner with ReqLLM
+
+If your host attaches ReqLLM's OTel bridge and also enables ExAgent Model tracing,
+replace that startup attach with `ExAgent.Observability.ReqLLM.attach/1`.
+Its public stock adapter enriches the existing ExAgent span and delegates
+standalone ReqLLM calls; do not register both bridges. Attach refuses a foreign
+bridge without detaching it. An observed ExAgent ReqLLM request with conflicting
+or duplicate stock bridge handlers now fails before provider IO, with
+`RunError.reason = {:model_request_failed, %RequestError{reason:
+{:observability_conflict, :req_llm_bridge}}}`. This explicit configuration error
+replaces silent double generation observations in the unreleased major.
+
+Hosts without a ReqLLM OTel bridge need no change. Generation tokens/costs still
+come from ExAgent's existing qualified ledger, not upstream bridge attributes.
+Provider success does not bypass ExAgent's terminal/argument/output guards.
+ExAgent adapter telemetry is now metadata-only even with a global ReqLLM raw
+capture setting; opt-in content still uses ExAgent's redactor. The integrated
+bridge retains ReqLLM's upstream tracking TTL maintenance requirement; use
+`prune_stale_spans/1` from the host. See [configuration](observability.md#reqllm-and-one-owner-for-request-spans).
+
+### Existing instrumentation and transport boundaries
+
 C6 adds opt-in native OpenTelemetry instrumentation. Existing callers need no
 tracing configuration; enabling it uses `ExAgent.Observability.OpenTelemetry.new/1`
 and the `observability:` option. The application supplies the SDK, exporter and

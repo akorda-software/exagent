@@ -118,33 +118,58 @@ Model-request spans end before after-request hooks and tool execution.
 
 ### ReqLLM and one owner for request spans
 
-For ExAgent executions, use the ExAgent instrumentation above and leave
-`ReqLLM.OpenTelemetry.attach/1,2` unattached. ReqLLM 1.26 emits native `:telemetry`
-events without starting its OTel bridge; ExAgent does not attach that bridge.
-Both libraries use the application's SDK/exporter rather than supplying separate
-Langfuse or Opik transports.
+ExAgent owns generation spans for its observed Model requests. To also use
+ReqLLM's request diagnostics or trace standalone ReqLLM calls, attach the
+integrated bridge **once at application startup**, after configuring the host SDK:
 
-Attaching both bridges observes the same request twice. An offline stock-ReqLLM
-HTTP/SSE integration check demonstrates one HTTP request and one generation span
-with ExAgent alone, versus two nested generation spans with both bridges. Each
-reports two output tokens; summing those observations gives four, while the
-execution result still reports two. ExAgent's budget ledger is unchanged, but
-backend aggregation can double-count. This check does not measure cloud billing.
+```elixir
+:ok = ExAgent.Observability.ReqLLM.attach()
+```
 
-ReqLLM's bridge is useful for applications making standalone ReqLLM calls:
-it includes request attributes, token/cost data and streaming timing. It does not
-observe ExAgent's caller-executed tools, delegation, durable approvals or run
-attempts. ExAgent also traces custom Models independently of ReqLLM. The
-[ownership comparison](../development/backend-evaluation.md#reqllm-and-exagent-instrumentation-ownership)
-explains the alternatives and the boundary a future simplification must preserve.
+This uses ReqLLM 1.26's public adapter behaviour and mapping. During an ExAgent
+Model request, the adapter adds bounded request ID, response ID/model, server
+address/port, max tokens, stream flag and first-chunk time to that existing span.
+It creates no additional generation/tool span and never ends the Model span or
+overwrites its status, accounting, cost or content. Request ID is
+`exagent.req_llm.request_id`; first-chunk time is
+`gen_ai.response.time_to_first_chunk` in **seconds**. Unknown/invalid labels or
+scalars are omitted. Ordinary ReqLLM calls outside that context keep stock spans,
+including native child-span callbacks. Optional ReqLLM metrics use its public
+adapter when the host has the meter APIs; the locked API1.5/SDK1.7 trace profile
+does not supply those APIs, so it does not certify metric export.
 
-A mixed application must choose ownership deliberately. The stock ReqLLM bridge
-attaches globally to ReqLLM request events; it has no built-in ExAgent exclusion.
-Do not detach/reattach around concurrent calls or assume ExAgent's redactor also
-protects attributes produced by another bridge. Native telemetry handlers can
-consume request events without producing another request span; custom metrics
-and their accounting policy remain application-owned. Automatic coexistence of
-both span bridges is not a qualified configuration.
+The native ReqLLM events remain available. Its ExAgent adapter requests
+`telemetry: [payloads: :none]` even if a host enables raw capture globally.
+Integration options `content:` and `langfuse:` apply to standalone calls; the
+ExAgent span keeps its own explicit redactor and allowlist. Both libraries use
+the application's SDK/exporter; neither adds a Langfuse or Opik transport.
+
+Replace an existing `ReqLLM.OpenTelemetry.attach/1,2` with this attach. The
+integrated attach refuses a foreign bridge without detaching it. Observed
+`ExAgent.Models.ReqLLM` requests reject an incompatible or duplicate stock bridge
+with `{:observability_conflict, :req_llm_bridge}` inside RequestError **before
+provider IO**. A Model that does not use ReqLLM is unaffected. Custom Models
+making ReqLLM calls inherit the Model context with the integrated bridge; arbitrary
+third-party instrumentations and runtime handler reconfiguration are outside
+this check. Explicit `observability: false` leaves host tracing to the host.
+
+ReqLLM's own in-flight ETS tracking survives in this integration. A worker death
+without a terminal event can leave an entry; schedule
+`ExAgent.Observability.ReqLLM.prune_stale_spans(ttl_ms)` from the host's maintenance
+process. Choose a TTL longer than allowed live requests and prune periodically.
+Prune removes entries, not spans: ExAgent's watcher closes its own span separately.
+`detach/0` removes only this integrated handler/entries. No global attach/detach
+around concurrent requests or hidden maintenance process is installed.
+
+The original negative control demonstrated two generations/4 output tokens for
+one request/2 actual fixture tokens with independent bridges. The current matrix
+retains one generation/2 tokens with and without integration, once-only pricing,
+concurrent standalone calls, sampling/named tracer, privacy and owner death.
+This is stock-ReqLLM/local HTTP-SSE/native SDK evidence, not cloud billing or new
+Langfuse/Opik UI acceptance. See the
+[ownership comparison](../development/backend-evaluation.md#reqllm-and-exagent-instrumentation-ownership).
+
+### Application-owned process boundaries
 
 For application-owned process boundaries, capture before dispatch and attach in
 the receiving process:

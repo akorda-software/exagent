@@ -4872,6 +4872,55 @@ por tags públicos/claves atom/string y disponibilidad de input conservado; no
 se alteran guards ni fuentes runtime. No es prueba de todos los paths ReqLLM,
 cloud billing o nueva aceptación UI. No repetir FULL/G2/G3/G4 por esta evaluación.
 
+### 8.52. Reparto de instrumentación por contexto con ReqLLM stock (2026-10-03)
+
+**Encargo y problema:** el usuario elige ExAgent como único productor de spans
+en sus ejecuciones y autoriza analizar/implementar una combinación sin solapamiento.
+8.51 demuestra la duplicación explícita. Sólo documentar no activar el bridge
+no resuelve aplicaciones que también hacen llamadas standalone a ReqLLM.
+
+**Decisión:** integración host opt-in `ExAgent.Observability.ReqLLM.attach/1`,
+implementando el behaviour público ReqLLM.OpenTelemetry.Adapter. Dentro de un
+contexto Model ExAgent conserva aquel span, añade sólo atributos de petición/
+respuesta y timing permitidos, y no crea/finaliza otro span ni cambia uso/coste/
+estado/contenido. Fuera delega al OTelAdapter público stock, incluidos tools y
+métricas opcionales. El host sigue controlando attach, SDK, exporter y credenciales.
+El contexto ephemeral propaga ownership a workers sync/stream; no va a Store.
+
+**Alternativas:** detach/reattach global introduce carreras y pérdida de trazas;
+filtrar spans al exportar ya ha creado datos/estado redundantes; reemplazar el
+span Model pierde aceptación/guards y Models custom. No modificar ReqLLM, usar
+su ETS privado, instalar un SDK o mantener dos modos de accounting. Si se detecta
+un bridge ReqLLM incompatible en el adapter ReqLLM observado, rechazar antes de IO con
+observability_conflict en vez de ejecutar y duplicar silenciosamente.
+
+**Impacto y migración:** cambio del contrato de configuración para la
+major pendiente; hosts con ambos bridges deben sustituir ReqLLM attach por el
+attach integrado. Hosts sin el bridge siguen igual. Los payloads de telemetría
+ReqLLM del adapter se fuerzan a none incluso ante configuración global raw;
+contenido opt-in conserva el redactor ExAgent. Accounting/schemas/snapshots no
+cambian. La configuración de handlers es de arranque, no una mutación concurrente
+durante peticiones. Guards conocidos no pueden controlar instrumentaciones
+arbitrarias de terceros. NativeAPI sin SDK sigue no-op.
+
+El tracking ETS pertenece al bridge stock y conserva su limitación: una muerte
+sin terminal requiere prune público periódico propiedad del host. No prometer
+que nuestro watcher elimine esa entrada upstream; sí cierra el span ExAgent.
+Métricas sólo si el host dispone de las APIs que comprueba ReqLLM; no afirmar
+aceptación de un exporter de métricas desde una prueba de spans.
+
+**Verificación local:** 21 casos stock/local HTTP-SSE + SDK pasan: sync/stream sin y
+con integración, standalone sync/stream, concurrencia por barrera, conflicto antes
+de IO, uso/pricing único, estado de rechazo ExAgent, raw global, projection adversa,
+sampler/named provider y owner death/prune en ambas superficies. Estos 21 están
+incluidos en 146 focales de observabilidad/ReqLLM/timeout/stream/host, sin fallos
+en Elixir 1.20/OTP 29 y 1.18/OTP 28 con fuentes idénticas. La rutina local 1.20
+pasa sus nueve fases y la suite completa: 2198 pasan, cero fallos, 28 exclusiones.
+Cuatro consumidores limpios pasan 28 contratos; strictdeps conserva warnings
+stock TOML/WebSockex/gproc. No inferir API/UI o métricas nuevas del A10 anterior.
+El [recibo](https://github.com/akorda-software/exagent/blob/codex/v2-candidate-029/docs/orchestration/2026-10-01-v2-codex/OBSERVABILITY-COMBINATION.md)
+conserva identidad de las olas, fuentes y límites.
+
 ## 9. Estado actual y no-goals
 
 **Hecho (núcleo funcional):** loop, backend ReqLLM stock cualificado, Model custom/Test,

@@ -109,13 +109,20 @@ exporter and ExAgent bridge are unchanged, with local tests exercised by this ru
   claiming support for it. These are future qualification goals, not silently
   implemented guarantees.
 
-The October 3 [instrumentation ownership assessment](development/backend-evaluation.md#reqllm-and-exagent-instrumentation-ownership)
-recommends ExAgent as the single span producer for ExAgent runs. ReqLLM's OTel
-bridge is explicitly attached by the application, not automatically enabled by
-ExAgent. Four stock-ReqLLM/local HTTP-SSE cases demonstrate the default and the
-double-counting risk if both bridges are attached. Orchestration, approval,
-accounting and lifecycle are not replaced by request telemetry. This is new local
-integration evidence, not a fresh full suite, cloud validation or publication.
+The October 3 [instrumentation ownership implementation](development/backend-evaluation.md#reqllm-and-exagent-instrumentation-ownership)
+keeps ExAgent as generation owner during its observed Model requests. The
+host opt-in `ExAgent.Observability.ReqLLM.attach/1` uses ReqLLM's public adapter to
+enrich that span and preserve standalone tracing. Incompatible/duplicate bridges
+reject before provider IO in the ExAgent ReqLLM adapter; no foreign handler is
+removed. Twenty-one bridge cases within 146 integrated cases pass on both
+Elixir 1.18/OTP 28 and 1.20/OTP 29 with identical runtime sources,
+including concurrency, sampling/named tracer, once-only pricing, raw-capture
+privacy and owner death/public prune. The complete local 1.20 routine passes all
+nine phases: 2,198 offline tests pass, zero fail and 28 opt-in cases are excluded.
+Four clean package graphs pass 28 contracts; strict dependency diagnostics remain
+red for stock TOML/WebSockex/gproc. No new cloud/UI or metrics export acceptance
+is inferred; equal prior Langfuse/Opik A10 evidence remains. See the
+[combination receipt](https://github.com/akorda-software/exagent/blob/codex/v2-candidate-029/docs/orchestration/2026-10-01-v2-codex/OBSERVABILITY-COMBINATION.md).
 
 Routine verification now runs locally before commit/push. The candidate branch's
 six-job CI workflow is manual; `main` adopts that change when the PR is integrated.

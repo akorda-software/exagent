@@ -231,6 +231,7 @@ defmodule ExAgent.MixProject do
         "Capabilities & Telemetry": [ExAgent.Capability, ExAgent.Capabilities, ExAgent.Telemetry],
         Observability: [
           ExAgent.Observability.OpenTelemetry,
+          ExAgent.Observability.ReqLLM,
           ExAgent.Observability.BoundedProcessor
         ],
         Exceptions: [

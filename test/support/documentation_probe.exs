@@ -561,7 +561,13 @@ defmodule DocumentationProbe do
       refute inspect(attrs) =~ "fixture output"
       clean!(diagnostics)
 
-      context = block("docs/guides/observability.md", "## 2. Enable instrumentation", 2)
+      integration =
+        block("docs/guides/observability.md", "### ReqLLM and one owner for request spans")
+
+      {:ok, _, diagnostics} = evaluate(integration)
+      clean!(diagnostics)
+
+      context = block("docs/guides/observability.md", "### Application-owned process boundaries")
       parent = :otel_tracer.start_span(%{}, tracer, "fixture parent", %{})
       token = :otel_ctx.attach(:otel_tracer.set_current_span(%{}, parent))
 
@@ -580,6 +586,7 @@ defmodule DocumentationProbe do
       assert :opentelemetry.get_tracer() == global
       clean!(diagnostics)
     after
+      ExAgent.Observability.ReqLLM.detach()
       Supervisor.stop(supervisor)
       GenServer.stop(storage)
     end

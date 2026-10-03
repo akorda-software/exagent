@@ -6,14 +6,16 @@ El usuario autorizó commit/push/PR; sin bump, tag, merge ni publicación en Hex
 ReqLLM oficial stock, R1.2 aceptado, C7 incluido, guards intactos.
 Una revisión máxima por objetivo; sin re-review ni reruns rutinarios del padre.
 
-## Ownership de observabilidad — evaluación cerrada
+## Ownership de observabilidad — combinación implementada y verificada
 
-ReqLLM1.26 bridge opt-in; ExAgent no lo activa.4controles SDK/HTTP-SSE pasan:
-1request/1generación por defecto; ambos bridges1request/2generaciones,output2→4
-al sumar observaciones, ledger intacto. Se recomienda productor ExAgent para sus
-runs; reparto parcial valorado/no implementado.32focales0; docs/enlaces/build/
-isolation0. Runtime/lock intactos, sin FULL/cloud/re-review/bump/publicación.
-[OBSERVABILITY-OWNERSHIP](OBSERVABILITY-OWNERSHIP.md) conserva análisis y evidencia.
+Usuario elige ExAgent productor y autoriza ejecutar reparto; integración host
+opt-in por Adapter público ReqLLM, metadata/timing sobre Model span existente,
+standalone stock. Conflicto antes IO/metadata-only/pricing1;21casos dentro de146
+focales0 en ambos runtimes, fuentes idénticas. bin/check9fases0/FULL1202198/0/28;
+4grafos/28contratos PASS, strictdeps rojo. TTL upstream por prune host; no métricas
+en perfil actual. No lock/bump/Hex/cloud/consumer/re-review nuevos.
+[OBSERVABILITY-OWNERSHIP](OBSERVABILITY-OWNERSHIP.md) conserva negativo37fed28;
+[OBSERVABILITY-COMBINATION](OBSERVABILITY-COMBINATION.md) conserva olas y límites.
 
 ## E2E complejos — cuatro nuevos escenarios cerrados
 

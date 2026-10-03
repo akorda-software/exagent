@@ -80,6 +80,7 @@ defmodule ExAgent.Observability.OpenTelemetry do
 
   @type t :: %__MODULE__{}
   @key {__MODULE__, :configuration}
+  @model_key {__MODULE__, :model_span}
   @logger_keys [:otel_trace_id, :otel_span_id, :otel_trace_flags]
   @profile "exagent.gen_ai.v1"
   @gen_ai_revision "b5d8440f6f126738fd50f927752cd669772c517b"
@@ -87,7 +88,7 @@ defmodule ExAgent.Observability.OpenTelemetry do
 
   defmodule Context do
     @moduledoc false
-    defstruct [:native, :config]
+    defstruct [:native, :config, :model_span]
   end
 
   defmodule Operation do
@@ -118,7 +119,8 @@ defmodule ExAgent.Observability.OpenTelemetry do
       safely(:context, nil, fn ->
         %Context{
           native: :otel_tracer.set_current_span(%{}, :otel_tracer.current_span_ctx()),
-          config: Process.get(@key)
+          config: Process.get(@key),
+          model_span: Process.get(@model_key)
         }
       end)
     end
@@ -127,8 +129,9 @@ defmodule ExAgent.Observability.OpenTelemetry do
   @doc "Run a function under a captured context, restoring the caller even on exceptions."
   def with_context(nil, fun), do: fun.()
 
-  def with_context(%Context{native: native, config: config}, fun) do
+  def with_context(%Context{native: native, config: config, model_span: model_span}, fun) do
     previous = Process.get(@key)
+    previous_model = Process.get(@model_key)
     logger = :logger.get_process_metadata()
     # Native attach updates metadata but does not remove old IDs when the new
     # context has no span. Clear only our keys before attaching, not just on exit.
@@ -136,6 +139,7 @@ defmodule ExAgent.Observability.OpenTelemetry do
     token = safely(:context, :unavailable, fn -> :otel_ctx.attach(native) end)
     if token == :unavailable, do: restore_logger(logger)
     Process.put(@key, config)
+    Process.put(@model_key, model_span)
 
     try do
       fun.()
@@ -143,9 +147,16 @@ defmodule ExAgent.Observability.OpenTelemetry do
       if token != :unavailable, do: safely(:context, nil, fn -> :otel_ctx.detach(token) end)
       if previous == nil, do: Process.delete(@key), else: Process.put(@key, previous)
 
+      if previous_model == nil,
+        do: Process.delete(@model_key),
+        else: Process.put(@model_key, previous_model)
+
       restore_logger(logger)
     end
   end
+
+  @doc false
+  def current_model_span, do: Process.get(@model_key)
 
   defp restore_logger(previous) do
     current =
@@ -199,7 +210,12 @@ defmodule ExAgent.Observability.OpenTelemetry do
             attributes: compact(Map.merge(base_attributes(kind), attributes))
           })
 
-        context = %Context{native: :otel_tracer.set_current_span(%{}, span), config: config}
+        context = %Context{
+          native: :otel_tracer.set_current_span(%{}, span),
+          config: config,
+          model_span: if(kind == :model, do: span)
+        }
+
         owner = self()
 
         watcher =
