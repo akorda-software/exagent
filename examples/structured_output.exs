@@ -1,14 +1,14 @@
-# Live structured-output test against Z.AI (Anthropic format) with glm-4.5-air.
+# Live Ecto-tool output example on an explicit non-reasoning OpenAI Chat profile.
 #
-#   set -a && . ./.env && set +a && mix run examples/structured_output.exs
+#   mix run examples/structured_output.exs
 #
 # The model is forced to call the `final_result` output tool whose args match a
 # JSON Schema derived from an Ecto schema; we validate them with a changeset.
 
-key = System.get_env("ZAI_API_KEY") || System.get_env("ANTHROPIC_AUTH_TOKEN")
+key = System.get_env("OPENAI_API_KEY")
 
 unless key do
-  IO.puts("ZAI_API_KEY not set — skipping.")
+  IO.puts("OPENAI_API_KEY not set — skipping.")
   System.halt(0)
 end
 
@@ -33,10 +33,15 @@ end
 alias ExAgent
 
 model =
-  ExAgent.Models.Anthropic.new(
-    model: System.get_env("ZAI_MODEL", "glm-4.5-air"),
-    auth_token: key,
-    base_url: "https://api.z.ai/api/anthropic"
+  ExAgent.Models.ReqLLM.new(
+    model: %{
+      provider: :openai,
+      id: "gpt-4o-mini",
+      capabilities: %{tools: %{enabled: true}, reasoning: %{enabled: false}},
+      extra: %{wire: %{protocol: "openai_chat"}}
+    },
+    api_key: key,
+    tool_profile: :chat_tools_v1
   )
 
 agent =
@@ -44,7 +49,7 @@ agent =
     model: model,
     output: Extract,
     instructions: "Extract structured data from the user's message.",
-    model_settings: [max_tokens: 512, temperature: 0]
+    model_settings: [max_tokens: 512, temperature: 0.0]
   )
 
 {:ok, result} =

@@ -5,7 +5,15 @@ defmodule ExAgent.Server.SnapshotTest do
   alias ExAgent.Server.Snapshot
 
   # Independently authored data exercises every conversation part in this fixture.
-  defp sample_history, do: ExAgent.Test.TestingAuditRuntime.history()
+  defp sample_history do
+    Enum.map(ExAgent.Test.TestingAuditRuntime.history(), fn
+      %ExAgent.Message.Response{usage: %Usage{} = usage} = response ->
+        %{response | usage: Usage.qualify(usage)}
+
+      message ->
+        message
+    end)
+  end
 
   describe "new/1" do
     test "builds a snapshot with serialized history and mapped usage" do
@@ -24,7 +32,15 @@ defmodule ExAgent.Server.SnapshotTest do
       # message_history is a JSON binary (the serialized conversation)
       assert is_binary(snap.message_history)
       assert String.contains?(snap.message_history, "be concise")
-      assert snap.usage == %{"input_tokens" => 3, "output_tokens" => 4, "details" => %{}}
+
+      assert %{
+               "input_tokens" => 3,
+               "output_tokens" => 4,
+               "details" => %{},
+               "accounting" => %{"version" => 1, "quality" => "reported"}
+             } = snap.usage
+
+      assert snap.version == 4
     end
   end
 
@@ -44,7 +60,14 @@ defmodule ExAgent.Server.SnapshotTest do
       assert {:ok, %Snapshot{} = restored} = Snapshot.deserialize(binary)
 
       assert restored.agent_id == "rt"
-      assert restored.usage == %{"input_tokens" => 5, "output_tokens" => 6, "details" => %{}}
+
+      assert %{
+               "input_tokens" => 5,
+               "output_tokens" => 6,
+               "details" => %{},
+               "accounting" => %{"quality" => "reported"}
+             } = restored.usage
+
       assert restored.metadata == %{"k" => "v"}
       assert restored == %{snap | metadata: %{"k" => "v"}}
       assert {:ok, ^history} = Snapshot.messages(restored)
@@ -72,7 +95,7 @@ defmodule ExAgent.Server.SnapshotTest do
 
       {:ok, restored} = snap |> Snapshot.serialize() |> Snapshot.deserialize()
 
-      assert Snapshot.usage_struct(restored) == usage
+      assert Snapshot.usage_struct(restored) == Usage.qualify(usage)
     end
 
     test "messages/1 on an empty snapshot yields []" do
@@ -166,7 +189,7 @@ defmodule ExAgent.Server.SnapshotTest do
       assert tool_return.content == data
     end
 
-    test "valid v1 usage/history migrates to v2 without losing details" do
+    test "valid v1 usage/history migrates to v4 with unknown quality and preserved subtotals" do
       json =
         Jason.encode!(%{
           version: 1,
@@ -175,8 +198,11 @@ defmodule ExAgent.Server.SnapshotTest do
           usage: %{input_tokens: 4, output_tokens: 2, details: %{cached_tokens: 3}}
         })
 
-      assert {:ok, %Snapshot{version: 2, revision: 0} = snapshot} = Snapshot.deserialize(json)
+      assert {:ok, %Snapshot{version: 4, revision: 0} = snapshot} = Snapshot.deserialize(json)
       assert Snapshot.usage_struct(snapshot).details == %{"cached_tokens" => 3}
+      assert snapshot.usage["input_tokens"] == 4
+      assert snapshot.usage["accounting"]["quality"] == "unknown"
+      assert snapshot.usage["accounting"]["source"] == "legacy_snapshot"
       assert {:error, :snapshot_id_mismatch} = Snapshot.validate(snapshot, "other")
     end
 

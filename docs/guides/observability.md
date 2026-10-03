@@ -4,12 +4,21 @@ ExAgent instruments operations with native Erlang/Elixir OpenTelemetry. The host
 application owns the SDK, sampler, resource, processors, exporter and credentials.
 No tracing service is required for the ordinary core, Server or Session.
 
+The default tracer is resolved from the live public provider for each span, so
+restarting the application-owned SDK does not retain the previous provider's
+tracer. If the host supplies `tracer:` explicitly, it also owns replacing that
+handle when recreating its provider.
+
 This guide describes the current optional tracing implementation. The
 [verification guide](../development/verification.md) provides runnable checks;
 [project status](../status.md) records accepted evidence and remaining limits.
-Langfuse and Opik are candidates; neither is a selected or verified reference
-backend yet. The next comparison is defined in the
-[backend acceptance plan](../development/backend-evaluation.md).
+Langfuse and Opik have **equal native/API/UI acceptance** for the finite A10
+scenario:33 observations,667 attributes and12 model usages by API, plus the same
+12 UI cases/248 attributes. Content is disabled, so Input `null` and Output
+`undefined` in a backend preview are expected; inspect correlation, status, usage,
+quality and provenance in the attributes. This acceptance does not certify cloud
+availability, retention or billing. See the
+[backend acceptance record](../development/backend-evaluation.md).
 
 ## 1. Application setup
 
@@ -18,7 +27,7 @@ An application choosing OTLP can add these dependencies to its own `mix.exs`:
 ```elixir
 {:opentelemetry_api, "~> 1.5.0"},
 {:opentelemetry, "~> 1.7.0"},
-{:opentelemetry_exporter, "~> 1.10.0"}
+{:opentelemetry_exporter, "~> 1.11.0"}
 ```
 
 ExAgent declares API and SDK as optional consumer dependencies; the SDK is marked
@@ -30,11 +39,20 @@ host application. API present without an SDK uses the native no-op tracer.
 Configure one processor route before starting the SDK, for example in the host's
 `config/runtime.exs`:
 
-**Native HTTP exporter qualification:** the recipe below is verified for local
-wire transport with exporter1.10.0, but its long-lived HTTP lifecycle is not
-accepted. Timeout/shutdown can leave native profiles, atoms and outstanding TCP
-requests after ExAgent's own processes close. Read section7 before choosing this
-route for an application; a callback deadline is not a network cancellation.
+**Transport qualification:** the direct stock HTTP configuration below is an
+installation example. Its historical exporter1.10 wire checks do not accept a
+long-lived HTTP lifecycle; choosing release1.11 does not itself close that gate.
+Timeout/shutdown can leave native profiles, atoms and outstanding TCP requests
+after ExAgent's own processes close. Read section7 before choosing this route;
+a callback deadline is not a network cancellation.
+
+The optional [isolated callback](../development/otlp-isolated-transport.md) and
+[application-owned Collector route](../development/otlp-collector-transport.md)
+qualify a different finite profile with official exporter1.11/Collector0.162:
+owned process groups, deadlines, partial loss evidence and repeated cleanup.
+Those recipes ship in `examples/otlp_transport`; the application supplies the
+binary/configuration and owns their startup. Their synthetic acceptance does not
+substitute for backend API/UI or guarantee high-throughput operation.
 
 ```elixir
 import Config
@@ -103,6 +121,103 @@ Server owns a run span through its checkpoint; its core worker shares that span.
 There is no span per token and no span covering a Server's entire lifetime.
 Model-request spans end before after-request hooks and tool execution.
 
+### ReqLLM and one owner for request spans
+
+ExAgent owns generation spans for its observed Model requests. To also use
+ReqLLM's request diagnostics or trace standalone ReqLLM calls, attach the
+integrated bridge **once at application startup**, after configuring the host SDK:
+
+```elixir
+:ok = ExAgent.Observability.ReqLLM.attach()
+```
+
+This uses ReqLLM 1.26's public adapter behaviour and mapping. During an ExAgent
+Model request, the adapter adds bounded request ID, response ID/model, server
+address/port, max tokens, stream flag and first-chunk time to that existing span.
+It creates no additional generation/tool span and never ends the Model span or
+overwrites its status, accounting, cost or content. Request ID is
+`exagent.req_llm.request_id`; first-chunk time is
+`gen_ai.response.time_to_first_chunk` in **seconds**. Unknown/invalid labels or
+scalars are omitted. Ordinary ReqLLM calls outside that context keep stock spans,
+including native child-span callbacks. Optional ReqLLM metrics use its public
+adapter with the published experimental0.6 metric APIs. Metrics default to off;
+the API1.5/SDK1.7 trace-only profile does not supply a metric SDK.
+
+### Optional metrics
+
+The host adds `opentelemetry_api_experimental ~>0.6.0` and
+`opentelemetry_experimental ~>0.6.0`, configures `:readers` on the latter and
+starts that SDK. The integrated bridge can then enable:
+
+```elixir
+:ok = ExAgent.Observability.ReqLLM.attach(metrics: [models: ["my-fixed-model"]])
+```
+
+Supply1–32 unique model labels. All other models collapse to `"other"`. The four
+instruments are operation duration, token usage, time to first chunk and time per
+output chunk. Durations use seconds, tokens `{token}`; token points carry normalized
+accounting quality. The only other dimensions are input/output and fixed error.
+Response models, request IDs, endpoints and content are excluded. These choices
+bound series dimensions; they do not bound the SDK heap or exporter response.
+
+The host owns views, aggregation temporality, reader/exporter and their lifecycle.
+Use a metric-capable destination; the Langfuse/Opik trace ingestion URL and A10
+trace acceptance do not qualify metric ingestion. Optional API availability is
+not a running reader: absent/stopped SDKs or failures drop measurements. No
+instrument cache is retained across SDK restarts. ReqLLM's normalized zero values
+remain normalized zeros, not proof of observed zero consumption. Configure one
+integrated bridge; adding a separate listener would count requests twice.
+
+The native ReqLLM events remain available. Its ExAgent adapter requests
+`telemetry: [payloads: :none]` even if a host enables raw capture globally.
+Integration options `content:` and `langfuse:` apply to standalone calls; the
+ExAgent span keeps its own explicit redactor and allowlist. Both libraries use
+the application's SDK/exporter; neither adds a Langfuse or Opik transport.
+
+Replace an existing `ReqLLM.OpenTelemetry.attach/1,2` with this attach. The
+integrated attach refuses a foreign bridge without detaching it. Observed
+`ExAgent.Models.ReqLLM` requests reject an incompatible or duplicate stock bridge
+with `{:observability_conflict, :req_llm_bridge}` inside RequestError **before
+provider IO**. A Model that does not use ReqLLM is unaffected. Custom Models
+making ReqLLM calls inherit the Model context with the integrated bridge; arbitrary
+third-party instrumentations and runtime handler reconfiguration are outside
+this check. Explicit `observability: false` leaves host tracing to the host.
+
+ReqLLM's own in-flight ETS tracking survives in this integration. A worker death
+without a terminal event can leave an entry. Add this optional child to the
+application's supervision tree after configuring its integrated bridge:
+
+```elixir
+{ExAgent.Observability.ReqLLM.Maintenance,
+ ttl_ms: 120_000, interval_ms: 30_000}
+```
+
+Both durations are explicit. **The TTL must exceed every allowed live ReqLLM
+request**, including standalone calls, streaming and retries. Cleanup uses age,
+not process liveness; a TTL that is too short can remove active tracking and lose
+terminal diagnostics. If any permitted request can run indefinitely, no finite TTL
+satisfies this precondition: bound those requests before enabling maintenance.
+The worker does not set request deadlines. It has one non-overlapping timer,
+stays dormant without the integrated handler, and exposes
+numeric generation-local counters through
+`ExAgent.Observability.ReqLLM.Maintenance.stats/0`. It does not
+attach/detach bridges or start an SDK. An application with its own maintenance job
+can continue calling `ExAgent.Observability.ReqLLM.prune_stale_spans(ttl_ms)`.
+Prune removes entries, not spans: ExAgent's watcher closes its own span separately.
+`detach/0` removes only this integrated handler/entries. No maintenance process is
+installed automatically. Request admission and total upstream table size remain
+host-owned; a periodic scan is not a hard memory bound.
+
+The original negative control demonstrated two generations/4 output tokens for
+one request/2 actual fixture tokens with independent bridges. The current matrix
+retains one generation/2 tokens with and without integration, once-only pricing,
+concurrent standalone calls, sampling/named tracer, privacy and owner death.
+This is stock-ReqLLM/local HTTP-SSE/native SDK evidence, not cloud billing or new
+Langfuse/Opik UI acceptance. See the
+[ownership comparison](../development/backend-evaluation.md#reqllm-and-exagent-instrumentation-ownership).
+
+### Application-owned process boundaries
+
 For application-owned process boundaries, capture before dispatch and attach in
 the receiving process:
 
@@ -122,6 +237,23 @@ enumeration unless supplied an explicit `trace_context:`. Capture contains span
 context and instrumentation configuration, excluding arbitrary context/baggage.
 Handles are ephemeral runtime values, not snapshot or JSON data. Attachment
 restores prior trace context and owned Logger trace keys.
+
+### Durable pause and attempt identity
+
+A confirmed durable pause closes the run span and its watcher with
+`exagent.status=paused`, without an OTel error. Resume creates another attempt/span
+under the same lifetime `run_id` and continuation `record_id`. Use
+`exagent.attempt_id` to distinguish attempts; a paused attempt is not a completed
+durable run. Approve/deny/recover administrative operations do not gain invented
+spans from this result projection.
+
+`exagent.continuation.*` exports only `version`, `id`, `record_id`, `run_id`,
+`revision` and optional `attempt_id` from a validated public reference. It must be
+a plain map without a `__struct__` marker and with integer version exactly1.
+IDs must satisfy existing label validation (UTF-8, permitted alphabet, at most256
+bytes); version/revision are integers. Invalid references are omitted completely,
+without losing independently valid run/attempt IDs. Actors, tokens, stored records,
+payloads and extra fields are not traversed or exported.
 
 ## 3. Privacy before export
 
@@ -167,21 +299,34 @@ It is an explicit subset, not full semantic/UI compatibility. That revision has
 no published schema URL; ExAgent does not invent one.
 
 - `gen_ai.usage.*` is emitted only for model requests. Cache read/write and
-  reasoning tokens are subsets of input/output, not additional billable totals.
+  reasoning dimensions are not added to totals without declared semantics.
   Reasoning detail in this profile is `exagent.usage.reasoning_tokens`.
 - Native Anthropic input excludes cache: the generation projection adds cache
   read/write to obtain GenAI's inclusive input. OpenAI-compatible/Test inputs are
   already inclusive. Run aggregates retain the ledger's provider-native semantics.
   For custom models with unknown input semantics, the GenAI input total is omitted;
-  `exagent.usage.reported_input_tokens` preserves the observed value and
+  `exagent.usage.reported_input_tokens` preserves the Model-reported value and
   `exagent.usage.input_tokens_semantics` is `provider_reported`.
 - The current cache-write key is `gen_ai.usage.cache_write.input_tokens`.
   Older backends may expect a different mapping; verify their actual interpretation.
 - Run usage is an inclusive subtree aggregate under `exagent.usage.*`. Do not add
   root, child and generation totals together. Keeping run aggregates out of the
   GenAI namespace is a deliberate profile choice to avoid that ambiguity.
+- Run request/tool counts and usage are cumulative lifetime snapshots, not deltas
+  per attempt. Do not sum snapshots across pause/resume. Host counts measure
+  admissions, not successful effects: the tested pause has1 request/1 tool admission
+  and zero effects; after resume it has2/1 and one effect. Keep these exact host
+  counters distinct from normalized/reported tokens and estimated costs.
 - Estimated costs reuse execution accounting in cents, including fractions and
   known/unknown status. Instrumentation does not call a second pricing function.
+- R1.5 adds allowlisted `exagent.usage.accounting_source`, `quality`,
+  `provider_presence` and input/output/cache_read/cache_write/reasoning availability
+  labels. ReqLLM public numbers use normalized quality even at zero, with unknown
+  provider presence. Their input value is `exagent.usage.normalized_input_tokens`,
+  not reported_input_tokens; GenAI inclusive input requires known semantics and
+  available cache dimensions when exclusive. Output does not add a reasoning subset.
+  `exagent.cost.quality` is estimated, with source/availability and a partial
+  known_subtotal_cents when present. Complete coverage never implies an audited bill.
 - Missing usage is not zero; cancellation cannot reconstruct unreported usage.
   A sampled or lossy trace is not an authoritative cost ledger.
 
@@ -205,6 +350,15 @@ than queuing indefinitely. Quantity of spans is not a byte bound on arbitrary
 application attributes or exporter allocations; SDK storage for active spans is
 another boundary. Slots do not promise FIFO ordering. An exporter timeout/error drops
 its batch without implicit retry; cancellation does not imply remote rollback.
+
+`max_exporter_restarts: n` limits automatic worker replacements per processor
+instance. Zero permits only the initial worker; `:infinity` keeps the previous
+default. At exhaustion the processor stays alive with status `:unavailable`,
+discards queued spans and drops further admission. Counters `exporter_restarts`
+and `restart_limit_reached` make this visible; completed error callbacks do not
+spend the restart budget. Application/SDK restart resets it. Choose a finite
+budget when repeated initialization can retain exporter-owned resources. This
+does not reclaim native HTTP sockets/profiles or make that lifecycle accepted.
 
 `BoundedProcessor.stats(:exagent_export)` exposes local scalar counters. Its
 `force_flush/1` is a coalesced asynchronous request, **not a delivery ACK**. A
@@ -253,8 +407,10 @@ by changing an endpoint. Their integrations belong outside the critical run path
 
 ## 7. Native OTLP HTTP: measured local contract and limits
 
-N01–N03 add the real `opentelemetry_exporter`1.10.0 as a **test-only** dependency.
-Four isolated-VM tests use SDK1.7/API1.5, a controller-gated receiver bound to
+N01–N03 use the real `opentelemetry_exporter`1.11.0 as a **test-only** dependency.
+The [dependency review](../development/dependencies.md) records its upgrade from
+1.10.0; historical receipts retain their original versions and observations.
+Five isolated-VM tests use SDK1.7/API1.5, a controller-gated receiver bound to
 127.0.0.1 on a dynamic port, and the exporter's official protobuf decoder. They
 inspect POST, full/generic path mapping, content type, resource/scope, nonzero
 trace/span/parent IDs, operation attributes and usage. A two-request run with one
@@ -284,20 +440,21 @@ calls, two effects, two traces and two HTTP export requests. After both batches:
 | Response held beyond processor deadline | 8 | 4 | 0 | 4 |
 | 200 with protobuf `rejected_spans=4` | 8 | 8 | 0 | 0 |
 
-Exporter1.10.0 ignores the successful response body, including `partial_success`.
+Exporter1.11.0 still ignores the successful response body, including `partial_success`.
 Thus **`exported` is successful-callback count, not remote accepted-span count**.
 A late HTTP success does not undo a timed-out batch; another flush does not replay
 effects/batches. The test does not certify every upstream redirect/retry variant.
 Native failure logs can print a response body; use synthetic responses in tests
 and assess third-party exporter logging separately from ExAgent's projections.
 
-### Boolean type fidelity is a known upstream defect
+### Boolean type fidelity is corrected in exporter 1.11
 
-The native SDK retains boolean span/resource attributes. Exporter1.10.0 handles
-atoms before booleans and serializes true/false as protobuf strings. A direct
-native-export control reproduces this independently of ExAgent, alongside correctly
-typed string/integer controls. No vendor patch or false assertion of type fidelity
-is included. Carry this loss into destination/profile acceptance.
+The native SDK retains boolean span/resource attributes. Historical exporter1.10.0
+handled atoms before booleans and serialized true/false as protobuf strings.
+Published1.11.0 corrects this upstream. The direct native-export control now requires
+protobuf `bool_value` for true/false and the resource boolean, alongside exact
+string/integer controls. Composed probes require native boolean compaction and
+checkpoint-retry attributes. No vendor patch is included.
 
 ### Owned-process cleanup is distinct from HTTP cleanup
 
@@ -325,8 +482,21 @@ General long-lived native HTTP cleanup remains gated on an upstream ownership/
 cancellation/lifecycle fix, or an independently owned disposable exporter VM
 boundary with its own acceptance. Other transports/exporters require separate
 tests. ExAgent does not inspect private profile names, close shared inets services,
-or implement a second OTLP client to hide this limitation. Platform API/UI
-comparison and production-like acceptance remain open.
+or implement a second OTLP client to hide this limitation. This native lifecycle
+experiment does not qualify a backend API/UI. The separate Langfuse/Opik A10
+receipts and their finite acceptance are recorded in [status](../status.md).
+
+The new restart-budget control uses `max_exporter_restarts: 0` with exporter1.11.
+After one held HTTP request times out, the worker dies, the processor becomes
+unavailable, and three later admissions are dropped. Exactly one native profile
+is created; no replacement POST/profile appears. The original socket survives,
+so this is a bound on automatic recreation per instance, not a cleanup fix.
+The probe cancels its exclusively owned request and removes its profile only
+inside that disposable VM. Existing unlimited-restart negative controls remain.
+See [known limits](../development/known-limits.md) for the upstream follow-up and
+the separate metrics integration described above. The application-owned HTTP VM
+recipe now closes its complete transport lifetime; the direct stock route retains
+this diagnostic. See [HTTP extension](../development/otlp-isolated-transport.md).
 
 ### Composed scenario for later platform comparison
 
@@ -334,7 +504,8 @@ comparison and production-like acceptance remain open.
 scenarios with68 spans in11 loopback POSTs. They compose parallel tools/delegation,
 corrective retry, five stream deltas, compaction, failed checkpoint and save-only
 retry; compare identical tracing-off/on ledgers (4 requests,43/8 tokens,0.51 cents,
-10 estimator invocations); and inspect generation usage as protobuf integer tags.
+5 actual-report estimator invocations, with synthetic-zero preflight probes removed
+in R1.5); and inspect generation usage as protobuf integer tags.
 Parent/subtree totals remain separate from generation sums.
 
 Two queued callers retain separate trace IDs and parent contexts. Cancellation

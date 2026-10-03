@@ -1,7 +1,7 @@
 defmodule ExAgent.Tool.ValidationVocabulary do
   @moduledoc false
 
-  # JSV 0.22 still counts graphemes and distinguishes integer/float map keys.
+  # JSV 0.25 still counts graphemes and distinguishes integer/float map keys.
   # Override only these three keywords through its vocabulary extension point.
   # Retire this adapter when upstream passes the corresponding Tool regressions.
   alias JSV.Vocabulary.V202012.Validation, as: Upstream

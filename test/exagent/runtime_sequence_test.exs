@@ -54,6 +54,8 @@ defmodule ExAgent.RuntimeSequenceTest do
   defmodule EffectModel do
     @behaviour ExAgent.Model
     defstruct [:journal]
+    # Implements a tool/return/text roundtrip, observed by the external journal.
+    def profile(_), do: %ExAgent.ModelProfile{supports_tools: true}
 
     def request(model, messages, _, _) do
       parts = Message.parts(messages)

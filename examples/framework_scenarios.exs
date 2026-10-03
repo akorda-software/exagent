@@ -310,6 +310,7 @@ defmodule ExAgent.FrameworkScenarios do
 
   def effect_eval do
     counter = counter()
+    pricing = :ets.new(__MODULE__, [:set, :public])
     saves = :atomics.new(1, signed: false)
     table = :ets.new(__MODULE__, [:set, :public])
     receipt = :ets.new(__MODULE__, [:set, :public])
@@ -351,8 +352,9 @@ defmodule ExAgent.FrameworkScenarios do
     {:ok, server} = Server.start_link(agent: agent, agent_id: id, store: store)
 
     try do
-      estimator = fn usage ->
+      estimator = fn model, usage ->
         increment(counter, 5)
+        :ets.insert(pricing, {make_ref(), model.index, usage.input_tokens, usage.output_tokens})
         (usage.input_tokens + usage.output_tokens) / 100
       end
 
@@ -373,6 +375,20 @@ defmodule ExAgent.FrameworkScenarios do
         Server.start_link(agent: ExAgent.new(model: %TestModel{}), agent_id: id, store: store)
 
       try do
+        # Two successful root responses are priced once; the three successful
+        # delegate responses are priced at child and root. The sixth admitted
+        # request failed without a report and creates no pricing invocation.
+        root_reports = Enum.count(partial.new_messages, &is_struct(&1, Response))
+        child_reports = partial.request_count - root_reports - 1
+        expected_prices = root_reports + 2 * child_reports
+
+        price_inputs =
+          for {_, index, input, output} <- :ets.tab2list(pricing), do: {index, input, output}
+
+        expected_inputs =
+          Enum.map(0..(root_reports - 1), &{&1, 3, 2}) ++
+            Enum.flat_map(0..(child_reports - 1), &[{&1, 3, 2}, {&1, 3, 2}])
+
         snapshot = %{
           history_preserved: Server.history(restored) == history,
           usage_preserved: Server.usage(restored) == partial.usage,
@@ -394,7 +410,9 @@ defmodule ExAgent.FrameworkScenarios do
               partial.usage_status == :partial,
           cost_honest:
             partial.cost_status == :unknown and partial.cost_cents == nil and
-              snapshot.observed.estimator_calls == 17,
+              snapshot.observed.estimator_calls == expected_prices and
+              Enum.sort(price_inputs) == Enum.sort(expected_inputs) and
+              partial.usage.accounting["cost"]["subtotal_cents"] == 0.25,
           dirty_blocks_replay: blocked,
           checkpoint_only_retry:
             before_retry == after_retry and after_retry == snapshot.observed and
@@ -406,6 +424,11 @@ defmodule ExAgent.FrameworkScenarios do
           ledger: ledger(partial),
           observed: snapshot.observed,
           save_attempts: snapshot.saves,
+          pricing_inputs:
+            Enum.map(Enum.sort(price_inputs), fn {index, input, output} ->
+              %{model_index: index, input_tokens: input, output_tokens: output}
+            end),
+          expected_pricing_calls: expected_prices,
           receipt: Map.new(snapshot.receipt),
           cost_note:
             "Failed request makes aggregate cost unknown; reported token usage is a known subtotal"
@@ -416,6 +439,7 @@ defmodule ExAgent.FrameworkScenarios do
     after
       stop(server)
       :ets.delete(receipt)
+      :ets.delete(pricing)
       :ets.delete(table)
     end
   end

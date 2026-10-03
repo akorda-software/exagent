@@ -16,13 +16,15 @@ defmodule ExAgent.Session do
   use GenServer
   require Logger
   alias ExAgent.{Event, PubSub, RuntimeCheckpoint, Store}
-  alias ExAgent.Session.{Participant, TurnPolicy, Snapshot}
+  alias ExAgent.Session.{Participant, TurnPolicy, Snapshot, Continuations, StateCodec}
   alias ExAgent.Observability.OpenTelemetry, as: Observability
 
   defmodule State do
     @moduledoc false
     defstruct session_id: nil,
+              namespace: nil,
               shared_state: nil,
+              shared_state_codec: nil,
               participants: %{},
               policy_mod: nil,
               policy_state: nil,
@@ -36,6 +38,8 @@ defmodule ExAgent.Session do
               emitter_id: nil,
               revision: 0,
               checkpoint_error: nil,
+              continuation_bindings: %{},
+              continuation_state: %{},
               observability: nil
 
     @type t :: %__MODULE__{}
@@ -43,9 +47,13 @@ defmodule ExAgent.Session do
 
   @doc """
   Start a Session with shared_state, policy, participants, session_id, pubsub,
-  metadata and optional Store. Live participant refs are supplied by the app.
+  metadata, optional trusted application `namespace` and Store. Namespace must
+  match any `Store.scoped/2` descriptor. Live participant refs are supplied by
+  the app within the intended namespace; persisted data never resolves processes.
   Store errors/incompatible snapshots fail startup rather than starting empty.
   Additional participants after restore must be added explicitly with join/2.
+  `shared_state_codec: MyCodec` optionally encodes and restores application
+  structs through `ExAgent.Session.StateCodec`, after snapshot validation.
   """
   def start_link(opts) do
     {name, opts} = Keyword.pop(opts, :name)
@@ -72,6 +80,17 @@ defmodule ExAgent.Session do
   def checkpoint(session), do: call(session, :checkpoint, :infinity)
   def health(session), do: GenServer.call(session, :health)
 
+  @doc "Query a participant's explicitly bound atomic continuation; no agent execution."
+  def continuation(session, id), do: GenServer.call(session, {:continuation, id})
+
+  @doc "Complete a bound terminal run once per lifetime/run using pure host state calculation."
+  def complete_turn(session, id, reference, change),
+    do: call(session, {:complete_turn, id, reference, change}, :infinity)
+
+  @doc "Acknowledge a bound local diagnostic explicitly, without running a callback or advancing the turn."
+  def reconcile_turn(session, id, witness),
+    do: call(session, {:reconcile_turn, id, witness}, :infinity)
+
   defp call(session, command, timeout \\ 5000),
     do: GenServer.call(session, {:observed, command, Observability.capture_context()}, timeout)
 
@@ -80,29 +99,44 @@ defmodule ExAgent.Session do
     {mod, policy_opts} = normalize_policy(Keyword.get(opts, :policy, :round_robin))
     participants = Keyword.get(opts, :participants, [])
     id = Keyword.get(opts, :session_id) || generate_id("session_")
-    store = Store.normalize(Keyword.get(opts, :store))
+    namespace = Keyword.get(opts, :namespace)
 
     state = %State{
       session_id: id,
+      namespace: namespace,
       shared_state: Keyword.get(opts, :shared_state),
+      shared_state_codec: Keyword.get(opts, :shared_state_codec),
       policy_mod: mod,
-      store: store,
       observability: Keyword.get(opts, :observability),
-      topic: Event.session_topic(id),
       pubsub: PubSub.normalize(Keyword.get(opts, :pubsub)),
       metadata: Keyword.get(opts, :metadata, %{}),
+      continuation_bindings: Keyword.get(opts, :continuations, %{}),
       emitter_id: generate_id("emitter_")
     }
 
-    with true <- is_binary(id),
+    with true <-
+           is_binary(id) and
+             (state.continuation_bindings == %{} or ExAgent.Continuation.Record.text?(id)),
+         :ok <- ExAgent.RuntimeIdentity.validate(namespace, id),
+         :ok <- StateCodec.validate(state.shared_state_codec),
+         state = %{
+           state
+           | store: Store.scoped(Keyword.get(opts, :store), namespace),
+             topic: Event.session_topic(id, namespace)
+         },
          :ok <- validate_roster(participants),
+         :ok <-
+           Continuations.bindings(
+             state.continuation_bindings,
+             Map.new(participants, &{&1.id, &1})
+           ),
          {:ok, state} <-
            restore(
              %{state | participants: Map.new(participants, &{&1.id, &1})},
              Keyword.put(policy_opts, :participants, participants)
            ),
          :ok <- validate_actor(state) do
-      {:ok, state}
+      {:ok, Continuations.refresh(state)}
     else
       false -> {:stop, :invalid_session_id}
       {:error, reason} -> {:stop, {:restore_failed, reason}}
@@ -121,13 +155,18 @@ defmodule ExAgent.Session do
 
   def handle_call(:status, _from, state), do: {:reply, state.status, state}
 
+  def handle_call({:continuation, id}, _from, state),
+    do: {:reply, Continuations.query(state, id), state}
+
   def handle_call(:health, _from, state),
     do:
       {:reply,
        %{
          status: state.status,
          persistence: RuntimeCheckpoint.health(state),
-         emitter_id: state.emitter_id
+         emitter_id: state.emitter_id,
+         namespace: state.namespace,
+         continuation_blocked: Continuations.blocked(Continuations.refresh(state))
        }, state}
 
   def handle_call(:checkpoint, _from, state) do
@@ -139,7 +178,7 @@ defmodule ExAgent.Session do
     do: {:reply, RuntimeCheckpoint.blocked(state), state}
 
   def handle_call(command, _from, state) do
-    case transition(state, command) do
+    case checked_transition(state, command) do
       {:ok, result, ^state, []} ->
         {:reply, result, state}
 
@@ -166,6 +205,60 @@ defmodule ExAgent.Session do
 
       {:error, _} = error ->
         {:reply, error, state}
+    end
+  end
+
+  defp checked_transition(state, command) do
+    current =
+      if command == :pause or (command == :resume and state.current != nil),
+        do: state,
+        else: Continuations.refresh(state)
+
+    except =
+      case command do
+        {:complete_turn, id, _, _} -> id
+        {:reconcile_turn, id, _} -> id
+        _ -> nil
+      end
+
+    independent? = command in [:pause, :start] or (command == :resume and state.current != nil)
+
+    case if(independent?, do: nil, else: Continuations.blocked(current, except)) do
+      nil -> transition(current, command)
+      reason -> {:ok, {:error, reason}, current, []}
+    end
+  end
+
+  defp transition(state, {:reconcile_turn, id, witness}) do
+    with :ok <- can_act(state, id),
+         {:ok, candidate} <- Continuations.reconcile(state, id, witness),
+         do: {:ok, :ok, candidate, []}
+  end
+
+  defp transition(state, {:complete_turn, id, reference, change}) do
+    with :ok <- can_act(state, id) do
+      callback = fn ->
+        result = apply_change(state.shared_state, change)
+
+        if Continuations.nonfinal_result?(result),
+          do: {:error, :continuation_result_not_final},
+          else: result
+      end
+
+      case Continuations.complete(state, id, reference, callback) do
+        {:ok, shared, candidate} ->
+          candidate = %{candidate | shared_state: shared}
+
+          with {:ok, next, events} <- advance(candidate) do
+            actor = if next.status == :done, do: :done, else: next.current
+
+            {:ok, {:ok, shared, actor}, next,
+             [{:shared_state_updated, %{participant_id: id}} | events]}
+          end
+
+        {:blocked, reason, candidate} ->
+          {:ok, {:error, reason}, candidate, []}
+      end
     end
   end
 
@@ -197,6 +290,7 @@ defmodule ExAgent.Session do
   defp transition(state, {:leave, id}) do
     with :ok <- roster_open(state),
          true <- Map.has_key?(state.participants, id),
+         {:ok, state} <- Continuations.detach(state, id),
          {:ok, policy} <-
            policy_call(state, fn -> TurnPolicy.participant_left(state.policy_state, id) end),
          :ok <- valid_policy(state, policy) do
@@ -238,18 +332,18 @@ defmodule ExAgent.Session do
   defp transition(state, :start), do: {:error, {:already_started, state.status}}
 
   defp transition(state, {kind, id, change}) when kind in [:take_turn, :update_state] do
-    with :ok <- can_act(state, id),
-         {:ok, shared_state} <- apply_change(state.shared_state, change) do
-      candidate = %{state | shared_state: shared_state}
-      events = [{:shared_state_updated, %{participant_id: id}}]
+    with :ok <- can_act(state, id) do
+      result = apply_change(state.shared_state, change)
+      candidate = Continuations.refresh(state)
 
-      if kind == :update_state do
-        {:ok, {:ok, shared_state}, candidate, events}
-      else
-        with {:ok, candidate, turn_events} <- advance(candidate) do
-          next = if candidate.status == :done, do: :done, else: candidate.current
-          {:ok, {:ok, shared_state, next}, candidate, events ++ turn_events}
-        end
+      candidate =
+        if Continuations.bound?(state, id) and Continuations.nonfinal_result?(result),
+          do: Continuations.result_failed(candidate, id),
+          else: candidate
+
+      case Continuations.blocked(candidate) do
+        nil -> apply_turn_change(candidate, kind, id, result)
+        reason -> {:ok, {:error, reason}, candidate, []}
       end
     end
   end
@@ -305,6 +399,22 @@ defmodule ExAgent.Session do
     do: {:ok, :ok, %{state | status: :closed}, [{:session_closed, %{}}]}
 
   defp transition(_, _), do: {:error, :invalid_command}
+
+  defp apply_turn_change(state, kind, id, {:ok, shared_state}) do
+    candidate = %{state | shared_state: shared_state}
+    events = [{:shared_state_updated, %{participant_id: id}}]
+
+    if kind == :update_state do
+      {:ok, {:ok, shared_state}, candidate, events}
+    else
+      with {:ok, candidate, turn_events} <- advance(candidate) do
+        next = if candidate.status == :done, do: :done, else: candidate.current
+        {:ok, {:ok, shared_state, next}, candidate, events ++ turn_events}
+      end
+    end
+  end
+
+  defp apply_turn_change(_, _, _, {:error, _} = error), do: error
 
   defp advance(state) do
     with {:ok, outcome} <-
@@ -427,10 +537,15 @@ defmodule ExAgent.Session do
 
       {:ok, raw} ->
         with {:ok, snapshot} <- Snapshot.validate(raw, state.session_id),
-             {:ok, participants} <- attach_participants(state.participants, snapshot.participants) do
+             {:ok, participants} <- attach_participants(state.participants, snapshot.participants),
+             :ok <- Snapshot.validate_policy(snapshot, state.policy_mod),
+             :ok <-
+               Continuations.validate_bindings(state, snapshot.continuations, snapshot.version),
+             {:ok, shared_state} <-
+               StateCodec.load(state.shared_state_codec, snapshot.shared_state) do
           candidate = %{
             state
-            | shared_state: snapshot.shared_state,
+            | shared_state: shared_state,
               participants: participants,
               current: snapshot.current,
               status: snapshot.status,
@@ -438,7 +553,12 @@ defmodule ExAgent.Session do
           }
 
           with {:ok, policy} <- Snapshot.restore(snapshot, state.policy_mod, context(candidate)),
-               do: {:ok, %{candidate | policy_state: policy}}
+               do:
+                 Continuations.restore(
+                   %{candidate | policy_state: policy},
+                   snapshot.continuations,
+                   snapshot.version
+                 )
         end
     end
   end
@@ -472,6 +592,7 @@ defmodule ExAgent.Session do
         emitter_id: state.emitter_id,
         source: :session,
         session_id: state.session_id,
+        namespace: state.namespace,
         payload: payload,
         metadata: state.metadata
       )

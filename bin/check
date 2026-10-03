@@ -1,0 +1,106 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'HELP'
+Usage: ./bin/check [--package-consumers]
+
+Validate the checkout locally before committing and pushing:
+  format, strict compilation, finite probes, complete offline suite,
+  documentation, package build/isolation and whitespace checks.
+
+--package-consumers  Also install the TAR in four clean consumer graphs.
+                    Downloads tooling/dependencies; retains strict dependency
+                    diagnostics, which may fail independently of the tests.
+
+Logs and generated files: .exagent-local/checks/<timestamp>-<pid>/
+Optional per-host shell configuration: .exagent-local/check-env.sh
+Requires the canonical Elixir 1.20.0 formatter, compatible OTP, Hex and Rebar.
+Real provider and PostgreSQL tests remain separate opt-in acceptance gates.
+HELP
+}
+
+package_consumers=false
+case "${1:-}" in
+  '') ;;
+  --package-consumers) package_consumers=true ;;
+  --help|-h) usage; exit 0 ;;
+  *) usage >&2; exit 64 ;;
+esac
+if (( $# > 1 )); then usage >&2; exit 64; fi
+
+EXAGENT_CHECK_ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
+export EXAGENT_CHECK_ROOT
+cd -- "$EXAGENT_CHECK_ROOT"
+if [[ -f .exagent-local/check-env.sh ]]; then
+  # This ignored file belongs to the developer, like a local shell profile.
+  source .exagent-local/check-env.sh
+fi
+
+# Do not inherit a foreign project, partition or build directory.
+unset MIX_EXS MIX_PATH MIX_INSTALL_RESTORE_PROJECT_DIR MIX_TEST_PARTITION
+export MIX_ENV=test EXAGENT_OFFLINE=1
+export MIX_TARGET=host
+export MIX_BUILD_PATH="$EXAGENT_CHECK_ROOT/_build/test"
+export MIX_DEPS_PATH="$EXAGENT_CHECK_ROOT/deps"
+
+for executable in elixir git timeout sha256sum tee; do
+  if ! command -v "$executable" >/dev/null; then
+    printf 'Missing executable: %s\n' "$executable" >&2
+    exit 64
+  fi
+done
+runtime=$(elixir -e 'IO.puts(System.version())')
+if [[ "$runtime" != 1.20.0 ]]; then
+  printf 'Use Elixir 1.20.0 for canonical formatting; found %s.\n' "$runtime" >&2
+  exit 64
+fi
+
+evidence="$EXAGENT_CHECK_ROOT/.exagent-local/checks/$(date -u +%Y%m%dT%H%M%SZ)-$$"
+mkdir -p -- "$evidence"
+printf 'Local validation — logs: %s\n' "$evidence"
+elixir --version > "$evidence/runtime.txt"
+git rev-parse HEAD > "$evidence/commit.txt"
+git status --short > "$evidence/worktree.txt"
+
+run() {
+  local gate=$1
+  shift
+  printf '\n[%s]\n' "$gate"
+  local status=0
+  "$@" 2>&1 | tee "$evidence/$gate.log" || status=$?
+  printf '%s %s\n' "$gate" "$status" >> "$evidence/exits.txt"
+  if (( status != 0 )); then
+    printf '\nFailed: %s (exit %s). Logs: %s\n' "$gate" "$status" "$evidence" >&2
+    exit "$status"
+  fi
+}
+
+mix_cli() {
+  elixir -e 'Application.put_env(:req_llm, :load_dotenv, false); Mix.CLI.main(System.argv())' -- "$@"
+}
+
+run whitespace git diff --check
+run staged-whitespace git diff --cached --check
+run format mix_cli format --check-formatted
+# The finite harness compiles strictly once, then runs C0, snippets, isolated
+# observability, deterministic evals and load smoke. Its child logs are retained.
+run harness elixir test/support/testing_audit_harness_ci.exs harness "$evidence/harness"
+run suite mix_cli test --warnings-as-errors --seed 37556
+
+# ExDoc is a dev-only dependency. Use a separate build from the test VM.
+export MIX_ENV=dev MIX_BUILD_PATH="$EXAGENT_CHECK_ROOT/_build/dev"
+run docs mix_cli docs --warnings-as-errors --output "$evidence/docs"
+run docs-links python3 test/support/documentation_site.py "$evidence/docs"
+run package mix_cli hex.build --output "$evidence/exagent.tar"
+sha256sum "$evidence/exagent.tar" > "$evidence/exagent.tar.sha256"
+run package-isolation elixir test/support/package_acceptance_isolation.exs "$evidence/exagent.tar"
+
+if "$package_consumers"; then
+  checksum=$(cut -d ' ' -f 1 "$evidence/exagent.tar.sha256")
+  run package-consumers elixir test/support/package_acceptance.exs \
+    --tar "$evidence/exagent.tar" --checksum "$checksum" \
+    --work-dir "$evidence/consumers" --mode all --seed 771506
+fi
+
+printf '\nValidation passed on this local runtime. Logs: %s\n' "$evidence"

@@ -30,12 +30,12 @@ defmodule ExAgent.Test.NativeOTLPReceiver do
   @impl true
   def handle_call(:port, _from, state), do: {:reply, state.port, state}
 
-  @impl true
-  def handle_info({:handler, handler}, state) do
+  def handle_call({:handler, handler}, _from, state) do
     Process.link(handler)
-    {:noreply, %{state | handlers: [handler | state.handlers]}}
+    {:reply, :ok, %{state | handlers: [handler | state.handlers]}}
   end
 
+  @impl true
   def handle_info({:DOWN, ref, :process, _, _}, %{monitor: ref} = state),
     do: {:stop, :normal, state}
 
@@ -55,7 +55,8 @@ defmodule ExAgent.Test.NativeOTLPReceiver do
       {:ok, socket} ->
         handler = spawn(fn -> await_socket(server, owner) end)
         :ok = :gen_tcp.controlling_process(socket, handler)
-        send(server, {:handler, handler})
+        # Establish ownership before the handler can process IO and terminate.
+        :ok = GenServer.call(server, {:handler, handler})
         send(handler, {:socket, socket})
         accept(listener, server, owner)
 

@@ -1,0 +1,209 @@
+defmodule PackageAcceptance.ReqLLMProbe do
+  import ExUnit.Assertions
+  import ExUnit.Callbacks, only: [start_supervised!: 1]
+  alias ExAgent.Message.Part
+
+  defmodule Transport do
+    def run(request), do: Agent.get(__MODULE__, & &1).(request)
+  end
+
+  defmodule NativeOutput do
+    use Ecto.Schema
+    import Ecto.Changeset
+    @primary_key false
+    embedded_schema do
+      field :value, :string
+      field :optional, :integer
+    end
+    def changeset(data, attrs) do
+      data |> cast(attrs, [:value, :optional])
+      |> validate_change(:value, fn :value, v -> if v == "accepted", do: [], else: [value: "retry Ecto rule"] end)
+    end
+  end
+
+  defmodule CustomModel do
+    @behaviour ExAgent.Model
+    defstruct [:owner]
+    def request(model, _history, _settings, _params) do
+      if model.owner, do: send(model.owner, :custom_model_called)
+      {:ok, ExAgent.Message.new_response([%Part.Text{content: "custom"}], finish_reason: :stop), model}
+    end
+    def model_name(_), do: "consumer-defined"
+    def system(_), do: "consumer"
+  end
+
+  defmodule ToolModel do
+    @behaviour ExAgent.Model
+    defstruct [:owner, fail: false, index: 0]
+    def model_name(_), do: "consumer-tool-model"
+    def system(_), do: "consumer"
+    def profile(_), do: %ExAgent.ModelProfile{supports_tools: true}
+    def request(model, history, _, params) do
+      send(model.owner, {:consumer_request, model.index})
+      if model.index == 0 do
+        [%ExAgent.Tool{name: "consumer_tool"}] = params.function_tools
+        response = ExAgent.Message.new_response([
+          %Part.ToolCall{tool_name: "consumer_tool", tool_call_id: "consumer-call", args: %{"value" => 7}}
+        ])
+        {:ok, response, %{model | index: 1}}
+      else
+        [%ExAgent.Message.Request{parts: [%Part.ToolReturn{tool_call_id: "consumer-call", status: :succeeded, content: 8}]}] = Enum.take(history, -1)
+        if model.fail, do: {:error, :consumer_failure},
+          else: {:ok, ExAgent.Message.new_response([%Part.Text{content: "consumer-done"}]), model}
+      end
+    end
+  end
+
+  def custom do
+    assert {:ok, %{output: "custom"}} = ExAgent.run(ExAgent.new(model: %CustomModel{}), "hello")
+    tool = ExAgent.Tool.new(name: "consumer_tool", takes_ctx: true,
+      parameters_json_schema: %{"type" => "object", "properties" => %{"value" => %{"type" => "integer"}}, "required" => ["value"]},
+      call: fn ctx, %{"value" => value} ->
+        send(ctx.deps.owner, {:consumer_effect, ctx.tool_name, ctx.tool_call_id})
+        value + 1
+      end)
+    assert {:error, %ExAgent.RunError{reason: {:unsupported, :tools}, partial: %{request_count: 0}}} =
+      ExAgent.run(ExAgent.new(model: %CustomModel{owner: self()}, tools: [tool]), "no declaration")
+    refute_receive :custom_model_called, 0
+    refute_receive {:consumer_effect, _, _}, 0
+    for fail <- [false, true] do
+      agent = ExAgent.new(model: %ToolModel{owner: self(), fail: fail}, tools: [tool])
+      result = ExAgent.run(agent, "tools", deps: %{owner: self()})
+      partial = if fail do
+        assert {:error, %ExAgent.RunError{reason: {:model_request_failed, :consumer_failure}, partial: partial}} = result
+        assert partial.status == :failed
+        partial
+      else
+        assert {:ok, %{output: "consumer-done"} = partial} = result
+        partial
+      end
+      assert partial.request_count == 2
+      assert partial.tool_calls == 1
+      assert_receive {:consumer_request, 0}
+      assert_receive {:consumer_effect, "consumer_tool", "consumer-call"}
+      assert_receive {:consumer_request, 1}
+      refute_receive {:consumer_effect, _, _}, 0
+    end
+  end
+
+  def buffered do
+    owner = self()
+    counter = start_supervised!({Agent, fn -> 0 end})
+    transport = fn request ->
+      index = Agent.get_and_update(counter, &{&1, &1 + 1})
+      assert index == 0
+      message = %{"role" => "assistant", "content" => "done"}
+      finish = "stop"
+      {request, Req.Response.new(status: 200, headers: [{"content-type", "application/json"}],
+        body: Jason.encode!(%{"id" => "package-response", "model" => "package-model",
+          "choices" => [%{"index" => 0, "message" => message, "finish_reason" => finish}]}))}
+    end
+    start_supervised!(%{id: Transport, start: {Agent, :start_link, [fn -> transport end, [name: Transport]]}})
+    model = ExAgent.Models.ReqLLM.new(
+      model: %{provider: :openai, id: "package-model", capabilities: %{tools: %{enabled: true}}},
+      api_key: "synthetic-key", base_url: "https://fixture.invalid/v1", http_options: [adapter: Transport])
+    tool = ExAgent.Tool.new(name: "lookup", description: "Local effect", parameters_json_schema: %{"type" => "object"}, takes_ctx: false,
+      call: fn _ -> send(owner, :effect); "found" end)
+    assert {:error, _} = ExAgent.run(ExAgent.new(model: model, tools: [tool]), "go")
+    assert Agent.get(counter, & &1) == 0
+    refute_receive :effect, 0
+    assert {:error, %ExAgent.RunError{reason: {:accounting_unavailable, "input", :normalized_only}}} =
+      ExAgent.run(ExAgent.new(model: model, usage_limits: %ExAgent.UsageLimits{input_tokens_limit: 10}), "strict")
+    assert Agent.get(counter, & &1) == 0
+    assert {:ok, result} = ExAgent.run(ExAgent.new(model: model), "go")
+    assert result.output == "done"
+    assert result.usage_status == :complete
+    assert result.usage.accounting["version"] == 1
+    assert result.usage.accounting["quality"] == "normalized"
+    assert result.usage.accounting["provider_presence"] == "unknown"
+    assert result.usage.input_tokens == 0
+    assert result.usage.output_tokens == 0
+    assert result.cost_status == :unknown
+    assert result.cost_cents == nil
+    assert Agent.get(counter, & &1) == 1
+    refute_receive :effect, 0
+    assert {:ok, restored} = result.messages |> ExAgent.Message.to_json() |> ExAgent.Message.from_json()
+    assert restored == result.messages
+    qualified(counter, tool)
+    native(counter)
+  end
+
+  defp native(counter) do
+    Agent.update(counter, fn _ -> 0 end)
+    expected = ExAgent.OutputSchema.json_schema(NativeOutput) |> Jason.encode!() |> Jason.decode!()
+    transport = fn request ->
+      i = Agent.get_and_update(counter, &{&1, &1 + 1})
+      payload = Jason.decode!(IO.iodata_to_binary(request.body))
+      assert payload["response_format"]["json_schema"]["schema"] == expected
+      assert payload["response_format"]["json_schema"]["strict"] == false
+      assert payload["tools"] in [nil, []]
+      if i == 1, do: assert(Enum.any?(payload["messages"], &(Jason.encode!(&1) =~ "retry Ecto rule")))
+      text = Jason.encode!(%{value: if(i == 0, do: "rejected", else: "accepted"), optional: nil})
+      {request, Req.Response.new(status: 200, headers: [{"content-type", "application/json"}], body: Jason.encode!(%{id: "native", model: "package-native", choices: [%{index: 0, message: %{role: "assistant", content: text}, finish_reason: "stop"}]}))}
+    end
+    Agent.update(Transport, fn _ -> transport end)
+    model = ExAgent.Models.ReqLLM.new(model: %{provider: :openai, id: "package-native", extra: %{wire: %{protocol: "openai_chat"}}, capabilities: %{tools: %{enabled: true}, reasoning: %{enabled: false}}},
+      api_key: "synthetic", base_url: "https://fixture.invalid/v1", tool_profile: :chat_tools_v1,
+      output_profile: :chat_json_schema_v1, http_options: [adapter: Transport])
+    agent = ExAgent.new(model: model, output: NativeOutput, output_mode: :native)
+    assert {:ok, result} = ExAgent.run(agent, "native")
+    assert %NativeOutput{value: "accepted", optional: nil} = result.output
+    assert result.request_count == 2
+    assert Agent.get(counter, & &1) == 2
+    assert {:ok, history} = result.messages |> ExAgent.Message.to_json() |> ExAgent.Message.from_json()
+    assert history == result.messages
+    assert {:error, %ExAgent.RunError{reason: {:unsupported, :native_output}, partial: %{request_count: 0}}} =
+      ExAgent.run(%{agent | model: %{model | output_profile: nil}}, "no native declaration")
+    assert Agent.get(counter, & &1) == 2
+  end
+
+  defp qualified(counter, tool) do
+    spec = %{provider: :openai, id: "package-model",
+      extra: %{wire: %{protocol: "openai_chat"}},
+      capabilities: %{tools: %{enabled: true}, reasoning: %{enabled: false}}}
+    for {arguments, valid?} <- [{"[]", false}, {"{\"arguments\":{}}", true}] do
+      Agent.update(counter, fn _ -> 0 end)
+      transport = fn request ->
+        index = Agent.get_and_update(counter, &{&1, &1 + 1})
+        assert request.url.path == "/v1/chat/completions"
+        payload = Jason.decode!(IO.iodata_to_binary(request.body))
+        if index == 1 do
+          assistant = Enum.find(payload["messages"], &(&1["role"] == "assistant"))
+          assert [%{"id" => "package-call", "function" => function}] = assistant["tool_calls"]
+          assert Jason.decode!(function["arguments"]) == %{"arguments" => %{}}
+        end
+        message = if index == 0 do
+          %{"role" => "assistant", "content" => nil, "tool_calls" => [
+            %{"id" => "package-call", "type" => "function", "function" => %{"name" => "lookup", "arguments" => arguments}}]}
+        else
+          %{"role" => "assistant", "content" => "qualified"}
+        end
+        {request, Req.Response.new(status: 200, headers: [{"content-type", "application/json"}],
+          body: Jason.encode!(%{"id" => "package-envelope", "model" => "package-model",
+            "choices" => [%{"index" => 0, "message" => message, "finish_reason" => if(index == 0, do: "tool_calls", else: "stop")}]}))}
+      end
+      Agent.update(Transport, fn _ -> transport end)
+      model = ExAgent.Models.ReqLLM.new(model: spec, tool_profile: :chat_tools_v1,
+        api_key: "synthetic", base_url: "https://fixture.invalid/v1", http_options: [adapter: Transport])
+      result = ExAgent.run(ExAgent.new(model: model, tools: [tool],
+        usage_limits: %ExAgent.UsageLimits{accounting: :estimated, request_limit: 2, total_tokens_limit: 100}), "go")
+      if valid? do
+        assert {:ok, result} = result
+        assert result.output == "qualified"
+        assert result.usage.accounting["quality"] == "normalized"
+        assert Agent.get(counter, & &1) == 2
+        assert_receive :effect
+        assert {:ok, restored} = result.messages |> ExAgent.Message.to_json() |> ExAgent.Message.from_json()
+        assert restored == result.messages
+        assert Enum.any?(restored, fn
+          %ExAgent.Message.Response{continuation: %{"version" => 2, "arguments_codec" => "exagent.arguments/1"}} -> true
+          _ -> false
+        end)
+      else
+        assert {:error, _} = result
+        assert Agent.get(counter, & &1) == 1
+      end
+      refute_receive :effect, 0
+    end
+  end
+end

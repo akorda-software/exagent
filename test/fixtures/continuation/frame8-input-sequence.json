@@ -1,0 +1,339 @@
+{
+  "created_at": 1790624826771,
+  "execution": {
+    "attempt_id": null,
+    "continuation_id": "continuation-YE7IqXguut2lja2ela611w",
+    "deadline_at": null,
+    "definition": {
+      "id": "legacy8",
+      "version": "1"
+    },
+    "effects": {},
+    "execution_version": 2,
+    "expires_at": null,
+    "fence": 2,
+    "kind": "composition",
+    "lease_until": null,
+    "owner_id": null,
+    "policy": {
+      "id": "policy",
+      "version": "1"
+    },
+    "progress": {
+      "active_budget": {
+        "limit_ms": null,
+        "refund_at": null,
+        "remaining_ms": null,
+        "reserved_ms": null
+      },
+      "runtime": {
+        "authority": {
+          "legacy8-root": {
+            "checkpoint_limit": 8388608,
+            "deadline_at": null,
+            "max_concurrent_requests": null,
+            "policies": [
+              {
+                "default": "allow",
+                "rules": []
+              },
+              {
+                "default": "allow",
+                "rules": []
+              }
+            ],
+            "usage": {
+              "accounting": "strict",
+              "input_tokens_limit": null,
+              "max_budget_cents": null,
+              "output_tokens_limit": null,
+              "request_limit": null,
+              "tool_calls_limit": null,
+              "total_tokens_limit": null
+            }
+          },
+          "run_2sLJV9K9kvNU7JAFtN3yBQ": {
+            "deadline_at": null,
+            "max_concurrent_requests": null,
+            "policies": [
+              {
+                "default": "allow",
+                "rules": []
+              },
+              {
+                "default": "allow",
+                "rules": []
+              }
+            ]
+          }
+        },
+        "binding": {
+          "composition_definition_version": 1,
+          "fingerprint": "18199586c9118e2a3d9c9bec5161fad89abd06df4245ea6ee813002609ef1610",
+          "id": "legacy8",
+          "kind": "sequence",
+          "steps": [
+            {
+              "definition": {
+                "id": "leaf",
+                "version": "1"
+              },
+              "id": "A",
+              "input_kind": "initial",
+              "input_version": null,
+              "model_ref": {
+                "id": "model",
+                "version": "1"
+              },
+              "output_ref": {
+                "id": "output",
+                "version": "1"
+              },
+              "policy": {
+                "id": "policy",
+                "version": "1"
+              }
+            }
+          ],
+          "version": "1"
+        },
+        "children": {
+          "run_2sLJV9K9kvNU7JAFtN3yBQ": {
+            "definition": {
+              "id": "leaf",
+              "version": "1"
+            },
+            "frame": {
+              "cursor": "request",
+              "first_new_message_index": 0,
+              "frame_version": 3,
+              "limits": {
+                "max_history_bytes": 8388608,
+                "max_payload_bytes": 1048576,
+                "max_steps": 50,
+                "output_retries": 1,
+                "tool_timeout": 30000,
+                "usage": {
+                  "accounting": "strict",
+                  "input_tokens_limit": null,
+                  "max_budget_cents": null,
+                  "output_tokens_limit": null,
+                  "request_limit": null,
+                  "tool_calls_limit": null,
+                  "total_tokens_limit": null
+                }
+              },
+              "model_binding": null,
+              "model_data": {
+                "index": 0
+              },
+              "model_request_id": null,
+              "outcomes": {},
+              "output_fingerprint": null,
+              "output_retries_used": 0,
+              "permissions": {
+                "default": "allow",
+                "rules": []
+              },
+              "run_id": "run_2sLJV9K9kvNU7JAFtN3yBQ",
+              "run_step": 0,
+              "scope": {
+                "batches": {},
+                "operations": [],
+                "requests": 0,
+                "run_id": "run_2sLJV9K9kvNU7JAFtN3yBQ",
+                "scope_version": 1,
+                "tools": 0
+              },
+              "selected_tools": {},
+              "settings": {
+                "extra": {},
+                "frequency_penalty": null,
+                "max_tokens": null,
+                "presence_penalty": null,
+                "temperature": null,
+                "timeout": null,
+                "top_p": null
+              },
+              "tool_retries": {},
+              "tool_return_bytes": 1048576
+            },
+            "link": {
+              "index": 0,
+              "input": "initial",
+              "kind": "step",
+              "step_id": "A"
+            },
+            "model_ref": {
+              "id": "model",
+              "version": "1"
+            },
+            "output_ref": {
+              "id": "output",
+              "version": "1"
+            },
+            "parent_run_id": "legacy8-root",
+            "policy": {
+              "id": "policy",
+              "version": "1"
+            },
+            "result": null,
+            "result_omitted": null,
+            "snapshot": {
+              "agent_id": "legacy8",
+              "message_history": "[{\"__type__\":\"request\",\"conversation_id\":null,\"instructions\":null,\"parts\":[{\"__type__\":\"user\",\"content\":\"initial\",\"timestamp\":\"2026-09-28T19:47:06.775809Z\"}],\"run_id\":\"run_2sLJV9K9kvNU7JAFtN3yBQ\",\"timestamp\":\"2026-09-28T19:47:06.777795Z\"}]",
+              "metadata": {},
+              "provider_state": null,
+              "revision": 0,
+              "saved_at": "2026-09-28T19:47:06.780116Z",
+              "usage": {
+                "accounting": {
+                  "availability": {
+                    "cache_read": "unavailable",
+                    "cache_write": "unavailable",
+                    "input": "available",
+                    "output": "available",
+                    "reasoning": "unavailable"
+                  },
+                  "cost": {
+                    "availability": "available",
+                    "cents": 0,
+                    "quality": "estimated",
+                    "source": "aggregate",
+                    "subtotal_cents": 0
+                  },
+                  "input_semantics": "unknown",
+                  "provider_presence": "unknown",
+                  "quality": "reported",
+                  "reasoning_semantics": "unknown",
+                  "source": "model",
+                  "version": 1
+                },
+                "details": {},
+                "input_tokens": 0,
+                "output_tokens": 0
+              },
+              "version": 4
+            },
+            "status": "running"
+          }
+        },
+        "cursor": "running",
+        "frame_version": 8,
+        "input": "initial",
+        "kind": "sequence",
+        "output_resolutions": {},
+        "run_id": "legacy8-root",
+        "scope": {
+          "batches": [],
+          "nodes": {
+            "legacy8-root": {
+              "parent_run_id": null,
+              "requests": 0,
+              "tools": 0
+            },
+            "run_2sLJV9K9kvNU7JAFtN3yBQ": {
+              "parent_run_id": "legacy8-root",
+              "requests": 0,
+              "tools": 0
+            }
+          },
+          "operations": [],
+          "retry_batches": [],
+          "root_run_id": "legacy8-root",
+          "scope_version": 2
+        },
+        "tool_batches": {}
+      }
+    },
+    "run_id": "legacy8-root",
+    "state": "ready"
+  },
+  "key": [
+    "legacy8-sequence",
+    "agent",
+    "legacy8"
+  ],
+  "receipts": {
+    "fixture-recover": {
+      "actor_id": "fixture",
+      "attempt_id": null,
+      "continuation_id": "continuation-YE7IqXguut2lja2ela611w",
+      "digest": "f942e95cf6a20887f5225969b5efb6215d1263d28c8062f097d5562f12c33ad3",
+      "operation": "recover",
+      "revision": 4,
+      "run_id": "legacy8-root",
+      "state": "ready"
+    },
+    "operation-AcFD__wZaikZLh-g_u_k_Q": {
+      "actor_id": "exagent-runtime",
+      "attempt_id": null,
+      "continuation_id": "continuation-YE7IqXguut2lja2ela611w",
+      "digest": "78da1ab7c2a18f1a8def270db5dcba23b4e3a96329c83d961494cd10442b1de8",
+      "operation": "step_input",
+      "revision": 3,
+      "run_id": "legacy8-root",
+      "state": "claimed"
+    },
+    "operation-XaGTW6CjiKmQM6Ma258WEQ": {
+      "actor_id": "exagent-runtime",
+      "attempt_id": "attempt-jRNHH8KHpX4DC1YaJcIyhg",
+      "continuation_id": "continuation-YE7IqXguut2lja2ela611w",
+      "digest": "43f30b8a17bc9f332c32e76a78f1b30cd2e4fb8fb0882734747912eb3b2719bd",
+      "operation": "claim",
+      "revision": 2,
+      "run_id": "legacy8-root",
+      "state": "claimed"
+    },
+    "operation-h6_uwg3dmdzd_v81DksFdQ": {
+      "actor_id": "exagent-runtime",
+      "attempt_id": null,
+      "continuation_id": "continuation-YE7IqXguut2lja2ela611w",
+      "digest": "e12a2cfa1cc3776597a5c49a5392c1942fed17913e2c49618970b1f3b50a04ea",
+      "operation": "create",
+      "revision": 1,
+      "run_id": "legacy8-root",
+      "state": "ready"
+    }
+  },
+  "record_id": "record-aFoLlbgKyxJDKRWqpXgtjA",
+  "record_version": 2,
+  "revision": 4,
+  "snapshot": {
+    "binding": {
+      "composition_definition_version": 1,
+      "fingerprint": "18199586c9118e2a3d9c9bec5161fad89abd06df4245ea6ee813002609ef1610",
+      "id": "legacy8",
+      "kind": "sequence",
+      "steps": [
+        {
+          "definition": {
+            "id": "leaf",
+            "version": "1"
+          },
+          "id": "A",
+          "input_kind": "initial",
+          "input_version": null,
+          "model_ref": {
+            "id": "model",
+            "version": "1"
+          },
+          "output_ref": {
+            "id": "output",
+            "version": "1"
+          },
+          "policy": {
+            "id": "policy",
+            "version": "1"
+          }
+        }
+      ],
+      "version": "1"
+    },
+    "composition_id": "legacy8",
+    "composition_snapshot_version": 1,
+    "revision": 0,
+    "run_id": "legacy8-root"
+  },
+  "updated_at": 1790624827276
+}

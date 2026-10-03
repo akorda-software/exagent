@@ -1,5 +1,8 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # Recipe: wrap an agent run in an Oban job in YOUR app.
+# For persisted approval/cursor recovery, use continuation_job.exs and the guide
+# docs/development/continuation-jobs.md. This older example illustrates only
+# conversation-history persistence; it does not implement that C7 job boundary.
 #
 # This file is documentation, not a runnable worker: it sketches persistent
 # Oban dispatch for agent execution, not durable replay of the agent loop.
@@ -62,7 +65,8 @@
 #             json -> {:ok, msgs} = Message.from_json(json); msgs
 #           end
 #
-#         agent = ExAgent.new(model: "openai:gpt-4o", tools: MyApp.Tools.tools())
+#         # Trusted app factory supplies explicit credentials and qualified model profile.
+#         agent = MyApp.agent_template()
 #
 #         case ExAgent.run(agent, prompt, message_history: history) do
 #           {:ok, %{output: output, messages: messages}} ->
@@ -94,11 +98,11 @@
 #   |> Oban.insert(MyApp.Repo)
 #
 # ── Human-in-the-loop workflows ──────────────────────────────────────────────
-#   ExAgent.run/3 runs to completion and capability callbacks do not suspend.
-#   Manage pending approvals as authenticated application state. Restoring history
+#   Capability callbacks are synchronous; persisted approval uses the explicit
+#   continuation APIs shown in continuation_job.exs. Restoring history
 #   and enqueueing the same prompt is not resuming an exact pending tool call;
 #   bind approval to its operation/arguments and reconcile prior effects. A general
-#   deferred continuation API is not implemented by this recipe.
+#   continuation is not implemented by this conversation-history recipe.
 #
 # ── Why this lives in YOUR app, not in the library ───────────────────────────
 #   - Keeps the framework dependency-light (no forced Postgres).

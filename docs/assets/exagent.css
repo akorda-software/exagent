@@ -1,0 +1,168 @@
+/* Extend ExDoc's navigation, search and theme primitives; no external assets. */
+body {
+  --exagent-paper: #fafaf6;
+  --exagent-ink: #1c302e;
+  --exagent-muted: #526662;
+  --exagent-accent: #096b60;
+  --exagent-line: #dce4df;
+  --exagent-soft: #edf3ed;
+  --link-color: var(--exagent-accent);
+  --main: var(--exagent-accent);
+  --mainDark: var(--exagent-accent);
+  --mainDarkest: var(--exagent-accent);
+  --mainLight: var(--exagent-accent);
+  --mainLightest: var(--exagent-accent);
+  --link-visited-color: var(--exagent-accent);
+  --background: var(--exagent-paper);
+  --sidebarBackground: #f1f4ee;
+  --sidebarHeader: #f1f4ee;
+  --sidebarLanguageAccentBar: var(--exagent-accent);
+  --searchBarFocusColor: var(--exagent-accent);
+  --bottomActionsBtnTitle: var(--exagent-accent);
+  --content-width: 860px;
+  --codeBackground: #f3f6f2;
+  --codeBorder: var(--exagent-line);
+  --textBody: var(--exagent-ink);
+  background: var(--exagent-paper);
+}
+
+body.dark {
+  --exagent-paper: #121b1a;
+  --exagent-ink: #e3eeea;
+  --exagent-muted: #abc0b8;
+  --exagent-accent: #7cd7c6;
+  --exagent-line: #34443f;
+  --exagent-soft: #1c2a25;
+  --sidebarBackground: #18231f;
+  --sidebarHeader: #18231f;
+  --link-color: var(--exagent-accent);
+  --link-visited-color: var(--exagent-accent);
+  --codeBackground: #17231e;
+  --codeBorder: var(--exagent-line);
+  --sidebarAccentMain: var(--exagent-ink);
+  --sidebarSubheadings: var(--exagent-muted);
+  --sidebarMuted: var(--exagent-muted);
+}
+
+.content-inner { padding-bottom: 3rem; }
+.content-inner > p, .content-inner > ul, .content-inner > ol {
+  line-height: 1.75;
+}
+.content-inner h1 {
+  color: var(--exagent-ink);
+  font-weight: 720;
+  letter-spacing: -0.035em;
+  line-height: 1.2;
+}
+.content-inner h2 {
+  margin-top: 2.5rem;
+  letter-spacing: -0.025em;
+}
+.content-inner h3 { letter-spacing: -0.015em; }
+.content-inner pre { border-radius: 8px; }
+.content-inner table { line-height: 1.55; }
+.content-inner td, .content-inner th { padding: 0.85rem 1rem; }
+.sidebar-projectName { letter-spacing: -0.04em; }
+.exagent-release-note {
+  margin-top: 1.25rem;
+  color: var(--exagent-muted);
+  font-size: 0.85rem;
+}
+.sidebar-projectVersion { color: var(--exagent-muted); }
+.sidebar-header { border-bottom: 1px solid var(--exagent-line); }
+.sidebar .sidebar-list a { line-height: 1.55; }
+.content-inner a:focus-visible, .sidebar a:focus-visible {
+  outline: 2px solid var(--exagent-accent);
+  outline-offset: 4px;
+  border-radius: 2px;
+}
+
+.exagent-intro {
+  margin: 1.5rem 0 0;
+  padding: 1.75rem 0 0.75rem;
+  border-top: 2px solid var(--exagent-accent);
+}
+.exagent-kicker {
+  margin: 0 0 1rem;
+  color: var(--exagent-accent);
+  font-size: 0.8rem;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.exagent-intro .exagent-lead {
+  max-width: 26ch;
+  margin: 0 0 1.25rem;
+  font-family: Charter, "Bitstream Charter", "Sitka Text", Cambria, Georgia, serif;
+  font-size: clamp(1.85rem, 3.2vw, 2.8rem);
+  letter-spacing: -0.04em;
+  line-height: 1.15;
+  color: var(--exagent-ink);
+}
+.exagent-intro > p:not(.exagent-lead):not(.exagent-kicker) {
+  max-width: 63ch;
+  color: var(--exagent-muted);
+  line-height: 1.75;
+}
+.exagent-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem 1.75rem;
+  margin-top: 1.75rem;
+  margin-bottom: 2rem;
+}
+.exagent-actions a { font-size: 0.95rem; font-weight: 600; }
+.exagent-actions a:first-child {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  padding: 0.85rem 1.15rem;
+  border-radius: 5px;
+  background: var(--exagent-accent);
+  color: var(--exagent-paper);
+  text-decoration: none;
+}
+.exagent-actions a:first-child:hover { text-decoration: underline; }
+.exagent-layers {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 2rem;
+  margin: 1.5rem 0;
+}
+.exagent-layers > div {
+  padding: 1.1rem 0;
+  border-top: 1px solid var(--exagent-line);
+}
+.exagent-layers dt {
+  margin-bottom: 0.5rem;
+  color: var(--exagent-accent);
+  font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+  font-weight: 600;
+}
+.exagent-layers dd {
+  margin-left: 0;
+  color: var(--exagent-muted);
+  line-height: 1.65;
+}
+@media (max-width: 768px) {
+  .exagent-intro { padding-top: 1.25rem; }
+  .exagent-intro .exagent-lead { font-size: 2rem; }
+  .exagent-layers { grid-template-columns: 1fr; }
+  .content-inner td, .content-inner th { padding: 0.65rem; }
+}
+@media print {
+  body, body.dark {
+    --exagent-paper: white;
+    --exagent-ink: black;
+    --exagent-muted: #333;
+    --exagent-accent: #096b60;
+    --exagent-line: #ccc;
+  }
+  .exagent-actions a:first-child {
+    background: none;
+    color: black;
+    border: 1px solid black;
+  }
+}

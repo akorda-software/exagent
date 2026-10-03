@@ -2,7 +2,8 @@ defmodule ExAgent.RunStream do
   @moduledoc false
 
   # Only the next demand releases the worker past its last public event. This
-  # bounds the bridge, not an adapter's independent HTTP push buffers.
+  # bounds the bridge, not an adapter's independent HTTP push buffers. Progress
+  # also waits for a correlated guardian ACK so accumulated snapshots cannot queue.
   def new(agent, prompt, opts) do
     Stream.resource(
       fn -> open(agent, prompt, opts) end,
@@ -11,6 +12,9 @@ defmodule ExAgent.RunStream do
     )
   end
 
+  def resume(agent, reference, opts),
+    do: new(agent, nil, Keyword.put(opts, :__resume_reference, reference))
+
   defp open(agent, prompt, opts) do
     opts = ExAgent.Observability.OpenTelemetry.options(opts)
     owner = self()
@@ -18,11 +22,15 @@ defmodule ExAgent.RunStream do
 
     {guardian, monitor} =
       spawn_monitor(fn ->
+        Process.flag(:trap_exit, true)
         owner_monitor = Process.monitor(owner)
         guardian = self()
 
         {worker, worker_monitor} =
-          spawn_monitor(fn -> run(owner, guardian, ref, agent, prompt, opts) end)
+          :erlang.spawn_opt(fn -> run(owner, guardian, ref, agent, prompt, opts) end, [
+            :link,
+            :monitor
+          ])
 
         send(owner, {ref, :ready, worker})
         guard(owner, owner_monitor, worker, worker_monitor, ref, nil)
@@ -33,7 +41,7 @@ defmodule ExAgent.RunStream do
         %{guardian: guardian, monitor: monitor, worker: worker, ref: ref, done: false}
 
       {:DOWN, ^monitor, :process, ^guardian, reason} ->
-        exit({:stream_start_failed, reason})
+        exit(ExAgent.Retention.reason({:stream_start_failed, reason}))
     end
   end
 
@@ -52,8 +60,17 @@ defmodule ExAgent.RunStream do
     end
 
     on_progress = fn partial ->
-      send(guardian, {ref, :progress, partial})
-      safe_call(progress_sink, partial)
+      unless Process.get(ref) == :cancelled do
+        progress_ref = make_ref()
+        send(guardian, {ref, :progress, progress_ref, partial})
+
+        receive do
+          {^ref, :progress_ack, ^progress_ref} -> :ok
+          {^ref, :cancel} -> cancel_run(ref)
+        end
+
+        safe_call(progress_sink, partial)
+      end
     end
 
     opts =
@@ -62,8 +79,14 @@ defmodule ExAgent.RunStream do
       |> Keyword.put(:on_event, on_event)
       |> Keyword.put(:on_progress, on_progress)
 
+    result =
+      case Keyword.pop(opts, :__resume_reference) do
+        {nil, opts} -> ExAgent.run(agent, prompt, opts)
+        {reference, opts} -> ExAgent.resume(agent, reference, opts)
+      end
+
     terminal =
-      case ExAgent.run(agent, prompt, opts) do
+      case result do
         {:ok, result} -> {:result, result}
         {:error, error} -> {:error, error}
       end
@@ -78,8 +101,13 @@ defmodule ExAgent.RunStream do
   defp await_demand(ref) do
     receive do
       {^ref, :demand} -> :ok
-      {^ref, :cancel} -> throw(:exagent_stream_cancelled)
+      {^ref, :cancel} -> cancel_run(ref)
     end
+  end
+
+  defp cancel_run(ref) do
+    Process.put(ref, :cancelled)
+    throw(:exagent_stream_cancelled)
   end
 
   defp next(%{done: true} = state), do: {:halt, state}
@@ -89,9 +117,14 @@ defmodule ExAgent.RunStream do
     send(worker, {ref, :demand})
 
     receive do
-      {^ref, :event, {:delta, _} = event} -> {[event], state}
-      {^ref, :event, terminal} -> {[terminal], %{state | done: true}}
-      {:DOWN, ^monitor, :process, ^guardian, reason} -> exit({:stream_owner_failed, reason})
+      {^ref, :event, {:delta, _} = event} ->
+        {[event], state}
+
+      {^ref, :event, terminal} ->
+        {[terminal], %{state | done: true}}
+
+      {:DOWN, ^monitor, :process, ^guardian, reason} ->
+        exit(ExAgent.Retention.reason({:stream_owner_failed, reason}))
     end
   end
 
@@ -113,8 +146,12 @@ defmodule ExAgent.RunStream do
 
   defp guard(owner, owner_monitor, worker, worker_monitor, ref, partial) do
     receive do
-      {^ref, :progress, result} ->
+      {^ref, :progress, progress_ref, result} ->
+        send(worker, {ref, :progress_ack, progress_ref})
         guard(owner, owner_monitor, worker, worker_monitor, ref, result)
+
+      {:EXIT, ^worker, _} ->
+        guard(owner, owner_monitor, worker, worker_monitor, ref, partial)
 
       {^ref, :terminal, terminal} ->
         send(owner, {ref, :event, terminal})
@@ -128,14 +165,27 @@ defmodule ExAgent.RunStream do
 
       {:DOWN, ^worker_monitor, :process, ^worker, reason} ->
         if partial do
-          partial = %{partial | output: nil, status: :failed, usage_status: :partial}
-          error = %ExAgent.RunError{reason: {:worker_exit, reason}, partial: partial}
+          partial = %{
+            partial
+            | output: nil,
+              status: :failed,
+              usage_status: :partial,
+              usage: ExAgent.Message.Usage.partial(partial.usage),
+              cost_cents: nil,
+              cost_status: :unknown
+          }
+
+          error = %ExAgent.RunError{
+            reason: ExAgent.Retention.reason({:worker_exit, reason}),
+            partial: partial
+          }
+
           send(owner, {ref, :event, {:error, error}})
           # This monitor notification was consumed here; cancellation must not
           # wait for the same DOWN a second time.
           finished(owner_monitor, nil, nil, ref)
         else
-          exit({:stream_worker_failed, reason})
+          exit(ExAgent.Retention.reason({:stream_worker_failed, reason}))
         end
     end
   end
@@ -145,7 +195,8 @@ defmodule ExAgent.RunStream do
       {^ref, :close} -> cancel(worker, worker_monitor, ref)
       {:DOWN, ^owner_monitor, :process, _, _} -> cancel(worker, worker_monitor, ref)
       {:DOWN, ^worker_monitor, :process, ^worker, _} -> finished(owner_monitor, nil, nil, ref)
-      {^ref, :progress, _} -> finished(owner_monitor, worker, worker_monitor, ref)
+      {^ref, :progress, _, _} -> finished(owner_monitor, worker, worker_monitor, ref)
+      {:EXIT, ^worker, _} -> finished(owner_monitor, worker, worker_monitor, ref)
     end
   end
 

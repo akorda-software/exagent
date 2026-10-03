@@ -10,7 +10,7 @@ defmodule ExAgent.Scenarios.RealProvidersTest do
   absent.
 
   All models route through OpenRouter (OpenAI Chat Completions wire format),
-  so this exercises `ExAgent.Providers.OpenAIChat` against each backend's
+  so the historical matrix exercised the retired Chat wrapper against each backend's
   response quirks: usage shape, finish_reason, content extraction and tool-call
   round-tripping. It catches parsing/integration bugs that the offline
   `ExAgent.Models.Test` cannot.
@@ -121,7 +121,7 @@ defmodule ExAgent.Scenarios.RealProvidersTest do
     agent =
       agent("anthropic/claude-haiku-4.5",
         output: ExAgent.Test.Ticket,
-        model_settings: [max_tokens: 1024, temperature: 0]
+        model_settings: [max_tokens: 1024, temperature: 0.0]
       )
 
     assert {:ok, %{output: ticket}} =
@@ -146,9 +146,9 @@ defmodule ExAgent.Scenarios.RealProvidersTest do
 
   defp agent(slug, opts \\ []) do
     model =
-      Models.OpenRouter.new(
-        model: slug,
-        app_title: "exagent integration test"
+      Models.ReqLLM.new(
+        model: %{provider: :openrouter, id: slug},
+        api_key: System.get_env("OPENROUTER_API_KEY")
       )
 
     ExAgent.new(
@@ -159,7 +159,7 @@ defmodule ExAgent.Scenarios.RealProvidersTest do
       # Reasoning models (glm-4.7-flash, etc.) consume tokens on internal
       # thinking, so a tight cap aborts mid-thought and yields finish_reason
       # :length. 1024 leaves comfortable room for both thinking and output.
-      model_settings: Keyword.get(opts, :model_settings, max_tokens: 1024, temperature: 0)
+      model_settings: Keyword.get(opts, :model_settings, max_tokens: 1024, temperature: 0.0)
     )
   end
 

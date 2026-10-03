@@ -5,7 +5,7 @@ defmodule ExAgent.UsageLimits do
   functions provide the pure checks. Token/cost thresholds are retrospective,
   so already in-flight requests can exceed them.
 
-  Any `nil` field is unchecked. When a limit is exceeded the run terminates with
+  Any `nil` threshold is unchecked. When a limit is exceeded the run terminates with
     a `RunError` with reason `{:usage_limit_exceeded, which, value}`.
 
   * `request_limit` / `total_tokens_limit` / `input_tokens_limit` /
@@ -14,16 +14,30 @@ defmodule ExAgent.UsageLimits do
     (pydanticAI semantics: if the model returned parallel calls that would
     exceed the limit, none run).
   * `max_budget_cents` — checked before each model request against an estimated
-    cost (see `ExAgent.CostGuard`). Requires an `:estimate_cost` run option.
+    cost (see `ExAgent.CostGuard`). An explicit `:estimate_cost` callback takes
+    precedence over a qualified public upstream estimate; unknown/error never
+    silently falls back. Neither is provider billing.
+
+  `accounting: :strict` (default) requires sufficient Model-reported metrics for
+  enabled thresholds. A declared normalized-only contract rejects before IO;
+  unknown contracts are checked against actual reports before later effects.
+  `accounting: :estimated` opts into available subtotals and may continue without
+  metrics/pricing, but metric limits require a finite request_limit in this scope
+  or an ancestor. Host-only limits require no accounting. A child's policy cannot
+  weaken its ancestors. In-flight operations can exceed retrospective thresholds.
 
   ## Example
+
+  Here `model` is an explicitly configured `ExAgent.Models.ReqLLM` instance;
+  normalized metrics require opt-in estimated thresholds and a finite request bound.
 
       alias ExAgent.{CostGuard, UsageLimits}
 
       agent =
         ExAgent.new(
-          model: "openai:gpt-4o",
+          model: model,
           usage_limits: %UsageLimits{
+            accounting: :estimated,
             request_limit: 5,
             total_tokens_limit: 2000,
             tool_calls_limit: 10,
@@ -41,7 +55,8 @@ defmodule ExAgent.UsageLimits do
             input_tokens_limit: nil,
             output_tokens_limit: nil,
             tool_calls_limit: nil,
-            max_budget_cents: nil
+            max_budget_cents: nil,
+            accounting: :strict
 
   @type t :: %__MODULE__{
           request_limit: non_neg_integer() | nil,
@@ -49,7 +64,8 @@ defmodule ExAgent.UsageLimits do
           input_tokens_limit: non_neg_integer() | nil,
           output_tokens_limit: non_neg_integer() | nil,
           tool_calls_limit: non_neg_integer() | nil,
-          max_budget_cents: number() | nil
+          max_budget_cents: number() | nil,
+          accounting: :strict | :estimated
         }
 
   @doc "Validate nonnegative integral counters and a nonnegative monetary threshold."
@@ -71,6 +87,9 @@ defmodule ExAgent.UsageLimits do
       end)
 
     cond do
+      limits.accounting not in [:strict, :estimated] ->
+        {:error, {:invalid_usage_limit, :accounting}}
+
       invalid ->
         {:error, {:invalid_usage_limit, invalid}}
 
@@ -85,41 +104,99 @@ defmodule ExAgent.UsageLimits do
 
   def validate(_), do: {:error, :invalid_usage_limits}
 
+  @doc false
+  def metric_limits?(limits), do: dimensions(limits) != []
+
+  @doc false
+  def dimensions(limits) do
+    []
+    |> then(fn dims ->
+      if limits.input_tokens_limit != nil or limits.total_tokens_limit != nil,
+        do: ["input" | dims],
+        else: dims
+    end)
+    |> then(fn dims ->
+      if limits.output_tokens_limit != nil or limits.total_tokens_limit != nil,
+        do: ["output" | dims],
+        else: dims
+    end)
+    |> then(fn dims -> if limits.max_budget_cents != nil, do: ["cost" | dims], else: dims end)
+  end
+
+  @doc false
+  def check_accounting(%__MODULE__{accounting: :estimated}, _usage), do: :ok
+
+  def check_accounting(limits, usage) do
+    usage = ExAgent.Message.Usage.qualify(usage)
+    a = usage.accounting
+
+    Enum.reduce_while(dimensions(limits), :ok, fn dimension, :ok ->
+      available =
+        if dimension == "cost", do: a["cost"]["availability"], else: a["availability"][dimension]
+
+      cond do
+        a["quality"] != "reported" ->
+          {:halt, {:error, {:accounting_unavailable, dimension, :unreported}}}
+
+        dimension == "cost" and available != "available" ->
+          {:halt, {:error, :cost_unknown}}
+
+        available != "available" ->
+          {:halt, {:error, {:accounting_unavailable, dimension, :missing}}}
+
+        true ->
+          {:cont, :ok}
+      end
+    end)
+  end
+
   @doc """
   Check the request/token/budget limits against accumulated `usage`, the
   upcoming request count, and the estimated `cost_cents`. Returns `:ok` or
   `{:error, {:usage_limit_exceeded, which, value}}`.
 
-  `request_count` is the number of model requests already issued (0 before the
+  `request_count` is the number of Model attempts already admitted (0 before the
   first). `cost_cents` is the known estimate so far, or `nil` when unknown; an
-  enabled monetary budget rejects unknown cost.
+  strict monetary budget rejects unknown cost; estimated thresholds use available
+  subtotals, with host-bound enforcement in ExecutionScope.
   """
   @spec check_before_request(t(), ExAgent.Message.Usage.t(), non_neg_integer(), number() | nil) ::
           :ok | {:error, term()}
   def check_before_request(%__MODULE__{} = limits, usage, request_count, cost_cents \\ nil) do
-    total = (usage.input_tokens || 0) + (usage.output_tokens || 0)
+    usage = ExAgent.Message.Usage.qualify(usage)
 
-    cond do
-      limits.max_budget_cents != nil and not is_number(cost_cents) ->
-        {:error, :cost_unknown}
+    total =
+      if usage.input_tokens != nil or usage.output_tokens != nil,
+        do: (usage.input_tokens || 0) + (usage.output_tokens || 0)
 
-      exceeds?(limits.request_limit, request_count) ->
-        {:error, {:usage_limit_exceeded, :request_limit, request_count}}
+    with :ok <-
+           check_accounting(
+             limits,
+             ExAgent.Message.Usage.with_cost(usage, cost_cents, "estimator")
+           ) do
+      cond do
+        limits.accounting == :strict and limits.max_budget_cents != nil and
+            not is_number(cost_cents) ->
+          {:error, :cost_unknown}
 
-      exceeds?(limits.total_tokens_limit, total) ->
-        {:error, {:usage_limit_exceeded, :total_tokens, total}}
+        exceeds?(limits.request_limit, request_count) ->
+          {:error, {:usage_limit_exceeded, :request_limit, request_count}}
 
-      exceeds?(limits.input_tokens_limit, usage.input_tokens || 0) ->
-        {:error, {:usage_limit_exceeded, :input_tokens, usage.input_tokens || 0}}
+        exceeds?(limits.total_tokens_limit, total) ->
+          {:error, {:usage_limit_exceeded, :total_tokens, total}}
 
-      exceeds?(limits.output_tokens_limit, usage.output_tokens || 0) ->
-        {:error, {:usage_limit_exceeded, :output_tokens, usage.output_tokens || 0}}
+        exceeds?(limits.input_tokens_limit, usage.input_tokens) ->
+          {:error, {:usage_limit_exceeded, :input_tokens, usage.input_tokens}}
 
-      exceeds?(limits.max_budget_cents, cost_cents) ->
-        {:error, {:usage_limit_exceeded, :budget_cents, cost_cents}}
+        exceeds?(limits.output_tokens_limit, usage.output_tokens) ->
+          {:error, {:usage_limit_exceeded, :output_tokens, usage.output_tokens}}
 
-      true ->
-        :ok
+        exceeds?(limits.max_budget_cents, cost_cents) ->
+          {:error, {:usage_limit_exceeded, :budget_cents, cost_cents}}
+
+        true ->
+          :ok
+      end
     end
   end
 
@@ -127,7 +204,8 @@ defmodule ExAgent.UsageLimits do
   Check the `tool_calls_limit` before executing a batch of `incoming` tool
   calls. Returns `:ok` or `{:error, {:usage_limit_exceeded, :tool_calls, n}}`.
 
-  `executed` is the number of tool calls already run this run. Following
+  `executed` is the historical parameter name for admitted/reserved tool calls,
+  not dispatched calls, successes or external effects. Following
   pydanticAI, if `executed + incoming` would exceed the limit, none of the
   incoming calls are executed.
   """
@@ -146,6 +224,7 @@ defmodule ExAgent.UsageLimits do
   end
 
   defp exceeds?(nil, _), do: false
+  defp exceeds?(_, nil), do: false
   defp exceeds?(limit, value), do: value >= limit
 end
 
@@ -183,6 +262,8 @@ defmodule ExAgent.CostGuard do
   or $2500 per 1M tokens). Fractions are preserved rather than truncating every
   small request to zero. Missing rates remain unknown when their token direction
   is used; they do not imply a free provider.
+  This is a flat input/output approximation, without cache discounts or adding
+  reasoning subsets twice. Supply a model-aware callback for differentiated prices.
   """
   @spec estimator(pricing()) :: (Usage.t() -> non_neg_integer() | float() | :unknown)
   def estimator(pricing) when is_map(pricing) do

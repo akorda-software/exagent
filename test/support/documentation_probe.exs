@@ -1,6 +1,6 @@
 # Explicit documentation acceptance, using already compiled checkout BEAMs only:
 #   EXAGENT_OFFLINE=1 elixir -pa '_build/test/lib/*/ebin' test/support/documentation_probe.exs
-# Run in a disposable VM. No Mix/install, application config writes, external
+# Run in a disposable VM. No Mix/install, host config writes, external
 # models, Repo, MCP process or network exporter. Source blocks are selected by
 # exact heading and ordinal; missing/ambiguous selections fail, never skip.
 # Provider strings alone become deterministic fixture variables. Application
@@ -8,6 +8,8 @@
 # not executed; their external gates remain separate. Diagnostics fail acceptance.
 
 unless System.get_env("EXAGENT_OFFLINE") == "1", do: raise("set EXAGENT_OFFLINE=1")
+# Plain elixir does not load config/test.exs. Keep the disposable VM off .env.
+Application.put_env(:req_llm, :load_dotenv, false)
 {:ok, _} = Application.ensure_all_started(:exagent)
 
 IO.inspect(%{elixir: System.version(), otp: to_string(:erlang.system_info(:otp_release))},
@@ -39,6 +41,7 @@ defmodule DocumentationProbe do
   Record.defrecordp(:span, Record.extract(:span, from_lib: "opentelemetry/include/otel_span.hrl"))
 
   @root Path.expand("../..", __DIR__)
+  Code.require_file(Path.join(@root, "docs/markdown_formatter.exs"))
 
   defmodule Callbacks do
     def deliver_validated_output(output), do: {:delivered, output}
@@ -56,6 +59,199 @@ defmodule DocumentationProbe do
     end
 
     def force_flush(_owner), do: :ok
+  end
+
+  test "Markdown formatter rebases navigation while preserving literal code and external URLs" do
+    source = Path.join(@root, "docs/guides/agents.md")
+
+    sources = %{
+      Path.join(@root, "docs/status.md") => "status.md",
+      Path.join(@root, "docs/README.md") => "documentation.md"
+    }
+
+    input = """
+    [Status](../status.md#support) and [`map`](../README.md).
+    [`map`]: ../README.md
+    <a href="ExAgent.html#run/3">API</a>
+    Literal `[Status](../status.md)` stays intact.
+    [External](https://example.invalid/../status.md) and [here](#support).
+    ```elixir
+    "[Status](../status.md)"
+    ```
+    ~~~~text
+    [Status](../status.md)
+    ~~~~
+    """
+
+    output = ExAgent.Docs.Markdown.rebase(input, source, sources, MapSet.new(["ExAgent.html"]))
+    assert output =~ "[Status](status.md#support) and [`map`](documentation.md)."
+    assert output =~ "[`map`]: documentation.md"
+    assert output =~ ~s(<a href="ExAgent.md#run/3">API</a>)
+    assert output =~ "Literal `[Status](../status.md)` stays intact."
+    assert output =~ "[External](https://example.invalid/../status.md) and [here](#support)."
+    assert output =~ "```elixir\n\"[Status](../status.md)\"\n```"
+    assert output =~ "~~~~text\n[Status](../status.md)\n~~~~"
+  end
+
+  test "welcome and getting-started preserve results and stateful model progress" do
+    {"a test response", _, diagnostics} =
+      evaluate(block("docs/home.md", "## A small, working beginning"))
+
+    clean!(diagnostics)
+
+    {%{output: "a test response", status: :succeeded, requests: 1}, bindings, diagnostics} =
+      evaluate(block("docs/guides/getting-started.md", "## Run your first agent"))
+
+    clean!(diagnostics)
+    agent = Keyword.fetch!(bindings, :agent)
+
+    {"second", bindings, diagnostics} =
+      evaluate(block("docs/guides/getting-started.md", "## Keep a conversation"),
+        agent: %{agent | model: %TestModel{script: ["first", "second"]}}
+      )
+
+    assert Keyword.fetch!(bindings, :second).model.index == 2
+    clean!(diagnostics)
+
+    {{:completed, "a test response"}, _, diagnostics} =
+      evaluate(block("docs/guides/getting-started.md", "## Handle success and failure"),
+        agent: agent
+      )
+
+    clean!(diagnostics)
+  end
+
+  test "task-guide tool and output examples execute the actual derived schemas" do
+    {[_tool], _, diagnostics} =
+      evaluate(block("docs/guides/tools-and-output.md", "## Define a tool"))
+
+    clean!(diagnostics)
+
+    {%{output: "3 kilometres is 3000 metres.", requests: 2, tools: 1}, bindings, diagnostics} =
+      evaluate(block("docs/guides/tools-and-output.md", "## Exercise the whole tool loop"))
+
+    assert [%Part.ToolReturn{status: :succeeded, content: 3000}] =
+             returns(Keyword.fetch!(bindings, :result))
+
+    clean!(diagnostics)
+
+    {3000, bindings, diagnostics} =
+      evaluate(block("docs/guides/tools-and-output.md", "## Return an Ecto struct"))
+
+    assert Keyword.fetch!(bindings, :result).output.__struct__ == DocumentationDistance
+    clean!(diagnostics)
+  end
+
+  test "model guide resolves configuration without requests and bounds the local run" do
+    for heading <- ["## Resolve a text model", "## Configure Chat tools and streaming"] do
+      snippet = block("docs/guides/models-and-limits.md", heading)
+
+      snippet =
+        replace!(snippet, ~s|System.fetch_env!("OPENAI_API_KEY")|, ~s("synthetic-doc-key"))
+
+      {_, bindings, diagnostics} = evaluate(snippet)
+      model = Keyword.fetch!(bindings, :model)
+      assert ExAgent.Model.model_name(model) == "gpt-4o-mini"
+
+      if heading == "## Configure Chat tools and streaming",
+        do: assert(model.tool_profile == :chat_tools_v1)
+
+      clean!(diagnostics)
+    end
+
+    {1, bindings, diagnostics} =
+      evaluate(block("docs/guides/models-and-limits.md", "## Bound requests and tool calls"))
+
+    assert Keyword.fetch!(bindings, :agent).usage_limits.request_limit == 3
+    clean!(diagnostics)
+  end
+
+  test "runtime guide subscribes before admission and consumes a terminal stream once" do
+    {%{first: "a test response", second: "a test response"}, bindings, diagnostics} =
+      evaluate(block("docs/guides/runtime-and-events.md", "## Start a conversation"))
+
+    clean!(diagnostics)
+    server = Keyword.fetch!(bindings, :server)
+
+    try do
+      {"a test response", _, diagnostics} =
+        evaluate(
+          block(
+            "docs/guides/runtime-and-events.md",
+            "## Subscribe before asynchronous admission"
+          ),
+          server: server
+        )
+
+      clean!(diagnostics)
+    after
+      ExAgent.AgentSupervisor.stop_agent(server)
+    end
+
+    {"Hello from Elixir", bindings, diagnostics} =
+      evaluate(block("docs/guides/runtime-and-events.md", "## Stream a one-shot run"))
+
+    assert Enum.count(Keyword.fetch!(bindings, :events), &match?({:result, _}, &1)) == 1
+    clean!(diagnostics)
+  end
+
+  test "checkpoint guide confirms data under the documented namespace" do
+    {"a test response", bindings, diagnostics} =
+      evaluate(
+        block("docs/guides/durability-and-approvals.md", "## Add a conversation checkpoint")
+      )
+
+    server = Keyword.fetch!(bindings, :server)
+    store = ExAgent.Store.scoped(:ets, "docs-workspace")
+
+    try do
+      assert {:ok, _} = ExAgent.Store.load_agent_snapshot(store, "docs-checkpoint")
+      clean!(diagnostics)
+    after
+      ExAgent.AgentSupervisor.stop_agent(server)
+      ExAgent.Store.delete_agent_snapshot(store, "docs-checkpoint")
+    end
+  end
+
+  test "coordination guide delegates in scope and passes the shared-state turn" do
+    {"Summary received.", bindings, diagnostics} =
+      evaluate(block("docs/guides/coordination.md", "## Delegate inside the parent's scope"))
+
+    result = Keyword.fetch!(bindings, :result)
+    assert [%Part.ToolReturn{status: :succeeded, content: "A concise summary."}] = returns(result)
+    assert result.usage.input_tokens == 3
+    clean!(diagnostics)
+
+    {["Draft ready"], bindings, diagnostics} =
+      evaluate(block("docs/guides/coordination.md", "## Give shared state one writer"))
+
+    session = Keyword.fetch!(bindings, :session)
+
+    try do
+      assert %{notes: ["Draft ready"]} = ExAgent.Session.read_state(session)
+      clean!(diagnostics)
+    after
+      GenServer.stop(session)
+    end
+  end
+
+  test "testing guide executes its actual ExUnit example assertions" do
+    {_, _, diagnostics} =
+      evaluate(block("docs/guides/testing.md", "## Assert on the public result"))
+
+    clean!(diagnostics)
+    assert Code.ensure_loaded?(DocumentationAgentTest)
+    apply(DocumentationAgentTest, :"test returns the validated final output", [%{}])
+  end
+
+  test "testing guide preserves one effect and failed progress when a script is exhausted" do
+    {%{status: :failed, requests: 2, effects: 1}, bindings, diagnostics} =
+      evaluate(block("docs/guides/testing.md", "## Script every expected request"))
+
+    assert [%Part.ToolReturn{status: :succeeded, content: "recorded"}] =
+             returns(Keyword.fetch!(bindings, :partial))
+
+    clean!(diagnostics)
   end
 
   test "README one-shot and streaming consume the actual selected codeblocks" do
@@ -94,14 +290,13 @@ defmodule DocumentationProbe do
   end
 
   test "README deftool preserves city/days schema and executes valid input" do
-    snippet = block("README.md", "### Tools with derived schemas")
-    snippet = replace!(snippet, ~s("openai:gpt-4o"), "fixture_model")
+    snippet = block("README.md", "### Define a tool")
 
     model = %TestModel{
       script: [{:tool_calls, [call("get_weather", %{"city" => "Madrid", "days" => 2})]}, "done"]
     }
 
-    {agent, _, warnings} = evaluate(snippet, fixture_model: model)
+    {agent, _, warnings} = evaluate(snippet, chat_model: model)
     [tool] = agent.tools
     schema = tool.parameters_json_schema |> Jason.encode!() |> Jason.decode!()
     assert schema["required"] == ["city", "days"]
@@ -118,9 +313,43 @@ defmodule DocumentationProbe do
     clean!(warnings)
   end
 
+  test "runtime recipe scopes public events and supports idempotent cancellation" do
+    recipe = block("docs/guides/migration.md", "### Minimal runtime integration recipe")
+    agent = ExAgent.new(model: %TestModel{label: "hello"})
+    {handles, _, warnings} = evaluate(recipe, agent: agent)
+    clean!(warnings)
+    %{server: server, namespace: namespace, request_id: request_id, cancel: cancel} = handles
+
+    assert_receive {:exagent_event,
+                    %ExAgent.Event{
+                      namespace: ^namespace,
+                      request_id: ^request_id,
+                      type: :run_finished,
+                      payload: %{output: "hello"}
+                    }},
+                   1000
+
+    assert :ok = cancel.()
+    assert %{pending: 0, pending_bytes: 0, namespace: ^namespace} = ExAgent.Server.health(server)
+    GenServer.stop(server)
+
+    :ok =
+      ExAgent.Store.delete_agent_snapshot(ExAgent.Store.scoped(:ets, namespace), "conversation-1")
+  end
+
+  test "README explicit Chat constructor resolves and admits the documented profile without IO" do
+    snippet = block("README.md", "### Tools with derived schemas")
+    snippet = replace!(snippet, ~s|System.fetch_env!("OPENAI_API_KEY")|, ~s("synthetic-doc-key"))
+    {model, _, diagnostics} = evaluate(snippet)
+    assert %ExAgent.Models.ReqLLM{tool_profile: :chat_tools_v1} = model
+    assert ExAgent.Model.model_name(model) == "gpt-4o-mini"
+    assert ExAgent.Model.profile(model).supports_tools
+    assert {:ok, ^model} = ExAgent.Model.resolve(model)
+    clean!(diagnostics)
+  end
+
   test "README Ecto block compiles in a fresh context and validates its real schema" do
     snippet = block("README.md", "### Structured output")
-    snippet = replace!(snippet, ~s("anthropic:claude-3-5-haiku"), "fixture_model")
     owner = self()
 
     model = %TestModel{
@@ -134,7 +363,7 @@ defmodule DocumentationProbe do
       ]
     }
 
-    {{:ok, result}, bindings, warnings} = evaluate(snippet, fixture_model: model)
+    {{:ok, result}, bindings, warnings} = evaluate(snippet, chat_model: model)
     assert result.output.__struct__ == WeatherReport
 
     assert Map.take(result.output, [:city, :temp_c, :condition]) == %{
@@ -183,8 +412,15 @@ defmodule DocumentationProbe do
       assert ExAgent.Session.read_state(game) == world
       clean!(warnings)
       coordination = block("README.md", "## Coordination")
-      coordination = replace!(coordination, ~s("openai:gpt-4o-mini"), "helper_model")
-      coordination = replace!(coordination, ~s("openai:gpt-4o"), "parent_model")
+
+      coordination =
+        replace!(
+          coordination,
+          "helper = ExAgent.new(model: chat_model",
+          "helper = ExAgent.new(model: helper_model"
+        )
+
+      coordination = replace!(coordination, "model: chat_model", "model: parent_model")
 
       parent_model = %TestModel{
         script: [{:tool_calls, [call("summarize", %{"prompt" => "subtask"})]}, "parent done"]
@@ -335,7 +571,13 @@ defmodule DocumentationProbe do
       refute inspect(attrs) =~ "fixture output"
       clean!(diagnostics)
 
-      context = block("docs/guides/observability.md", "## 2. Enable instrumentation", 2)
+      integration =
+        block("docs/guides/observability.md", "### ReqLLM and one owner for request spans")
+
+      {:ok, _, diagnostics} = evaluate(integration)
+      clean!(diagnostics)
+
+      context = block("docs/guides/observability.md", "### Application-owned process boundaries")
       parent = :otel_tracer.start_span(%{}, tracer, "fixture parent", %{})
       token = :otel_ctx.attach(:otel_tracer.set_current_span(%{}, parent))
 
@@ -354,6 +596,7 @@ defmodule DocumentationProbe do
       assert :opentelemetry.get_tracer() == global
       clean!(diagnostics)
     after
+      ExAgent.Observability.ReqLLM.detach()
       Supervisor.stop(supervisor)
       GenServer.stop(storage)
     end
@@ -361,7 +604,15 @@ defmodule DocumentationProbe do
 
   test "external setup recipes have explicit syntax-only gates, never execute their side effects" do
     recipes = [
+      {"docs/guides/mcp.md", "## Connect a stdio server", 1, "external stdio: MCP SDK gate"},
+      {"docs/guides/mcp.md", "## Supply an HTTP pool", 1, "Finch child: host supervision gate"},
+      {"docs/guides/mcp.md", "## Supply an HTTP pool", 2, "external HTTP: MCP SDK gate"},
+      {"docs/guides/getting-started.md", "## Install ExAgent 2.0", 1,
+       "deps: package consumer gate"},
+      {"docs/guides/getting-started.md", "## Install ExAgent 2.0", 2,
+       "Config: host startup gate"},
       {"README.md", "## Quick start", 1, "Mix.install: package consumer gate"},
+      {"README.md", "## Quick start", 2, "stock tuple with explicit auth: resolution TCP gate"},
       {"README.md", "## Layer 2 — snapshots & resume", 2, "Postgres: authorized Repo/DB gate"},
       {"README.md", "## External tools (MCP)", 1, "npx/MCP: separate authorized backend gate"},
       {"docs/guides/observability.md", "## 1. Application setup", 2,

@@ -15,6 +15,11 @@ defmodule ExAgent.Coordination do
   message each other, rather than one agent calling another as a tool. Delegation
   is provided for parity with the pydanticAI pattern and for cases where nesting
   a sub-agent inside a tool is genuinely the simplest design.
+
+  `ExAgent.Coordination.Composition` executes and resumes trusted durable sequences.
+  `ExAgent.Coordination.Flow` adds a versioned host router and bounded parallel
+  fan-out/fan-in with ordered outcomes, fail-fast/collect and the same C7 approvals.
+  Structural roots have no Model request; leaves use the original agent loop.
   """
 
   alias ExAgent.Tool
@@ -41,21 +46,43 @@ defmodule ExAgent.Coordination do
 
   ## Example
 
-      delegate = ExAgent.new(model: "openai:gpt-4o-mini", instructions: "You summarize.")
+  `chat_model` is an explicitly configured `ExAgent.Models.ReqLLM` instance with
+  credentials and the qualified `:chat_tools_v1` profile (see the README recipe).
+
+      delegate = ExAgent.new(model: chat_model, instructions: "You summarize.")
       parent =
         ExAgent.new(
-          model: "openai:gpt-4o",
+          model: chat_model,
           tools: [ExAgent.Coordination.delegation_tool(delegate, name: "summarize")]
         )
 
   The parent model can then call `summarize(prompt: "...")` to hand a sub-task
-  to the cheaper model and get its result back, with both runs' tokens counted
+  to the delegate and get its result back, with both runs' tokens counted
   together.
   """
   @spec delegation_tool(ExAgent.t() | (map(), map() -> ExAgent.t()), keyword()) :: Tool.t()
   def delegation_tool(delegate, opts \\ []) do
     name = opts[:name] || "delegate"
     prompt_arg = opts[:prompt_arg] || "prompt"
+
+    child_opts =
+      Keyword.take(opts, [
+        :permissions,
+        :approve,
+        :estimate_cost,
+        :deadline,
+        :max_concurrent_requests
+      ])
+
+    descriptor =
+      if opts[:continuation],
+        do:
+          ExAgent.Continuation.Delegation.new(
+            delegate,
+            prompt_arg,
+            child_opts,
+            opts[:continuation]
+          )
 
     Tool.new(
       name: name,
@@ -72,18 +99,10 @@ defmodule ExAgent.Coordination do
       },
       takes_ctx: true,
       max_retries: opts[:max_retries] || 1,
+      delegation: descriptor,
       call: fn ctx, args ->
         prompt = prompt_string(prompt_value(args, prompt_arg))
         agent = resolve_delegate(delegate, ctx, args)
-
-        child_opts =
-          Keyword.take(opts, [
-            :permissions,
-            :approve,
-            :estimate_cost,
-            :deadline,
-            :max_concurrent_requests
-          ])
 
         case ExAgent.run_child(ctx, agent, prompt, child_opts) do
           {:ok, %{output: output}} ->

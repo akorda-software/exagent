@@ -3,6 +3,8 @@ deps = Mix.Dep.load_and_cache()
 apps = Enum.map(deps, & &1.app)
 
 forbidden = [
+  :jido,
+  :jido_ai,
   :ecto_sql,
   :postgrex,
   :db_connection,
@@ -14,11 +16,15 @@ forbidden = [
 ]
 
 true = Enum.all?(forbidden, &(&1 not in apps))
+true = :req_llm in apps
+true = Version.match?(Application.spec(:req, :vsn) |> to_string(), ">= 0.7.4")
 true = :opentelemetry_api in apps == (mode != "none")
 true = :opentelemetry in apps == mode in ["sdk", "exporter"]
 true = :opentelemetry_exporter in apps == (mode == "exporter")
-true = Version.match?(Application.spec(:mint, :vsn) |> to_string(), ">= 1.10.0")
-true = Version.match?(Application.spec(:hpax, :vsn) |> to_string(), ">= 1.0.4")
+true = Version.match?(Application.spec(:finch, :vsn) |> to_string(), ">= 0.24.0")
+true = Version.match?(Application.spec(:mint, :vsn) |> to_string(), ">= 1.11.0")
+true = Version.match?(Application.spec(:hpax, :vsn) |> to_string(), ">= 1.1.0")
+true = Version.match?(Application.spec(:jsv, :vsn) |> to_string(), "~> 0.25.0")
 
 graph =
   Enum.map(deps, fn dep ->

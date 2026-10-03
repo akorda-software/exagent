@@ -1,148 +1,218 @@
-# Estado actual y recapitulación
+# Support and release status
 
-**Base revisada: auditoría de testing del 2026-09-10.** El framework tiene una
-base local ampliamente verificada. La aceptación de sistemas externos y la
-publicación de la major siguen abiertas. La versión nominal del checkout es
-**1.3.0** en HEAD `69c2747`, pero contiene cambios incompatibles destinados a una
-major posterior. Los registros nocturnos de abajo corresponden al nominal1.2.0.
+Updated **2026-10-03**. These docs describe **ExAgent 2.0.0**. At this dated
+checkpoint, release metadata and the GitHub publication workflow are prepared on
+`codex/v2-candidate-029`; merge, official release and Hex publication are pending
+the next session. Availability is established by the
+[Hex release](https://hex.pm/packages/exagent/2.0.0) and its versioned HexDocs,
+not by the version string alone. See [publishing](development/releasing.md).
 
-## Última aceptación: auditoría de testing
+Release preparation verifies17 offline Git/loopback guards,18 executable
+documentation cases, strict dev/test compilation and ExDoc/site/TAR checks.
+A fresh installed2.0.0 minimal graph passes8 contracts; its aggregate diagnostic
+remains exit1 from38 upstream warning lines. All94 library source files and the
+dependency lock match the accepted runtime freeze. The
+[preparation receipt](https://github.com/akorda-software/exagent/blob/codex/v2-candidate-029/docs/orchestration/2026-10-01-v2-codex/RELEASE-PREPARATION.md)
+distinguishes the installed staging TAR from the final documentation artifact.
 
-Inventario readonly completo, mejoras y dos revisiones frescas por área. Se
-corrigieron falsos verdes de eventos/cola/telemetry, oráculos de datos/efectos y
-cleanup; la auditoría reprodujo y cerró cinco familias de defectos de biblioteca.
-Se retiró un test ficticio de payload sólo después de comprobar sus sustitutos
-mediante mutación del adapter. Detalle y backlog en
-[auditoría de testing](development/testing-audit.md).
+The requested operational closure now integrates the Dragonex extensions, opt-in
+metrics through official experimental0.6 APIs and the stock HTTP disposable-VM
+recipe. A reproduced SDK-restart cache defect is corrected through a live public
+provider lookup.194 focused cases pass on1.18; the complete1.20 suite passes2,235
+cases with zero failures and28 exclusions in2,001.6 seconds. The original routine
+exits1 at ExDoc because a callback link lacks its `c:` prefix. That prose-only
+correction passes strict generation and link readback; the failed invocation is
+retained, without a suite rerun. Five installed graphs pass38 functional contracts
+on the frozen source. Final artifact checks and identities are recorded in the
+[closure record](https://github.com/akorda-software/exagent/blob/codex/v2-candidate-029/docs/orchestration/2026-10-01-v2-codex/OPERATIONAL-CLOSURE.md).
 
-**Auditoría cerrada por acuerdo del usuario; se retoma el desarrollo.** El testing
-se centra en los contratos e integración de ExAgent; los internals de sus
-dependencias corresponden a sus mantenedores. Los warnings Req/gproc se conservan
-como seguimiento externo y no bloquean por sí solos esa continuidad. El
-[criterio de verificación](development/verification.md) delimita responsabilidades
-y frecuencia; la segunda revisión queda diferida al paquete funcionalmente terminado.
+## What is accepted
 
-| Runtime de esta unidad | Compile forzado | Correctos | Fallos | Excluidos |
-|---|---:|---:|---:|---:|
-| Elixir1.20.0 / OTP29.0.5 | 75 fuentes | 655 | 0 | 28 |
-| Elixir1.17.3 / OTP27.3.4.17 | 75 fuentes + dependencias desde build vacío | 655 | 0 | 28 |
+| Boundary | Evidence | Scope |
+|---|---|---|
+| Offline runtime | Operational FULL1.20:2,235 passes /0 failures /28 exclusions.194 integrated cases pass on1.18;53 affected tracing/metric cases pass on1.20 after the causal SDK-restart fix. | Five initial local phases pass. ExDoc initially fails on a callback link; corrected generation/link checks pass separately. No new complete1.18 run. Prior2,208/2,198/2,177 receipts retain their identities. TestModel/loopback fixtures, not real-provider compatibility. |
+| Runtime targets | Elixir 1.18 / OTP 28 and Elixir 1.20 / OTP 29; strict test compile passes on both. | Tested combinations, not every patch release or dependency graph. |
+| Real model | Updated dependencies: 12 scenarios pass initially; length sync/stream pass after correcting the stimulus. All 14 scenarios covered, 18 admissions / 3 effects. | Original refusal/stop failure retained; not a single new 14/14 wave. GPT-4o-mini/OpenRouter Chat tools profile only. |
+| Real consumer | October 3: 27 scenarios accepted per model, reusing 26 unchanged cases plus the newly qualified required-header native case08. Consumer precommit: 20 offline passes /27 opt-in exclusions. Complex workflows retain their 4/4 receipts,46 requests /15 effects per model. | OpenRouter Chat, reasoning disabled. The old nullable extraction still fails. Smoke phases now Luna53/DeepSeek57; complex phases retain70/53. Invoice unobserved. No new complete27-case wave or universal provider qualification. |
+| Durable recovery | October 3 PostgreSQL 17.4: 14 phases, including lost COMMIT ACK, competing resumers, fresh-VM resume, explicit recovery and backup/restore; cleanup confirmed. | Declared single-database/host profile, not universal HA or external exactly-once effects. |
+| Langfuse and Opik | Each: prior native/API 33/33 observations, 667 attributes, 12 model usages; UI 12 cases / 248 attributes. Exporter 1.11 booleans newly verified locally. | Same finite A10 criteria. No fresh cloud/API/UI wave. Content off; synthetic TestModel tokens. |
+| Package consumers | Operational staging TAR: five clean1.20 graphs,38 contracts; none/API/SDK/exporter ×8 plus six metric SDK/reader cases.94 library sources match the FULL freeze. | Staging TAR and final documentation-only artifact retain separate identities. Actual ExUnit records have zero failures/exclusions/skips. Functional acceptance; upstream strict warnings remain red. Earlier32/28/56 receipts retain their scope. |
+| Integrations | Official MCP SDK 2.2.0: five profiles; LiveViewTest/Oban SQL: six cases plus crash/recovery. | Qualified recipes, not every deployment combination. |
+| Load and cleanup | Finite TestModel load/soak/saturation and owned-resource cleanup. | No LLM latency SLO, cloud availability or upstream predecode RAM guarantee. |
 
-Seed37556, warnings-as-errors. Los28excluidos son22proveedores y6Postgres;
-no son aceptación de esos sistemas. No se repitió1.18/28 en esta unidad.
-Harness compilado23/23; C0 exige14indicadores, docs7/7, R3instrumentado1/1,
-tres reports de evals y load smoke160, todos con exit0.
+The earlier observability lifecycle polish added an optional application-supervised
+ReqLLM maintenance child and a per-instance exporter worker restart budget.
+Its complete1.20 suite takes1,995.2 seconds; the nine-phase routine takes2,035.684
+seconds. The final documentation/tooling correction preserves all92 library
+sources from that freeze; Dragonex was outside that dated acceptance and is now
+integrated by the operational closure above.
+TTL must exceed live request durations. A finite budget closes admission after
+exhaustion; its default remains infinity and restarting the processor resets it.
+Native HTTP verifies one-profile recreation containment with budget0 while
+retaining the surviving-socket limit. Stock ReqLLM metric APIs also differ from
+published experimental0.6 arities; that receipt did not qualify metric export.
+The new opt-in Adapter uses those public arities, with its own SDK/reader checks.
+See [known limits](development/known-limits.md) and the
+[lifecycle receipt](https://github.com/akorda-software/exagent/blob/codex/v2-candidate-029/docs/orchestration/2026-10-01-v2-codex/OBSERVABILITY-LIFECYCLE.md).
 
-**Paquete runtime24/24, strict pendiente en los cuatro grafos nativos.** El TAR
-de93archivos, seed771506, pasa seis nombres ExUnit por none/API/SDK/exporter,
-sin excluidos/skips. Cada grafo emite una deprecación `xref.exclude` de Req0.6.1
-bajo Mix1.20; exporter añade los nueve warnings gproc/OTP29 conocidos. El runner
-retiene **exit1**, aunque el runtime pase. No se cambió lock, floors ni dependencias
-para ocultarlo. La CI quedó explícitamente offline y con artefactos por fase;
-su driver pasó localmente, no se atribuye una ejecución remota GitHub.
+The critical review's one P1/four P2 findings were corrected and verified.
+The single final R9 integration/distribution review is closed. No known
+unresolved finding from those scoped reviews is being hidden by this summary.
 
-El estado de fuentes continúa como WIP de esta auditoría sobre69c2747, sin commit,
-bump ni publicación. El archivo `docs/archive/2026-09-testing-audit.md` conserva
-comandos, provenance, controles negativos y liquidación de Orca.
+The subsequent owner alignment pass corrects stale documentation rather than
+changing execution: exhausted TestModel scripts fail, SQL/C7 and both tracing
+backends have scoped acceptance, and API references resolve against the candidate.
+A fresh 146-case critical run passes; the documentation probe passes 18 cases on
+both runtimes. TestModel's executable AST and six runtime BEAM chunks are unchanged,
+so the earlier complete runtime evidence retains its scope. See the
+[alignment receipt](https://github.com/akorda-software/exagent/blob/codex/v2-candidate-029/docs/orchestration/2026-10-01-v2-codex/RELEASE-READINESS.md).
+This pass does not reopen the independent R9 review or expand provider guarantees.
 
-## Qué hemos consolidado
+The subsequent [known-limit investigation](development/known-limits.md) isolates
+native extraction to the caller's optional header contract. The final E2E schema
+requires merchant/currency and case08 passes with both models, while reverting
+to nullable reproduces DeepSeek's failure. ExAgent runtime and dependency lock
+remain unchanged. Stock warnings have identified upstream fixes/release blockers;
+the strict diagnostic remains red. On2026-10-03 the user chose to proceed with
+publication while retaining these external limitations, without changing upstream
+projects or suppressing their diagnostics. This is a release decision, not a
+new green diagnostic or an expansion of qualified profiles.
 
-| Área | Resultado vigente |
-|---|---|
-| Core y streaming | Un loop para sync, `stream_text` y stream público; resultado completo o RunError con progreso, historial y modelo conocidos. |
-| Tools | Validación JSV antes de efectos, permisos sobre la tool efectiva, JSON portable, outcomes de batch y retries explícitos. Ecto valida el output final. |
-| Delegación | Scope compartido, admisión atómica, autoridad de ancestros y contabilidad por identidad sin sumar dos veces los hijos. |
-| Runtime y snapshots | Ownership y cancelación, checkpoint confirmado, estado dirty y retry sólo de save; snapshots v2 con lectura v1 validada y policy confiable. |
-| Protocolos | Streaming/SSE y MCP con límites, fragmentación Unicode, terminales y cleanup comprobados localmente. |
-| Observabilidad | OTel opcional y app-owned, contenido off, redacción previa, processor acotado; OTLP nativo realmente decodificado en loopback. |
-| Aceptación | Consumidores de bytes TAR, tres runtimes, escenarios compuestos, secuencias con oráculos independientes, evals y medidas finitas. |
+## Read the CI result accurately
 
-Durante la noche se añadieron **40 tests raíz**. Las correcciones de biblioteca
-se centraron en compilar correctamente el processor con SDK opcional en Elixir
-1.17 y 1.20. También se corrigieron supuestos de fixtures, dos snippets README y
-el runner de aceptación: selectores Mix heredados, destinos con enlaces, warnings
-por fase y colisión entre el grafo y su diagnóstico. No se presentan esas
-correcciones de tooling como bugs del loop de agentes.
+[Compatibility run03](https://github.com/akorda-software/exagent/actions/runs/37019949320)
+tested commit `f69aedea1a2f7c94c546fa95b631a71664110b4d`.
+Both complete suites passed with warnings-as-errors:
+**2,176 passes, zero failures, 28 exclusions per runtime**. Package and finite
+harness checks passed, as did all functional consumer contracts.
 
-## Evidencia de la consolidación anterior
+The **overall run is failure**, because strict dependency diagnostics report
+stock TOML/WebSockex/gproc warnings. There are no ExAgent compiler warnings in
+those accepted checks. G5 strict diagnostics remain open; there is no suppression,
+fork or forced unsupported upgrade.
 
-| Runtime | Compile forzado | Correctos | Fallos | Excluidos |
-|---|---:|---:|---:|---:|
-| Elixir 1.20.0 / OTP 29.0.5 | 73 fuentes | 619 | 0 | 28 |
-| Elixir 1.18.4 / OTP 28.0 | 73 fuentes | 619 | 0 | 28 |
-| Elixir 1.17.3 / OTP 27.3.4.17 | 73 fuentes | 619 | 0 | 28 |
+The local `bin/check` routine subsequently passed all eight phases. It took
+**33m44s**, including a 1,979.7-second suite, almost entirely synchronous work.
+This does not demonstrate a 20× local speedup. New documentation checks are
+recorded separately; they do not relabel an old TAR or test receipt as new evidence.
 
-Seed `37556`; warnings-as-errors para el proyecto. En los tres runtimes:
-C0 **14/14** invariantes, snippets **7/7** y probe R3 aislado **1/1**. Los tests
-excluidos son proveedores reales y Postgres, no aceptación implícita de esos sistemas.
+## Dependency review — October 3
 
-- Paquete: **72/72 contratos runtime** en doce consumidores sin symlink al checkout.
-  Once pasan también strict; el exporter/OTP29 conserva **exit 1** por nueve
-  warnings de gproc. No quedan warnings propios de ExAgent en esos consumidores.
-- OTLP compuesto: **68 spans en 11 POST** inspeccionados, con uso por request,
-  jerarquía, cancelación, checkpoint, privacidad y aislamiento de contexto.
-- Carga: **4.000 runs medidos correctos** y **12.200 spans locales** sin pérdida
-  normal; la saturación separada admite 32 spans y descarta 610 de forma observable.
-  Son medidas sintéticas con definiciones reutilizadas, no latencia de LLM ni SLO.
-- N14 concluyó **sin optimización nueva**: la medición no identificó un hotspot
-  causal que justificara alterar la base o retirar controles.
+All 43 locked Hex packages were checked against official stable releases.
+Eleven are updated; 42 are current. Gproc remains at 1.2 because stock grpcbox
+requires `~> 1.2.0`, excluding 1.3. No unsupported override is introduced.
+The [dependency record](development/dependencies.md) lists every version,
+compatibility change and official source. `hex.audit` reports no retired packages
+or advisories for this lock at the time of the query.
 
-El [procedimiento de verificación](development/verification.md) mantiene los
-comandos actuales. El registro completo está en
-[la evidencia histórica de consolidación](https://github.com/akorda-software/exagent/blob/main/docs/archive/2026-09-consolidation/action-plan.md).
-Los artefactos `/tmp/opencode/exagent-night-final-verification.*` y el TAR
-`exagent-night-final-reviewed-preview.tar` pertenecen a esa aceptación anterior;
-la reorganización documental produce un artefacto local distinto.
+The new local routine passes all nine phases in 2,073.45 seconds. The complete
+1.20 and 1.18 suites pass in 2,007.4 and 2,024.7 seconds respectively. Compile
+checks report no ExAgent warnings. The previous failed 1.18 receipt remains below;
+these new runs qualify the updated dependency graph independently.
+Fresh G2 covers all fourteen scenarios with the initial failure retained and two
+causal length controls; PostgreSQL and all eight clean package graphs also pass
+their functional checks. Strict upstream diagnostics remain open.
 
-## Límites que no debemos perder de vista
+The subsequent [application model comparison](development/real-consumer-e2e.md)
+uses GPT-6-Luna and DeepSeek V4.1 Flash instead of Mini, with five additional
+negative/lifecycle/composed-approval scenarios. Luna's initial 23/23 wave passes;
+affected exact-marker controls also pass. DeepSeek's 22 accepted scenarios span
+several finite waves; native JSON receipt output still has missing merchant and
+currency despite schema validation. Its native extraction profile remains
+unqualified in that receipt. The later required-header control above qualifies
+the updated case08 without relabelling that nullable failure. No private parser,
+coercion, guard relaxation or model fallback is
+used to convert that failure to a pass. The library runtime and root lock are
+unchanged by this comparison; the earlier G2 Mini receipt remains historical.
 
-1. **HTTP nativo OTel no certificado para una VM longeva:** el exporter 1.10.0
-   conserva perfiles/átomos y puede dejar solicitudes TCP tras timeout/shutdown.
-   Su callback exitoso ignora `partial_success` y convierte booleanos en strings.
-   La [guía de observabilidad](guides/observability.md) delimita lo probado.
-2. **Backend por elegir:** el usuario confirmó instancias de Opik existentes;
-   faltan destinos, acceso e histórico. Partir de ellas y comparar la información
-   recuperada en API/UI antes de justificar un cambio a Langfuse u otra opción.
-3. **C8 externo abierto:** proveedores/modelos, Postgres, Dragonex y WhoamAI necesitan
-   aceptación propia. Las fixtures de paquete no son esas aplicaciones.
-4. **C7 condicionado:** aprobación diferida persistida no está implementada ni forma
-   parte implícita de la base verificada. Snapshot no equivale a replay de efectos.
-5. **Tooling del host:** un bootstrap nocturno sobrescribió accidentalmente el Hex
-   compartido por heredar `MIX_ARCHIVES`. Se contuvo y corrigió el runner; la
-   reparación del Hex compartido sigue pendiente de autorización. Los gates
-   finales utilizaron tooling aislado. Véase [entorno](development/environment.md).
+Four additional combined workflows now exercise six typed stages, two levels of
+delegation, failure collection, lost effect ACK with explicit uncertain recovery,
+and a complete application journey across fresh VMs and a PostgreSQL restart.
+The last combines memory, shared state/turns, cancellation, parallel delegation,
+two approvals, finalization and PubSub streaming. All four pass offline and with
+both real models. An initial DeepSeek Session-marker failure is retained; a
+clearer ASCII-copy instruction passes the unchanged oracle in both profiles.
+Owned processes and databases close; confirmed work is not replayed. These
+receipts extend the application matrix without rerunning unrelated qualifications.
 
-## Situación de trabajo
+## ReqLLM 1.26 qualification — October 2 receipt
 
-La ejecución nocturna cerró como WIP, incluidos los untracked, sobre HEAD
-`c08125be71eada363d08ca463cc7df2ea7855e4a`, sin commit, merge, bump, publicación,
-despliegue ni modificación de consumidores durante aquella ejecución. Orca terminó:
-16 Dispatches, 15 workers distintos cerrados; sus handles no se reutilizan.
+The candidate requires ReqLLM 1.26.0 and its llm_db 2026.9.8 catalogue. The fresh
+local routine passes all nine phases, including the complete 1.20 suite, ExDoc,
+link readback, TAR and isolation. Fresh G2, application E2E, PostgreSQL and clean
+consumer results are listed above. Historical 1.24 receipts retain their identity.
 
-Al iniciar la auditoría de testing se observó HEAD `69c2747` y árbol limpio: la
-consolidación ya estaba integrada en Git. El baseline reproducido fue620/28,
-seed37556; las mejoras de esta sesión se mantienen como WIP nuevo. La prioridad
-activa y los gates posteriores están en [el roadmap](development/roadmap.md) y
-la [auditoría de testing](development/testing-audit.md).
+The 1.18 integrated run executes all 2,205 cases: 2,176 pass, one fails and 28 are
+excluded. The failure is a 100 ms tool-readiness assertion before owner-death
+cancellation, using TestModel. A controlled 150 ms startup reproduces it; the
+existing 1,000 ms readiness barrier used by neighbouring ownership tests passes.
+The cancellation assertion and runtime remain unchanged. All 12 ownership cases
+plus that slow-start control pass on both runtimes; the original full-suite failure
+is retained. This October 2 receipt contains no second green full run; the separate
+October 3 dependency-baseline runs above qualify their later sources.
 
-## Reorganización documental verificada — 2026-09-10
+Argument, accounting, continuation and capability guards remain in place. Stock
+Anthropic now preserves redacted provider blocks; ExAgent rejects their unqualified
+continuation explicitly. Cache reads/writes remain separate without double-counting
+inclusive input or reasoning. This update does not expand supported profiles.
+Langfuse/Opik retain their previous native/API/UI qualification; their SDK,
+exporter and ExAgent bridge are unchanged, with local tests exercised by this run.
 
-Las guías vigentes, arquitectura, roadmap y relevo están ahora bajo `docs/`;
-los cinco registros grandes de la ejecución anterior se conservaron en el archivo.
-Se actualizaron las referencias, los lectores de snippets y el manifiesto.
+## What remains before publication
 
-- Suite nativa de esta unidad: **619 correctos, 28 excluidos**, seed `348677`.
-  La matriz1.18/1.17 de arriba sigue siendo evidencia de la consolidación anterior;
-  no se repitió ni se atribuye como nueva verificación de esta organización.
-- Snippets: **7/7**, seed0; **120 enlaces locales** comprobados en20 Markdown.
-- ExDoc y formato global pasan con los nuevos grupos/rutas; no hay colisión entre
-  el README raíz y el índice documental.
-- Preview con91 archivos: documentación vigente incluida, `docs/archive/` excluido.
-  Los cuatro consumidores nativos pasan **24/24 contratos runtime**. None/API/SDK
-  pasan strict; exporter mantiene el exit1 conocido por nueve warnings gproc.
-- El control de aislamiento pasa con el nuevo manifiesto, sin instalar nada en
-  esa comprobación ni modificar el tooling compartido.
+- Resolve or explicitly decide the strict stock-dependency diagnostic policy
+  using compatible upstream releases. Preserve the red diagnostic evidence.
+- Finalize versioning, release notes, tag and the separately authorized Hex
+  publication pipeline. The current draft PR is not a published v2.
+- Qualify any additional provider, modality, deployment or scaling profile before
+  claiming support for it. These are future qualification goals, not silently
+  implemented guarantees.
 
-Las salidas temporales están en `/tmp/opencode/exagent-docs-reorganized/` y
-`/tmp/opencode/exagent-night-package-docs-reorganization/`. La versión y los
-contratos runtime no cambiaron. El siguiente trabajo es confirmar el entorno
-autorizado para la comparación de backend, siguiendo su plan específico.
+The October 3 [instrumentation ownership implementation](development/backend-evaluation.md#reqllm-and-exagent-instrumentation-ownership)
+keeps ExAgent as generation owner during its observed Model requests. The
+host opt-in `ExAgent.Observability.ReqLLM.attach/1` uses ReqLLM's public adapter to
+enrich that span and preserve standalone tracing. Incompatible/duplicate bridges
+reject before provider IO in the ExAgent ReqLLM adapter; no foreign handler is
+removed. Twenty-one bridge cases within 146 integrated cases pass on both
+Elixir 1.18/OTP 28 and 1.20/OTP 29 with identical runtime sources,
+including concurrency, sampling/named tracer, once-only pricing, raw-capture
+privacy and owner death/public prune. The complete local 1.20 routine passes all
+nine phases: 2,198 offline tests pass, zero fail and 28 opt-in cases are excluded.
+Four clean package graphs pass 28 contracts; strict dependency diagnostics remain
+red for stock TOML/WebSockex/gproc. No new cloud/UI or metrics export acceptance
+is inferred; equal prior Langfuse/Opik A10 evidence remains. See the
+[combination receipt](https://github.com/akorda-software/exagent/blob/codex/v2-candidate-029/docs/orchestration/2026-10-01-v2-codex/OBSERVABILITY-COMBINATION.md).
+
+Routine verification now runs locally before commit/push. The candidate branch's
+six-job CI workflow is manual; `main` adopts that change when the PR is integrated.
+The [verification guide](development/verification.md) describes `bin/check`,
+its optional package consumers and focused documentation checks.
+
+## Exclusions and observations
+
+The 28 offline exclusions are **22 real-provider tests and six PostgreSQL tests**.
+Their bodies did not run; exclusions are not passes or timeouts. Real-provider and
+SQL acceptance above come from separate explicit profiles.
+
+Langfuse/Opik preview Input `null` and Output `undefined` are expected with
+content capture disabled. Inspect IDs/parentage, status, request/tool counters,
+usage quality/provenance and estimated cents in attributes. Neither export ACKs,
+API readback nor UI visibility proves durable retention, invoice accuracy or
+browser/cloud reliability.
+
+## Source of detail
+
+- [Roadmap](development/roadmap.md): the current R0–R9 board and evidence boundaries.
+- [Release scope](development/release-scope.md) and
+  [production acceptance](development/production-acceptance.md): promised profiles and oracles.
+- [Consumer E2E](development/real-consumer-e2e.md) and
+  [backend acceptance](development/backend-evaluation.md): exact external profiles.
+- [Execution policy](development/execution-flow.md): at most one independent review per objective.
+- Historical status is preserved under
+  `docs/archive/2026-10-02-status-history.md` in the checkout. The
+  [original dated record](https://github.com/akorda-software/exagent/blob/70c4a0c9d4b3f69805f24def7e61def5b0f5ab08/docs/status.md)
+  retains its original paths and results. Historical pending labels do not reopen
+  accepted work.
+
+Receipts and private tooling remain outside the consumer package. Read task guides
+to integrate the library; read these evidence records when evaluating support.

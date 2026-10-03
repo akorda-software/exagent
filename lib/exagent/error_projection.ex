@@ -52,6 +52,25 @@ defmodule ExAgent.ErrorProjection do
 
   defp project(%module{}, _), do: %{exception: Atom.to_string(module)}
 
+  defp project({:retention_limit_exceeded, %{boundary: boundary, bytes: bytes, limit: limit}}, _)
+       when boundary in [
+              :response,
+              :tool_return,
+              :usage,
+              :history,
+              :input,
+              :projection,
+              :hook,
+              :output,
+              :error,
+              :stream
+            ] and is_integer(bytes) and bytes >= 0 and
+              is_integer(limit) and limit >= 0,
+       do: [
+         "retention_limit_exceeded",
+         %{boundary: Atom.to_string(boundary), bytes: bytes, limit: limit}
+       ]
+
   defp project(value, depth) when is_tuple(value),
     do: value |> Tuple.to_list() |> Enum.take(16) |> Enum.map(&project(&1, depth + 1))
 

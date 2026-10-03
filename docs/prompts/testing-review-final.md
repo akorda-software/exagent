@@ -1,9 +1,20 @@
-# Nota diferida: segunda revisión de testing del paquete
+# Nota diferida: revisión de la candidata R9
 
-**Estado: preparada, no activa.** Usarla cuando el usuario confirme que el alcance
-funcional del paquete está terminado y solicite su revisión final, antes de decidir
-la publicación. Leer esta nota no inicia trabajo ni reabre la primera auditoría.
+**Método vigente2026-10-01:** `docs/development/execution-flow.md`. Como máximo una
+revisión de esta frontera; no re-review de correcciones ni segunda auditoría de
+capacidades aceptadas. Reutilizar su evidencia y concentrarse en integración,
+distribución y delta no revisado. El antiguo título «segunda revisión» no añade ronda.
+
+**Estado: preparada, no activa.** Usarla al alcanzar R9 bajo el mandato
+`docs/prompts/implement-v2.md` activado, o por encargo específico del usuario,
+antes de decidir la publicación. Leer esta nota no inicia trabajo ni reabre la primera auditoría.
 «Terminado» se refiere al alcance acordado, no a implementar todas las ideas futuras.
+
+Esta revisión corresponde a **R9.2** de `docs/development/roadmap.md`, sobre la
+candidata R9.1. Consultar `docs/development/release-scope.md` y
+`docs/development/production-acceptance.md`: **C7 está incluido** por decisión
+expresa posterior. R8 verifica consumidores representativos; la adaptación de
+Dragonex/WhoamAI no es requisito del release.
 
 ## Acuerdo que debe conservarse
 
@@ -31,8 +42,8 @@ en `docs/archive/2026-09-testing-{inventory,audit}.md`.
 Comprobar HEAD, WIP, versión, dependencias, runtimes y comandos vigentes; no heredar
 655/28 ni un TAR anterior como evidencia del paquete final. Preservar el trabajo
 no commiteado y emplear artefactos congelados que lo incluyan si hace falta aislar.
-Si se orquesta, cargar `orca-orchestration`, recuperar autoridad/estado y usar Orca
-Tasks/Dispatch con `openai/gpt-6-astra`; nunca reutilizar handles cerrados.
+Usar orquestación nativa y los perfiles disponibles; no activar Orca ni cambiar
+modelos por esta nota. Nunca continuar hijos de otro padre.
 
 ## Revisión acotada a un resultado útil
 
@@ -44,6 +55,9 @@ Tasks/Dispatch con `openai/gpt-6-astra`; nunca reutilizar handles cerrados.
    en las superficies realmente modificadas. Contrastar los puntos P2 anotados
    (Session/callbacks, retries por tool, restore, SDK tardío) con su estado final;
    no presuponer que sigan abiertos ni añadir casos nominales equivalentes.
+   Incluir la frontera ReqLLM, negociación de contenido/output, CAS/claim, aprobación
+   sobre argumentos exactos, resume con autoridad vigente, efectos inciertos y
+   composición pausada. No sustituir la prueba de reinicio por lectura del mismo PID.
 3. **Paquete consumidor:** verificar un TAR del candidato real, manifiesto y
    documentación, dependencia opcional/orden de compilación y los grafos/runtimes
    pertinentes. Los tests del repositorio no sustituyen esta frontera.
@@ -56,9 +70,10 @@ Tasks/Dispatch con `openai/gpt-6-astra`; nunca reutilizar handles cerrados.
    Req/gproc. Registrar origen e impacto y una decisión razonada de seguimiento
    o compatibilidad. La funcionalidad y los diagnósticos strict se informan por
    separado, conservando exits reales y sin cambiar floors para fabricar un verde.
-6. **Entrega:** corregir problemas de ExAgent justificados por evidencia y revisar
-   independientemente los cambios. Dejar una aceptación del candidato, límites y
-   siguientes acciones concretas; cerrar la revisión cuando alcance ese resultado.
+6. **Entrega:** una revisión independiente del delta de candidata no revisado.
+   El implementador corrige su lote y prueba reproducciones/regresiones pertinentes,
+   sin otra ronda independiente. Registrar límites y pendientes; no aceptar si
+   permanecen bloqueantes ni convertir el cierre en una nueva auditoría.
 
 Empezar por lectura y baseline apropiado. Mantener un owner de builds compartidos,
 controles positivos/negativos y comandos offline según la guía. No instalar otra

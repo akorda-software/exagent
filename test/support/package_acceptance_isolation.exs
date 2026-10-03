@@ -6,7 +6,9 @@ defmodule PackageAcceptance.Isolation do
   import ExUnit.Assertions
 
   def main(tar) do
-    base = "/tmp/opencode/exagent-night-package-isolation-#{System.os_time(:nanosecond)}"
+    base =
+      Path.join(System.tmp_dir!(), "exagent-package-isolation-#{System.os_time(:nanosecond)}")
+
     File.mkdir!(base)
     host = Path.join(base, "fake-host")
     File.mkdir!(host)
@@ -81,6 +83,18 @@ defmodule PackageAcceptance.Isolation do
 
     refute File.exists?(Path.join(work, "tooling-hex.log"))
 
+    # A fresh directory below an arbitrary real parent is valid on CI too; no
+    # /tmp/opencode installation or host-specific naming convention is needed.
+    portable_parent = Path.join(base, "runner-temp")
+    File.mkdir!(portable_parent)
+    portable_work = Path.join(portable_parent, "package-consumers")
+    assert run(base, "portable", runner, tar, portable_work, env, ["--prepare-only"]) == 0
+
+    assert File.read!(Path.join(portable_work, "tooling-preflight.log")) =~
+             "verified temporary tooling destinations"
+
+    refute File.exists?(Path.join(portable_work, "tooling-hex.log"))
+
     warning =
       replace!(
         original,
@@ -145,12 +159,16 @@ defmodule PackageAcceptance.Isolation do
     dangling = base <> "-dangling"
     File.ln_s!(outside, link)
     File.ln_s!(Path.join(base, "missing-target"), dangling)
+    existing_file = Path.join(base, "existing-file")
+    File.write!(existing_file, "unchanged")
 
     for {label, work} <- [
           {"ancestor", Path.join(link, "new-work")},
           {"symlink", link},
           {"dangling", dangling},
-          {"existing", base}
+          {"existing", base},
+          {"existing-file", existing_file},
+          {"missing-parent", Path.join(base, "missing-parent/new-work")}
         ] do
       assert run(base, label, runner, tar, work, env, ["--prepare-only"]) == 1
       assert File.read!(Path.join(base, label <> ".log")) =~ "work-dir"
@@ -159,6 +177,7 @@ defmodule PackageAcceptance.Isolation do
     assert File.read_link!(link) == outside
     assert File.read_link!(dangling) == Path.join(base, "missing-target")
     assert inventory(outside) == %{"sentinel" => "unchanged"}
+    assert File.read!(existing_file) == "unchanged"
     refute File.exists?(Path.join(base, "missing-target"))
     assert inventory(host) == original_host
 
@@ -177,8 +196,8 @@ defmodule PackageAcceptance.Isolation do
           name == "graph" -> ~s[File.write!("graph.term", "synthetic graph evidence"); ]
           name == "smoke" ->
             # Deliberately synthetic diagnostic replay, not executed contracts.
-            data = %{tests: Enum.map(ExAgent.TestingAuditHarness.package_names("none"), &%{name: &1, module: "PackageAcceptanceTest", state: nil})}
-            stats = %{total: 6, failures: 0, excluded: 0, skipped: 0}
+            data = %{tests: ExAgent.TestingAuditHarness.package_manifest("none")}
+            stats = %{total: 8, failures: 0, excluded: 0, skipped: 0}
             ~s|File.write!("runtime-results.etf", | <> inspect(:erlang.term_to_binary(data), limit: :infinity) <> "); " <>
               ~s|File.write!("runtime-stats.etf", | <> inspect(:erlang.term_to_binary(stats), limit: :infinity) <> "); "
           true -> ""

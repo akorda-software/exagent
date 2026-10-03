@@ -7,31 +7,22 @@ defmodule ExAgent.SnapshotData do
   def id?(id), do: is_binary(id) or is_integer(id)
 
   def usage_map(%Usage{} = usage) do
-    %{
-      "input_tokens" => usage.input_tokens || 0,
-      "output_tokens" => usage.output_tokens || 0,
-      "details" => json(usage.details || %{})
-    }
+    usage |> Usage.to_map() |> json()
   end
 
-  def usage_map(nil), do: usage_map(%Usage{input_tokens: 0, output_tokens: 0})
+  def usage_map(nil), do: usage_map(Usage.qualify(nil))
   def usage_map(map) when is_map(map), do: json(map)
 
   def usage_valid?(usage) when is_map(usage) do
-    counter?(Map.get(usage, "input_tokens", 0)) and
-      counter?(Map.get(usage, "output_tokens", 0)) and
-      is_map(Map.get(usage, "details", %{}))
+    Usage.from_map!(usage)
+    true
+  rescue
+    _ -> false
   end
 
   def usage_valid?(_), do: false
 
-  def usage_struct(map) do
-    %Usage{
-      input_tokens: Map.get(map, "input_tokens", 0),
-      output_tokens: Map.get(map, "output_tokens", 0),
-      details: Map.get(map, "details", %{})
-    }
-  end
+  def usage_struct(map), do: Usage.from_map!(map)
 
   def timestamp(nil), do: {:ok, nil}
   def timestamp(%DateTime{} = date), do: {:ok, date}

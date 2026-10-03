@@ -1,0 +1,499 @@
+{
+  "status": "local_grpc_recipe_only",
+  "versions": {
+    "otp": "29",
+    "elixir": "1.20.0",
+    "grpcbox": "0.18.0",
+    "sdk": "1.7.0",
+    "api": "1.5.0",
+    "exporter": "1.11.0"
+  },
+  "baseline": {
+    "ets": 56,
+    "monitors": 18,
+    "ports": 4,
+    "processes": 127,
+    "atoms": 28316,
+    "httpc_profiles": 2
+  },
+  "cycles": [
+    {
+      "mode": "success",
+      "processor": {
+        "status": "closing",
+        "exported": 2,
+        "export_timed_out": 0,
+        "export_failed": 0,
+        "accepted": 2,
+        "dropped_queue_full": 1,
+        "retained": 0,
+        "dropped_unsampled": 0,
+        "dropped_unavailable": 0,
+        "capacity": 2,
+        "dropped_invalid": 0,
+        "shutdown_dropped": 0,
+        "batches_timed_out": 0,
+        "batches_exported": 1,
+        "batches_failed": 0,
+        "init_timed_out": 0,
+        "init_failed": 0,
+        "in_flight": 0,
+        "queue_depth": 0,
+        "shutdown_failed": 0,
+        "shutdown_timed_out": 0
+      },
+      "transport": {
+        "warning": 0,
+        "unknown": 0,
+        "rejected": 0,
+        "sent": 2,
+        "reported_accepted": 2,
+        "response_external_bytes": 6,
+        "request_external_bytes": 1570
+      },
+      "gauges": {
+        "ets": 56,
+        "monitors": 18,
+        "ports": 4,
+        "processes": 127,
+        "atoms": 28316,
+        "httpc_profiles": 2
+      },
+      "wire_request_bytes": 417,
+      "wire_response_bytes": 0,
+      "owned_down": 4,
+      "receiver_released": true,
+      "cleanup_ms": 0
+    },
+    {
+      "mode": "success",
+      "processor": {
+        "status": "closing",
+        "exported": 2,
+        "export_timed_out": 0,
+        "export_failed": 0,
+        "accepted": 2,
+        "dropped_queue_full": 1,
+        "retained": 0,
+        "dropped_unsampled": 0,
+        "dropped_unavailable": 0,
+        "capacity": 2,
+        "dropped_invalid": 0,
+        "shutdown_dropped": 0,
+        "batches_timed_out": 0,
+        "batches_exported": 1,
+        "batches_failed": 0,
+        "init_timed_out": 0,
+        "init_failed": 0,
+        "in_flight": 0,
+        "queue_depth": 0,
+        "shutdown_failed": 0,
+        "shutdown_timed_out": 0
+      },
+      "transport": {
+        "warning": 0,
+        "unknown": 0,
+        "rejected": 0,
+        "sent": 2,
+        "reported_accepted": 2,
+        "response_external_bytes": 6,
+        "request_external_bytes": 1570
+      },
+      "gauges": {
+        "ets": 56,
+        "monitors": 18,
+        "ports": 4,
+        "processes": 127,
+        "atoms": 28316,
+        "httpc_profiles": 2
+      },
+      "wire_request_bytes": 417,
+      "wire_response_bytes": 0,
+      "owned_down": 4,
+      "receiver_released": true,
+      "cleanup_ms": 6
+    },
+    {
+      "mode": "success",
+      "processor": {
+        "status": "closing",
+        "exported": 2,
+        "export_timed_out": 0,
+        "export_failed": 0,
+        "accepted": 2,
+        "dropped_queue_full": 1,
+        "retained": 0,
+        "dropped_unsampled": 0,
+        "dropped_unavailable": 0,
+        "capacity": 2,
+        "dropped_invalid": 0,
+        "shutdown_dropped": 0,
+        "batches_timed_out": 0,
+        "batches_exported": 1,
+        "batches_failed": 0,
+        "init_timed_out": 0,
+        "init_failed": 0,
+        "in_flight": 0,
+        "queue_depth": 0,
+        "shutdown_failed": 0,
+        "shutdown_timed_out": 0
+      },
+      "transport": {
+        "warning": 0,
+        "unknown": 0,
+        "rejected": 0,
+        "sent": 2,
+        "reported_accepted": 2,
+        "response_external_bytes": 6,
+        "request_external_bytes": 1570
+      },
+      "gauges": {
+        "ets": 56,
+        "monitors": 18,
+        "ports": 4,
+        "processes": 127,
+        "atoms": 28316,
+        "httpc_profiles": 2
+      },
+      "wire_request_bytes": 417,
+      "wire_response_bytes": 0,
+      "owned_down": 4,
+      "receiver_released": true,
+      "cleanup_ms": 1
+    }
+  ],
+  "cases": [
+    {
+      "mode": "success",
+      "processor": {
+        "status": "closing",
+        "exported": 2,
+        "export_timed_out": 0,
+        "export_failed": 0,
+        "accepted": 2,
+        "dropped_queue_full": 1,
+        "retained": 0,
+        "dropped_unsampled": 0,
+        "dropped_unavailable": 0,
+        "capacity": 2,
+        "dropped_invalid": 0,
+        "shutdown_dropped": 0,
+        "batches_timed_out": 0,
+        "batches_exported": 1,
+        "batches_failed": 0,
+        "init_timed_out": 0,
+        "init_failed": 0,
+        "in_flight": 0,
+        "queue_depth": 0,
+        "shutdown_failed": 0,
+        "shutdown_timed_out": 0
+      },
+      "transport": {
+        "warning": 0,
+        "unknown": 0,
+        "rejected": 0,
+        "sent": 2,
+        "reported_accepted": 2,
+        "response_external_bytes": 6,
+        "request_external_bytes": 1570
+      },
+      "wire_request_bytes": 417,
+      "wire_response_bytes": 0,
+      "owned_down": 4,
+      "receiver_released": true,
+      "cleanup_ms": 4
+    },
+    {
+      "mode": "partial",
+      "processor": {
+        "status": "closing",
+        "exported": 0,
+        "export_timed_out": 0,
+        "export_failed": 2,
+        "accepted": 2,
+        "dropped_queue_full": 1,
+        "retained": 0,
+        "dropped_unsampled": 0,
+        "dropped_unavailable": 0,
+        "capacity": 2,
+        "dropped_invalid": 0,
+        "shutdown_dropped": 0,
+        "batches_timed_out": 0,
+        "batches_exported": 0,
+        "batches_failed": 1,
+        "init_timed_out": 0,
+        "init_failed": 0,
+        "in_flight": 0,
+        "queue_depth": 0,
+        "shutdown_failed": 0,
+        "shutdown_timed_out": 0
+      },
+      "transport": {
+        "warning": 1,
+        "unknown": 0,
+        "rejected": 1,
+        "sent": 2,
+        "reported_accepted": 1,
+        "response_external_bytes": 85,
+        "request_external_bytes": 1570
+      },
+      "wire_request_bytes": 417,
+      "wire_response_bytes": 25,
+      "owned_down": 4,
+      "receiver_released": true,
+      "cleanup_ms": 1
+    },
+    {
+      "mode": "warning",
+      "processor": {
+        "status": "closing",
+        "exported": 2,
+        "export_timed_out": 0,
+        "export_failed": 0,
+        "accepted": 2,
+        "dropped_queue_full": 1,
+        "retained": 0,
+        "dropped_unsampled": 0,
+        "dropped_unavailable": 0,
+        "capacity": 2,
+        "dropped_invalid": 0,
+        "shutdown_dropped": 0,
+        "batches_timed_out": 0,
+        "batches_exported": 1,
+        "batches_failed": 0,
+        "init_timed_out": 0,
+        "init_failed": 0,
+        "in_flight": 0,
+        "queue_depth": 0,
+        "shutdown_failed": 0,
+        "shutdown_timed_out": 0
+      },
+      "transport": {
+        "warning": 1,
+        "unknown": 0,
+        "rejected": 0,
+        "sent": 2,
+        "reported_accepted": 2,
+        "response_external_bytes": 83,
+        "request_external_bytes": 1570
+      },
+      "wire_request_bytes": 417,
+      "wire_response_bytes": 21,
+      "owned_down": 4,
+      "receiver_released": true,
+      "cleanup_ms": 0
+    },
+    {
+      "mode": "error",
+      "processor": {
+        "status": "closing",
+        "exported": 0,
+        "export_timed_out": 0,
+        "export_failed": 2,
+        "accepted": 2,
+        "dropped_queue_full": 1,
+        "retained": 0,
+        "dropped_unsampled": 0,
+        "dropped_unavailable": 0,
+        "capacity": 2,
+        "dropped_invalid": 0,
+        "shutdown_dropped": 0,
+        "batches_timed_out": 0,
+        "batches_exported": 0,
+        "batches_failed": 1,
+        "init_timed_out": 0,
+        "init_failed": 0,
+        "in_flight": 0,
+        "queue_depth": 0,
+        "shutdown_failed": 0,
+        "shutdown_timed_out": 0
+      },
+      "transport": {
+        "timeout": 0,
+        "failed": 1,
+        "unknown": 2,
+        "sent": 2,
+        "request_external_bytes": 1570
+      },
+      "wire_request_bytes": 417,
+      "wire_response_bytes": null,
+      "owned_down": 4,
+      "receiver_released": true,
+      "cleanup_ms": 6
+    },
+    {
+      "mode": "timeout",
+      "processor": {
+        "status": "closing",
+        "exported": 0,
+        "export_timed_out": 0,
+        "export_failed": 2,
+        "accepted": 2,
+        "dropped_queue_full": 1,
+        "retained": 0,
+        "dropped_unsampled": 0,
+        "dropped_unavailable": 0,
+        "capacity": 2,
+        "dropped_invalid": 0,
+        "shutdown_dropped": 0,
+        "batches_timed_out": 0,
+        "batches_exported": 0,
+        "batches_failed": 1,
+        "init_timed_out": 0,
+        "init_failed": 0,
+        "in_flight": 0,
+        "queue_depth": 0,
+        "shutdown_failed": 0,
+        "shutdown_timed_out": 0
+      },
+      "transport": {
+        "timeout": 1,
+        "failed": 1,
+        "unknown": 2,
+        "sent": 2,
+        "request_external_bytes": 1570
+      },
+      "wire_request_bytes": 417,
+      "wire_response_bytes": null,
+      "owned_down": 4,
+      "receiver_released": true,
+      "cleanup_ms": 208
+    },
+    {
+      "mode": "killed",
+      "processor": {
+        "status": "closing",
+        "exported": 0,
+        "export_timed_out": 2,
+        "export_failed": 0,
+        "accepted": 2,
+        "dropped_queue_full": 1,
+        "retained": 0,
+        "dropped_unsampled": 0,
+        "dropped_unavailable": 0,
+        "capacity": 2,
+        "dropped_invalid": 0,
+        "shutdown_dropped": 0,
+        "batches_timed_out": 1,
+        "batches_exported": 0,
+        "batches_failed": 0,
+        "init_timed_out": 0,
+        "init_failed": 0,
+        "in_flight": 0,
+        "queue_depth": 0,
+        "shutdown_failed": 0,
+        "shutdown_timed_out": 0
+      },
+      "transport": null,
+      "wire_request_bytes": 417,
+      "wire_response_bytes": null,
+      "owned_down": 4,
+      "receiver_released": true,
+      "cleanup_ms": 129
+    }
+  ],
+  "limitations": [
+    "No ExAgent run, paid model, backend API/UI or cloud acceptance",
+    "Official pre-release exporter source; root lock remains 1.10.0",
+    "Upstream gRPC decode allocates before local postdecode bounds",
+    "Span count/external term byte limits do not bound all wire allocations",
+    "Reported remote acceptance is not durable backend receipt"
+  ],
+  "consumer": "/tmp/opencode/exagent-v2-codex-t6qgpstl/otlp/consumer-6gjs4ahx/project",
+  "official_revision": "9cb8b3627cf68aeb0df7b3243378f0c2520cff66",
+  "source_hashes": {
+    "test/support/otlp_transport/grpc_exporter.ex": "4c0cee7a7918f8bbc1dbb40d866ffa6fccaadd8aaaee55def5547ca93dbc53ea",
+    "test/support/otlp_transport/probe.exs": "15606821ef783f35cb566936f8eeee2a8f18063eef0380e0c4439762db335d6d",
+    "test/support/otlp_transport/run.py": "029a718be4f23b8b3060ad21d87fb6b8f2dea70479849b32f86741aa19f371a5",
+    "lib/exagent/observability/bounded_processor.ex": "141fddcae04413bae484665c2673d9565cb02e0f8bae6789b714efb83ce9bd11"
+  },
+  "command_receipts": [
+    {
+      "command": [
+        "git",
+        "init"
+      ],
+      "cwd": "/tmp/opencode/exagent-v2-codex-t6qgpstl/otlp/consumer-6gjs4ahx/upstream",
+      "exit": 0,
+      "log": "/tmp/opencode/exagent-v2-codex-t6qgpstl/otlp/consumer-6gjs4ahx/upstream-init.log"
+    },
+    {
+      "command": [
+        "git",
+        "remote",
+        "add",
+        "origin",
+        "https://github.com/open-telemetry/opentelemetry-erlang.git"
+      ],
+      "cwd": "/tmp/opencode/exagent-v2-codex-t6qgpstl/otlp/consumer-6gjs4ahx/upstream",
+      "exit": 0,
+      "log": "/tmp/opencode/exagent-v2-codex-t6qgpstl/otlp/consumer-6gjs4ahx/upstream-remote.log"
+    },
+    {
+      "command": [
+        "git",
+        "fetch",
+        "--depth",
+        "1",
+        "origin",
+        "9cb8b3627cf68aeb0df7b3243378f0c2520cff66"
+      ],
+      "cwd": "/tmp/opencode/exagent-v2-codex-t6qgpstl/otlp/consumer-6gjs4ahx/upstream",
+      "exit": 0,
+      "log": "/tmp/opencode/exagent-v2-codex-t6qgpstl/otlp/consumer-6gjs4ahx/upstream-fetch.log"
+    },
+    {
+      "command": [
+        "git",
+        "checkout",
+        "--detach",
+        "9cb8b3627cf68aeb0df7b3243378f0c2520cff66"
+      ],
+      "cwd": "/tmp/opencode/exagent-v2-codex-t6qgpstl/otlp/consumer-6gjs4ahx/upstream",
+      "exit": 0,
+      "log": "/tmp/opencode/exagent-v2-codex-t6qgpstl/otlp/consumer-6gjs4ahx/upstream-checkout.log"
+    },
+    {
+      "command": [
+        "mix",
+        "deps.get"
+      ],
+      "cwd": "/tmp/opencode/exagent-v2-codex-t6qgpstl/otlp/consumer-6gjs4ahx/project",
+      "exit": 0,
+      "log": "/tmp/opencode/exagent-v2-codex-t6qgpstl/otlp/consumer-6gjs4ahx/deps.log"
+    },
+    {
+      "command": [
+        "mix",
+        "compile",
+        "--warnings-as-errors"
+      ],
+      "cwd": "/tmp/opencode/exagent-v2-codex-t6qgpstl/otlp/consumer-6gjs4ahx/project",
+      "exit": 0,
+      "log": "/tmp/opencode/exagent-v2-codex-t6qgpstl/otlp/consumer-6gjs4ahx/compile.log"
+    },
+    {
+      "command": [
+        "mix",
+        "run",
+        "--no-start",
+        "probe.exs"
+      ],
+      "cwd": "/tmp/opencode/exagent-v2-codex-t6qgpstl/otlp/consumer-6gjs4ahx/project",
+      "exit": 0,
+      "log": "/tmp/opencode/exagent-v2-codex-t6qgpstl/otlp/consumer-6gjs4ahx/probe.log"
+    }
+  ],
+  "compile_warnings": [
+    "\u2502                                  \u2570\u2500\u2500 Warning: variable 'Wrk' exported from call (line 808, column 5).",
+    "\u2502                                                 \u2570\u2500\u2500 Warning: variable 'NewLen' exported from '-' (line 828, column 41).",
+    "\u2502  \t                      \u2570\u2500\u2500 Warning: variable 'K' exported from call (line 136, column 10).",
+    "\u2502      \u2570\u2500\u2500 Warning: variable 'Reg' exported from call (line 490, column 5).",
+    "\u2502      \u2570\u2500\u2500 Warning: variable 'Reg' exported from call (line 493, column 5).",
+    "\u2502      \u2570\u2500\u2500 Warning: variable 'Reg' exported from call (line 496, column 5).",
+    "\u2502      \u2570\u2500\u2500 Warning: variable 'Reg' exported from call (line 499, column 5).",
+    "\u2502                                          \u2570\u2500\u2500 Warning: variable 'K' exported from call (line 608, column 10).",
+    "\u2502                \u2570\u2500\u2500 Warning: lists:zf/2 is deprecated; use filtermap/2 instead"
+  ],
+  "private_report_sha256": "76575c094cec0d917ffe5f618a214caf9abf909f3eb5c155059e3d70253ea205"
+}

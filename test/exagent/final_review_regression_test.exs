@@ -218,11 +218,14 @@ defmodule ExAgent.FinalReviewRegressionTest do
     assert published.cost_cents == 9
     Process.exit(scope.pid, :kill)
     assert_receive {:root_result, {:error, %RunError{partial: final}}}, 2_000
-    assert final.usage == published.usage
+    assert final.usage.input_tokens == published.usage.input_tokens
+    assert final.usage.output_tokens == published.usage.output_tokens
+    assert final.usage.accounting["availability"]["input"] == "partial"
     assert final.request_count == published.request_count
     assert final.tool_calls == published.tool_calls
-    assert final.cost_cents == published.cost_cents
-    assert final.cost_status == published.cost_status
+    assert final.cost_cents == nil
+    assert final.usage.accounting["cost"]["subtotal_cents"] == published.cost_cents
+    assert final.cost_status == :unknown
     assert final.usage_status == :partial
     assert length(returns(final)) == 2
     assert Enum.count(returns(final), &(&1.status == :succeeded)) == 1
@@ -237,7 +240,7 @@ defmodule ExAgent.FinalReviewRegressionTest do
       status: 429,
       reason: {:stream_limit, :max_response_bytes},
       body: %{secret: sentinel},
-      model: struct(ExAgent.Models.OpenAI, model: "synthetic", api_key: sentinel)
+      model: struct(ExAgent.Models.ReqLLM, model: "synthetic", api_key: sentinel)
     }
 
     agent = ExAgent.new(model: %Failing{error: error}, name: "review-private-error")
@@ -286,7 +289,8 @@ defmodule ExAgent.FinalReviewRegressionTest do
     assert {:suspended, events, continuation} = Enumerable.reduce(stream, {:cont, []}, reducer)
     assert_receive {:stream_scope, scope}
     published = await_stream_usage()
-    assert published.cost_cents == 2
+    assert published.cost_cents == nil
+    assert published.usage.accounting["cost"]["subtotal_cents"] == 2
     Process.exit(scope.pid, :kill)
 
     assert {status, [{:error, %RunError{partial: partial}} | ^events]} =
@@ -295,7 +299,8 @@ defmodule ExAgent.FinalReviewRegressionTest do
     assert status in [:done, :halted]
 
     assert partial.usage == published.usage
-    assert partial.cost_cents == 2
+    assert partial.cost_cents == nil
+    assert partial.usage.accounting["cost"]["subtotal_cents"] == 2
     assert partial.request_count == 1
     assert partial.usage_status == :partial
   end

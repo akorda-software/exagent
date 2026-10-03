@@ -4,6 +4,45 @@ defmodule ExAgent.TestingAuditHarnessTest do
   use ExUnit.Case, async: true
   alias ExAgent.TestingAuditHarness, as: Gate
 
+  test "package acceptance requires the maintenance contract and rejects a missing or failed eighth case" do
+    common = [
+      "test consumer runtime contains only requested optional applications",
+      "test optional ReqLLM maintenance runs without attaching handlers or starting optional apps",
+      "test one-shot, typed tool, lazy stream and ETS checkpoint restore from package",
+      "test typed invalid input has zero effects and is not coerced",
+      "test Ecto remains the final structured-output authority",
+      "test model failure is one rich partial error in sync and stream"
+    ]
+
+    for mode <- ~w(none api sdk exporter) do
+      route =
+        if mode in ~w(sdk exporter),
+          do: "test app-owned native SDK exports package scenarios through its configured route",
+          else: "test processor explicitly reports absent SDK"
+
+      tests =
+        Enum.map([route | common], &%{name: &1, module: "PackageAcceptanceTest", state: nil}) ++
+          [
+            %{
+              name:
+                "test installed package composes application Model, Tool, Store and PubSub through public continuation APIs",
+              module: "PackageAcceptance.C7ExtensibleTest",
+              state: nil
+            }
+          ]
+
+      stats = %{total: 8, failures: 0, excluded: 0, skipped: 0}
+      assert Gate.package_result(%{stats: stats, tests: tests}, mode) == []
+      missing = Enum.reject(tests, &String.contains?(&1.name, "optional ReqLLM maintenance"))
+      refute Gate.package_result(%{stats: %{stats | total: 7}, tests: missing}, mode) == []
+      duplicate = [hd(tests), hd(tests) | Enum.drop(tests, 2)]
+      refute Gate.package_result(%{stats: stats, tests: duplicate}, mode) == []
+      failed = [%{hd(tests) | state: {:failed, []}} | tl(tests)]
+      refute Gate.package_result(%{stats: stats, tests: failed}, mode) == []
+      refute Gate.package_result(%{stats: %{stats | excluded: 1}, tests: tests}, mode) == []
+    end
+  end
+
   test "C0 requires the complete fourteen-invariant manifest and rejects probe errors" do
     probes =
       Map.new(Gate.c0_manifest(), fn {name, fields} -> {name, Map.new(fields, &{&1, true})} end)

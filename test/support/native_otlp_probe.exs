@@ -2,7 +2,7 @@
 # Also runnable after compilation:
 # EXAGENT_OFFLINE=1 elixir --erl '+S 2:2' -pa '_build/test/lib/*/ebin' \
 #   test/support/native_otlp_probe.exs wire
-# Scenarios: wire | generic_endpoint | failures | lifecycle
+# Scenarios: wire | generic_endpoint | failures | lifecycle | restart_budget
 
 defmodule ExAgent.Test.NativeOTLPProbe do
   import ExUnit.Assertions
@@ -33,11 +33,12 @@ defmodule ExAgent.Test.NativeOTLPProbe do
     end
 
     Application.put_env(:opentelemetry, :processors, [])
+    Application.put_env(:req_llm, :load_dotenv, false)
     {:ok, _} = Application.ensure_all_started(:exagent)
     {:ok, _} = Application.ensure_all_started(:inets)
     {:ok, _} = Application.ensure_all_started(:opentelemetry)
     :ok = Application.load(:opentelemetry_exporter)
-    assert to_string(Application.spec(:opentelemetry_exporter, :vsn)) == "1.10.0"
+    assert to_string(Application.spec(:opentelemetry_exporter, :vsn)) == "1.11.0"
     assert to_string(Application.spec(:opentelemetry, :vsn)) == "1.7.0"
     assert to_string(Application.spec(:opentelemetry_api, :vsn)) == "1.5.0"
   end
@@ -196,7 +197,12 @@ defmodule ExAgent.Test.NativeOTLPProbe do
       before_timeout = resources(port)
 
       assert_receive {:DOWN, ^old_monitor, :process, ^old_worker, :killed}, 1500
-      timed_out = wait_stats(&(&1.export_timed_out == 1 and &1.status == :ready))
+      wait_stats(&(&1.export_timed_out == 1 and &1.status == :ready))
+      # stats reads ETS and counters separately. The timeout counter proves the
+      # processor entered finish_batch; synchronize with that callback before
+      # reading retained, rather than combining gauges from different instants.
+      :sys.get_state(processor)
+      timed_out = BoundedProcessor.stats(@processor)
       assert timed_out.exported == 0
       assert timed_out.retained == 0
       assert Enum.all?(worker_tables, &(:ets.info(&1) == :undefined))
@@ -269,6 +275,54 @@ defmodule ExAgent.Test.NativeOTLPProbe do
     stop_profiles([{unrelated, :native_otlp_unrelated}])
   end
 
+  def restart_budget do
+    {:ok, receiver} = Receiver.start_link()
+    port = Receiver.port(receiver)
+    configure_exporter("http://127.0.0.1:#{port}", false)
+    baseline_profiles = profiles()
+    config = Map.put(processor_config(250), :max_exporter_restarts, 0)
+    {:ok, processor, handle} = BoundedProcessor.start_link(config)
+    wait_stats(&(&1.status == :ready))
+    original_worker = :sys.get_state(processor).worker
+    monitor = Process.monitor(original_worker)
+    assert length(profiles() -- baseline_profiles) == 1
+    assert BoundedProcessor.on_end(native_span(), handle) == true
+    assert :ok == BoundedProcessor.force_flush(handle)
+    {handler, _request} = request(receiver)
+    assert_receive {:DOWN, ^monitor, :process, ^original_worker, :killed}, 1500
+    stats = wait_stats(&(&1.status == :unavailable))
+    assert stats.export_timed_out == 1 and stats.exporter_restarts == 0
+    assert stats.restart_limit_reached == 1 and stats.retained == 0
+    assert Process.alive?(processor)
+
+    # Observe several scheduled opportunities without automatic reinitialization.
+    for _ <- 1..3 do
+      assert BoundedProcessor.on_end(native_span(), handle) == :dropped
+      assert :ok == BoundedProcessor.force_flush(handle)
+      :sys.get_state(processor)
+      assert length(profiles() -- baseline_profiles) == 1
+    end
+
+    final = BoundedProcessor.stats(handle)
+    assert final.dropped_unavailable == 3
+    assert final.exporter_restarts == 0 and final.restart_limit_reached == 1
+    refute_receive {:native_otlp_request, _, _, _}, 40
+    assert length(client_sockets(port)) == 1
+    refute_receive {:native_otlp_peer_closed, ^handler}, 0
+    assert {:ok, _} = BoundedProcessor.shutdown(handle)
+
+    # The circuit stops recreation, while the upstream socket still survives.
+    # Cancel only the resources proved exclusive to this disposable fixture VM.
+    assert length(profiles() -- baseline_profiles) == 1
+    cancel_requests(profiles() -- baseline_profiles)
+    assert_receive {:native_otlp_peer_closed, ^handler}, 1000
+    stop_profiles(profiles() -- baseline_profiles)
+    eventually(fn -> client_sockets(port) == [] end)
+    assert MapSet.new(profiles()) == MapSet.new(baseline_profiles)
+    report(%{phase: "native_restart_budget", profiles_created: 1, stats: final})
+    Receiver.stop(receiver)
+  end
+
   defp direct_native_export(receiver) do
     owner = self()
 
@@ -324,16 +378,16 @@ defmodule ExAgent.Test.NativeOTLPProbe do
     assert %{resource_spans: [%{resource: resource, scope_spans: [%{spans: [exported]}]}]} =
              @pb.decode_msg(request.body, :export_trace_service_request)
 
-    # Direct native export confirms this affects both span/resource values,
+    # Direct native export confirms boolean fidelity for span/resource values,
     # independently of ExAgent. Keep the string/int controls typed and exact.
     assert :otel_attributes.map(span(native_span(), :attributes))["test.true"] == true
     assert :otel_attributes.map(span(native_span(), :attributes))["test.false"] == false
-    assert typed_attributes(exported)["test.true"] == {:string_value, "true"}
-    assert typed_attributes(exported)["test.false"] == {:string_value, "false"}
+    assert typed_attributes(exported)["test.true"] == {:bool_value, true}
+    assert typed_attributes(exported)["test.false"] == {:bool_value, false}
     assert typed_attributes(exported)["test.string"] == {:string_value, "control"}
     assert typed_attributes(exported)["test.int"] == {:int_value, 17}
     assert :otel_attributes.map(:otel_resource.attributes(resource()))[:"test.synthetic"] == true
-    assert typed_attributes(resource)["test.synthetic"] == {:string_value, "true"}
+    assert typed_attributes(resource)["test.synthetic"] == {:bool_value, true}
   end
 
   defp typed_attributes(%{attributes: attrs}) do
@@ -549,7 +603,7 @@ defmodule ExAgent.Test.NativeOTLPProbe do
     assert request.path == path
     assert request.headers["content-type"] == "application/x-protobuf"
     assert request.headers["x-synthetic-auth"] == @header
-    assert request.headers["user-agent"] == "OTel-OTLP-Exporter-erlang/1.10.0"
+    assert request.headers["user-agent"] == "OTel-OTLP-Exporter-erlang/1.11.0"
 
     for sentinel <- [@header, @prompt, @argument, @output, @dependency, @model] do
       refute request.body =~ sentinel
@@ -665,6 +719,7 @@ case scenario do
   "generic_endpoint" -> ExAgent.Test.NativeOTLPProbe.wire(true)
   "failures" -> ExAgent.Test.NativeOTLPProbe.failures()
   "lifecycle" -> ExAgent.Test.NativeOTLPProbe.lifecycle()
+  "restart_budget" -> ExAgent.Test.NativeOTLPProbe.restart_budget()
 end
 
 IO.puts("NATIVE_OTLP_OK #{scenario}")

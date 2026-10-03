@@ -1,0 +1,1205 @@
+{
+  "created_at": 1790593201421,
+  "execution": {
+    "attempt_id": "attempt-zkY5CpYQy0MotDLPOFRusQ",
+    "continuation_id": "continuation-WF1LSC9voDI25_3DgUDVdA",
+    "deadline_at": null,
+    "definition": {
+      "id": "output-_intact",
+      "version": "1"
+    },
+    "effects": {
+      "model-43868d5a1c8ae19fad3abd72907cd47b44bbbe7079a204c3843f7ec9870600c0": {
+        "intent": {
+          "call_id": "model_request_IPt9zsHUDC-DD11QDZoPcw",
+          "kind": "model",
+          "payload": {
+            "history_index": 1,
+            "phase": "model_dispatch",
+            "request_data": {
+              "instructions": "[{\"__type__\":\"request\",\"conversation_id\":null,\"instructions\":null,\"parts\":[],\"run_id\":null}]",
+              "messages": "[{\"__type__\":\"request\",\"conversation_id\":null,\"instructions\":null,\"parts\":[{\"__type__\":\"user\",\"content\":\"probe\",\"timestamp\":\"2026-09-28T11:00:01.424686Z\"}],\"run_id\":\"run_c435VHemvxg1Ehee2s0vWg\",\"timestamp\":\"2026-09-28T11:00:01.424690Z\"}]",
+              "model_ref": {
+                "id": "model",
+                "version": "1"
+              },
+              "model_state_hash": "ffbf81d654b1b5c8d67a4459f25003c9434e10d05ffea0708e825ece8f9976c6",
+              "output_fingerprint": "e7a57563059a7ed5c9b94506ba55ce529b6e692b4b457ebe4bffa19525ed4706",
+              "request_version": 1,
+              "settings": {
+                "extra": {},
+                "frequency_penalty": null,
+                "max_tokens": null,
+                "presence_penalty": null,
+                "temperature": null,
+                "top_p": null
+              },
+              "tools": {
+                "effect": "a2237b766cd1586073cd70f9c2df157404ffc386a78ff2cd45ae2c0a6845dcc0"
+              }
+            },
+            "run_id": "run_c435VHemvxg1Ehee2s0vWg",
+            "step": 1
+          }
+        },
+        "outcome": {
+          "data": {
+            "model_state_hash": "29219e41f7d3be520df73c53a60c5b096e3984e06f48d6048c5cd44077c27380",
+            "response_hash": "3e5a4c5fac575c591d7306e4a681f50a526655c319eccc79aa1dabd9c3423689",
+            "runtime_model_version": 1,
+            "state_available": true
+          },
+          "status": "succeeded"
+        },
+        "state": "confirmed"
+      },
+      "model-6a1814872b8a0638b35bba6572bc55a0ad8c59e19802b563bb9c45cba890818f": {
+        "intent": {
+          "call_id": "model_request_ACGsTLaQ15g19ZDUNI4Iyg",
+          "kind": "model",
+          "payload": {
+            "history_index": 3,
+            "phase": "model_dispatch",
+            "request_data": {
+              "instructions": "[{\"__type__\":\"request\",\"conversation_id\":null,\"instructions\":null,\"parts\":[],\"run_id\":null}]",
+              "messages": "[{\"__type__\":\"request\",\"conversation_id\":null,\"instructions\":null,\"parts\":[{\"__type__\":\"user\",\"content\":\"probe\",\"timestamp\":\"2026-09-28T11:00:01.424686Z\"}],\"run_id\":\"run_c435VHemvxg1Ehee2s0vWg\",\"timestamp\":\"2026-09-28T11:00:01.424690Z\"},{\"__type__\":\"response\",\"finish_reason\":\"tool_calls\",\"model_name\":null,\"parts\":[{\"__type__\":\"tool_call\",\"args\":{\"mode\":\"ok\"},\"kind\":\"function\",\"tool_call_id\":\"one\",\"tool_name\":\"effect\"},{\"__type__\":\"tool_call\",\"args\":{\"mode\":\"ok\"},\"kind\":\"function\",\"tool_call_id\":\"two\",\"tool_name\":\"effect\"}],\"timestamp\":\"2026-09-28T11:00:01.418255Z\",\"usage\":{\"accounting\":{\"availability\":{\"cache_read\":\"unavailable\",\"cache_write\":\"unavailable\",\"input\":\"available\",\"output\":\"available\",\"reasoning\":\"unavailable\"},\"cost\":{\"availability\":\"unavailable\",\"cents\":null,\"quality\":\"estimated\",\"source\":\"unknown\",\"subtotal_cents\":null},\"input_semantics\":\"unknown\",\"provider_presence\":\"unknown\",\"quality\":\"reported\",\"reasoning_semantics\":\"unknown\",\"source\":\"model\",\"version\":1},\"details\":{},\"input_tokens\":3,\"output_tokens\":2}},{\"__type__\":\"request\",\"conversation_id\":null,\"instructions\":null,\"parts\":[{\"__type__\":\"tool_return\",\"content\":\"real usage\",\"status\":\"succeeded\",\"tool_call_id\":\"one\",\"tool_name\":\"effect\"},{\"__type__\":\"tool_return\",\"content\":\"real usage\",\"status\":\"succeeded\",\"tool_call_id\":\"two\",\"tool_name\":\"effect\"}],\"run_id\":\"run_c435VHemvxg1Ehee2s0vWg\",\"timestamp\":\"2026-09-28T11:00:01.633572Z\"}]",
+              "model_ref": {
+                "id": "model",
+                "version": "1"
+              },
+              "model_state_hash": "29219e41f7d3be520df73c53a60c5b096e3984e06f48d6048c5cd44077c27380",
+              "output_fingerprint": "e7a57563059a7ed5c9b94506ba55ce529b6e692b4b457ebe4bffa19525ed4706",
+              "request_version": 1,
+              "settings": {
+                "extra": {},
+                "frequency_penalty": null,
+                "max_tokens": null,
+                "presence_penalty": null,
+                "temperature": null,
+                "top_p": null
+              },
+              "tools": {
+                "effect": "a2237b766cd1586073cd70f9c2df157404ffc386a78ff2cd45ae2c0a6845dcc0"
+              }
+            },
+            "run_id": "run_c435VHemvxg1Ehee2s0vWg",
+            "step": 2
+          }
+        },
+        "outcome": {
+          "data": {
+            "model_state_hash": "49a3059f750079b138322cee2fb15716b68e1fa5acee9392e4374dcd2118699f",
+            "response_hash": "475e63c42203813a669e1327f31f907ca0e99ec404a619db9f60a1dd815cd196",
+            "runtime_model_version": 1,
+            "state_available": true
+          },
+          "status": "succeeded"
+        },
+        "state": "confirmed"
+      },
+      "tool-7738ee079ca425858bf42971fea35a3e03335c44ee006f80a67b37b20321e571": {
+        "intent": {
+          "call_id": "two",
+          "kind": "tool",
+          "payload": {
+            "args": {
+              "mode": "ok"
+            },
+            "call_hash": "6b553a78bb4c058af2f38a3190bd8b72746df06eff47a7b3fb915e6bd50d7745",
+            "model_request_id": "model_request_IPt9zsHUDC-DD11QDZoPcw",
+            "phase": "dispatch",
+            "run_id": "run_c435VHemvxg1Ehee2s0vWg",
+            "schema_hash": "a2237b766cd1586073cd70f9c2df157404ffc386a78ff2cd45ae2c0a6845dcc0",
+            "tool_name": "effect"
+          }
+        },
+        "outcome": {
+          "data": {
+            "phase": "final",
+            "raw_hash": "67eebf80c7dca7a5f2fc04c368c741dd4d44fef6439e173e369da1948e093d95",
+            "result_hash": "67eebf80c7dca7a5f2fc04c368c741dd4d44fef6439e173e369da1948e093d95",
+            "runtime_outcome_version": 1
+          },
+          "status": "succeeded"
+        },
+        "state": "confirmed"
+      },
+      "tool-e8eca4f0df6b3c9183aa1d6d06f0a979c050fd53a00d7a4ecc6b6317b6ee0332": {
+        "intent": {
+          "call_id": "one",
+          "kind": "tool",
+          "payload": {
+            "args": {
+              "mode": "ok"
+            },
+            "call_hash": "72b086cd536ed94e2b4a07dc6de11c632204b62eb008b0e5c655ababbfd8c175",
+            "model_request_id": "model_request_IPt9zsHUDC-DD11QDZoPcw",
+            "phase": "dispatch",
+            "run_id": "run_c435VHemvxg1Ehee2s0vWg",
+            "schema_hash": "a2237b766cd1586073cd70f9c2df157404ffc386a78ff2cd45ae2c0a6845dcc0",
+            "tool_name": "effect"
+          }
+        },
+        "outcome": {
+          "data": {
+            "phase": "final",
+            "raw_hash": "743f99989eee4df880733cd35c867d1e88e6b7444b63e441865e8fd7b0567cee",
+            "result_hash": "743f99989eee4df880733cd35c867d1e88e6b7444b63e441865e8fd7b0567cee",
+            "runtime_outcome_version": 1
+          },
+          "status": "succeeded"
+        },
+        "state": "confirmed"
+      }
+    },
+    "execution_version": 2,
+    "expires_at": null,
+    "fence": 1,
+    "kind": "composition",
+    "lease_until": 1790593261422,
+    "owner_id": "owner-smoyaOWBNiHC4lwtqV3tlA",
+    "policy": {
+      "id": "policy",
+      "version": "1"
+    },
+    "progress": {
+      "active_budget": {
+        "limit_ms": null,
+        "refund_at": null,
+        "remaining_ms": null,
+        "reserved_ms": null
+      },
+      "runtime": {
+        "authority": {
+          "root": {
+            "checkpoint_limit": 8388608,
+            "deadline_at": null,
+            "max_concurrent_requests": null,
+            "policies": [
+              {
+                "default": "allow",
+                "rules": []
+              },
+              {
+                "default": "allow",
+                "rules": []
+              }
+            ],
+            "usage": {
+              "accounting": "strict",
+              "input_tokens_limit": null,
+              "max_budget_cents": null,
+              "output_tokens_limit": null,
+              "request_limit": null,
+              "tool_calls_limit": null,
+              "total_tokens_limit": null
+            }
+          },
+          "run_c435VHemvxg1Ehee2s0vWg": {
+            "deadline_at": null,
+            "max_concurrent_requests": null,
+            "policies": [
+              {
+                "default": "allow",
+                "rules": []
+              },
+              {
+                "default": "allow",
+                "rules": []
+              }
+            ]
+          }
+        },
+        "binding": {
+          "composition_definition_version": 1,
+          "fingerprint": "e7e9aa122dcac0770d154d0b59a0016f349d7f5467855c8dfdc3c5f7fd657f38",
+          "id": "output-_intact",
+          "kind": "sequence",
+          "steps": [
+            {
+              "definition": {
+                "id": "leaf",
+                "version": "1"
+              },
+              "id": "A",
+              "input_kind": "initial",
+              "input_version": null,
+              "model_ref": {
+                "id": "model",
+                "version": "1"
+              },
+              "output_ref": {
+                "id": "output",
+                "version": "1"
+              },
+              "policy": {
+                "id": "policy",
+                "version": "1"
+              }
+            }
+          ],
+          "version": "1"
+        },
+        "children": {
+          "run_c435VHemvxg1Ehee2s0vWg": {
+            "definition": {
+              "id": "leaf",
+              "version": "1"
+            },
+            "frame": {
+              "cursor": "response",
+              "first_new_message_index": 0,
+              "frame_version": 3,
+              "limits": {
+                "max_history_bytes": 8388608,
+                "max_payload_bytes": 1048576,
+                "max_steps": 50,
+                "output_retries": 1,
+                "tool_timeout": 30000,
+                "usage": {
+                  "accounting": "strict",
+                  "input_tokens_limit": null,
+                  "max_budget_cents": null,
+                  "output_tokens_limit": null,
+                  "request_limit": null,
+                  "tool_calls_limit": null,
+                  "total_tokens_limit": null
+                }
+              },
+              "model_binding": null,
+              "model_data": {
+                "index": 2
+              },
+              "model_request_id": "model_request_ACGsTLaQ15g19ZDUNI4Iyg",
+              "outcomes": {},
+              "output_fingerprint": "e7a57563059a7ed5c9b94506ba55ce529b6e692b4b457ebe4bffa19525ed4706",
+              "output_retries_used": 0,
+              "permissions": {
+                "default": "allow",
+                "rules": []
+              },
+              "run_id": "run_c435VHemvxg1Ehee2s0vWg",
+              "run_step": 2,
+              "scope": {
+                "batches": {
+                  "model_request_IPt9zsHUDC-DD11QDZoPcw": 2
+                },
+                "operations": [
+                  {
+                    "complete": true,
+                    "id": [
+                      "tool",
+                      "model_request_IPt9zsHUDC-DD11QDZoPcw",
+                      "one"
+                    ],
+                    "usage": {
+                      "accounting": {
+                        "availability": {
+                          "cache_read": "unavailable",
+                          "cache_write": "unavailable",
+                          "input": "available",
+                          "output": "available",
+                          "reasoning": "unavailable"
+                        },
+                        "cost": {
+                          "availability": "unavailable",
+                          "cents": null,
+                          "quality": "estimated",
+                          "source": "unknown",
+                          "subtotal_cents": null
+                        },
+                        "input_semantics": "unknown",
+                        "provider_presence": "unknown",
+                        "quality": "reported",
+                        "reasoning_semantics": "unknown",
+                        "source": "model",
+                        "version": 1
+                      },
+                      "details": {},
+                      "input_tokens": 7,
+                      "output_tokens": 11
+                    }
+                  },
+                  {
+                    "complete": true,
+                    "id": [
+                      "tool",
+                      "model_request_IPt9zsHUDC-DD11QDZoPcw",
+                      "two"
+                    ],
+                    "usage": {
+                      "accounting": {
+                        "availability": {
+                          "cache_read": "unavailable",
+                          "cache_write": "unavailable",
+                          "input": "available",
+                          "output": "available",
+                          "reasoning": "unavailable"
+                        },
+                        "cost": {
+                          "availability": "unavailable",
+                          "cents": null,
+                          "quality": "estimated",
+                          "source": "unknown",
+                          "subtotal_cents": null
+                        },
+                        "input_semantics": "unknown",
+                        "provider_presence": "unknown",
+                        "quality": "reported",
+                        "reasoning_semantics": "unknown",
+                        "source": "model",
+                        "version": 1
+                      },
+                      "details": {},
+                      "input_tokens": 7,
+                      "output_tokens": 11
+                    }
+                  },
+                  {
+                    "complete": true,
+                    "id": [
+                      "model",
+                      "model_request_ACGsTLaQ15g19ZDUNI4Iyg"
+                    ],
+                    "usage": {
+                      "accounting": {
+                        "availability": {
+                          "cache_read": "unavailable",
+                          "cache_write": "unavailable",
+                          "input": "available",
+                          "output": "available",
+                          "reasoning": "unavailable"
+                        },
+                        "cost": {
+                          "availability": "unavailable",
+                          "cents": null,
+                          "quality": "estimated",
+                          "source": "unknown",
+                          "subtotal_cents": null
+                        },
+                        "input_semantics": "unknown",
+                        "provider_presence": "unknown",
+                        "quality": "reported",
+                        "reasoning_semantics": "unknown",
+                        "source": "model",
+                        "version": 1
+                      },
+                      "details": {},
+                      "input_tokens": 3,
+                      "output_tokens": 2
+                    }
+                  },
+                  {
+                    "complete": true,
+                    "id": [
+                      "model",
+                      "model_request_IPt9zsHUDC-DD11QDZoPcw"
+                    ],
+                    "usage": {
+                      "accounting": {
+                        "availability": {
+                          "cache_read": "unavailable",
+                          "cache_write": "unavailable",
+                          "input": "available",
+                          "output": "available",
+                          "reasoning": "unavailable"
+                        },
+                        "cost": {
+                          "availability": "unavailable",
+                          "cents": null,
+                          "quality": "estimated",
+                          "source": "unknown",
+                          "subtotal_cents": null
+                        },
+                        "input_semantics": "unknown",
+                        "provider_presence": "unknown",
+                        "quality": "reported",
+                        "reasoning_semantics": "unknown",
+                        "source": "model",
+                        "version": 1
+                      },
+                      "details": {},
+                      "input_tokens": 3,
+                      "output_tokens": 2
+                    }
+                  }
+                ],
+                "requests": 2,
+                "run_id": "run_c435VHemvxg1Ehee2s0vWg",
+                "scope_version": 1,
+                "tools": 2
+              },
+              "selected_tools": {
+                "effect": "a2237b766cd1586073cd70f9c2df157404ffc386a78ff2cd45ae2c0a6845dcc0"
+              },
+              "settings": {
+                "extra": {},
+                "frequency_penalty": null,
+                "max_tokens": null,
+                "presence_penalty": null,
+                "temperature": null,
+                "timeout": 59789,
+                "top_p": null
+              },
+              "tool_retries": {},
+              "tool_return_bytes": 1048576
+            },
+            "link": {
+              "index": 0,
+              "input": "probe",
+              "kind": "step",
+              "step_id": "A"
+            },
+            "model_ref": {
+              "id": "model",
+              "version": "1"
+            },
+            "output_ref": {
+              "id": "output",
+              "version": "1"
+            },
+            "parent_run_id": "root",
+            "policy": {
+              "id": "policy",
+              "version": "1"
+            },
+            "result": null,
+            "result_omitted": null,
+            "snapshot": {
+              "agent_id": "output-_intact",
+              "message_history": "[{\"__type__\":\"request\",\"conversation_id\":null,\"instructions\":null,\"parts\":[{\"__type__\":\"user\",\"content\":\"probe\",\"timestamp\":\"2026-09-28T11:00:01.424686Z\"}],\"run_id\":\"run_c435VHemvxg1Ehee2s0vWg\",\"timestamp\":\"2026-09-28T11:00:01.424690Z\"},{\"__type__\":\"response\",\"finish_reason\":\"tool_calls\",\"model_name\":null,\"parts\":[{\"__type__\":\"tool_call\",\"args\":{\"mode\":\"ok\"},\"kind\":\"function\",\"tool_call_id\":\"one\",\"tool_name\":\"effect\"},{\"__type__\":\"tool_call\",\"args\":{\"mode\":\"ok\"},\"kind\":\"function\",\"tool_call_id\":\"two\",\"tool_name\":\"effect\"}],\"timestamp\":\"2026-09-28T11:00:01.418255Z\",\"usage\":{\"accounting\":{\"availability\":{\"cache_read\":\"unavailable\",\"cache_write\":\"unavailable\",\"input\":\"available\",\"output\":\"available\",\"reasoning\":\"unavailable\"},\"cost\":{\"availability\":\"unavailable\",\"cents\":null,\"quality\":\"estimated\",\"source\":\"unknown\",\"subtotal_cents\":null},\"input_semantics\":\"unknown\",\"provider_presence\":\"unknown\",\"quality\":\"reported\",\"reasoning_semantics\":\"unknown\",\"source\":\"model\",\"version\":1},\"details\":{},\"input_tokens\":3,\"output_tokens\":2}},{\"__type__\":\"request\",\"conversation_id\":null,\"instructions\":null,\"parts\":[{\"__type__\":\"tool_return\",\"content\":\"real usage\",\"status\":\"succeeded\",\"tool_call_id\":\"one\",\"tool_name\":\"effect\"},{\"__type__\":\"tool_return\",\"content\":\"real usage\",\"status\":\"succeeded\",\"tool_call_id\":\"two\",\"tool_name\":\"effect\"}],\"run_id\":\"run_c435VHemvxg1Ehee2s0vWg\",\"timestamp\":\"2026-09-28T11:00:01.633572Z\"},{\"__type__\":\"response\",\"finish_reason\":\"tool_calls\",\"model_name\":null,\"parts\":[{\"__type__\":\"tool_call\",\"args\":{\"count\":7},\"kind\":\"function\",\"tool_call_id\":\"output\",\"tool_name\":\"final_result\"}],\"timestamp\":\"2026-09-28T11:00:01.418249Z\",\"usage\":{\"accounting\":{\"availability\":{\"cache_read\":\"unavailable\",\"cache_write\":\"unavailable\",\"input\":\"available\",\"output\":\"available\",\"reasoning\":\"unavailable\"},\"cost\":{\"availability\":\"unavailable\",\"cents\":null,\"quality\":\"estimated\",\"source\":\"unknown\",\"subtotal_cents\":null},\"input_semantics\":\"unknown\",\"provider_presence\":\"unknown\",\"quality\":\"reported\",\"reasoning_semantics\":\"unknown\",\"source\":\"model\",\"version\":1},\"details\":{},\"input_tokens\":3,\"output_tokens\":2}}]",
+              "metadata": {},
+              "provider_state": null,
+              "revision": 2,
+              "saved_at": "2026-09-28T11:00:01.686972Z",
+              "usage": {
+                "accounting": {
+                  "availability": {
+                    "cache_read": "unavailable",
+                    "cache_write": "unavailable",
+                    "input": "available",
+                    "output": "available",
+                    "reasoning": "unavailable"
+                  },
+                  "cost": {
+                    "availability": "unavailable",
+                    "cents": null,
+                    "quality": "estimated",
+                    "source": "unknown",
+                    "subtotal_cents": null
+                  },
+                  "input_semantics": "unknown",
+                  "provider_presence": "unknown",
+                  "quality": "reported",
+                  "reasoning_semantics": "unknown",
+                  "source": "aggregate",
+                  "version": 1
+                },
+                "details": {},
+                "input_tokens": 20,
+                "output_tokens": 26
+              },
+              "version": 4
+            },
+            "status": "running"
+          }
+        },
+        "cursor": "running",
+        "frame_version": 7,
+        "input": "probe",
+        "kind": "sequence",
+        "output_resolutions": {},
+        "run_id": "root",
+        "scope": {
+          "batches": [
+            {
+              "count": 2,
+              "id": "model_request_IPt9zsHUDC-DD11QDZoPcw",
+              "run_id": "run_c435VHemvxg1Ehee2s0vWg"
+            }
+          ],
+          "nodes": {
+            "root": {
+              "parent_run_id": null,
+              "requests": 2,
+              "tools": 2
+            },
+            "run_c435VHemvxg1Ehee2s0vWg": {
+              "parent_run_id": "root",
+              "requests": 2,
+              "tools": 2
+            }
+          },
+          "operations": [
+            {
+              "ancestors": {
+                "root": {
+                  "accounting": {
+                    "availability": {
+                      "cache_read": "unavailable",
+                      "cache_write": "unavailable",
+                      "input": "available",
+                      "output": "available",
+                      "reasoning": "unavailable"
+                    },
+                    "cost": {
+                      "availability": "unavailable",
+                      "cents": null,
+                      "quality": "estimated",
+                      "source": "unknown",
+                      "subtotal_cents": null
+                    },
+                    "input_semantics": "unknown",
+                    "provider_presence": "unknown",
+                    "quality": "reported",
+                    "reasoning_semantics": "unknown",
+                    "source": "model",
+                    "version": 1
+                  },
+                  "details": {},
+                  "input_tokens": 7,
+                  "output_tokens": 11
+                },
+                "run_c435VHemvxg1Ehee2s0vWg": {
+                  "accounting": {
+                    "availability": {
+                      "cache_read": "unavailable",
+                      "cache_write": "unavailable",
+                      "input": "available",
+                      "output": "available",
+                      "reasoning": "unavailable"
+                    },
+                    "cost": {
+                      "availability": "unavailable",
+                      "cents": null,
+                      "quality": "estimated",
+                      "source": "unknown",
+                      "subtotal_cents": null
+                    },
+                    "input_semantics": "unknown",
+                    "provider_presence": "unknown",
+                    "quality": "reported",
+                    "reasoning_semantics": "unknown",
+                    "source": "model",
+                    "version": 1
+                  },
+                  "details": {},
+                  "input_tokens": 7,
+                  "output_tokens": 11
+                }
+              },
+              "complete": true,
+              "id": [
+                "tool",
+                "model_request_IPt9zsHUDC-DD11QDZoPcw",
+                "one"
+              ],
+              "run_id": "run_c435VHemvxg1Ehee2s0vWg",
+              "terminal_usage": {
+                "accounting": {
+                  "availability": {
+                    "cache_read": "unavailable",
+                    "cache_write": "unavailable",
+                    "input": "available",
+                    "output": "available",
+                    "reasoning": "unavailable"
+                  },
+                  "cost": {
+                    "availability": "unavailable",
+                    "cents": null,
+                    "quality": "estimated",
+                    "source": "unknown",
+                    "subtotal_cents": null
+                  },
+                  "input_semantics": "unknown",
+                  "provider_presence": "unknown",
+                  "quality": "reported",
+                  "reasoning_semantics": "unknown",
+                  "source": "model",
+                  "version": 1
+                },
+                "details": {},
+                "input_tokens": 7,
+                "output_tokens": 11
+              },
+              "usage": {
+                "accounting": {
+                  "availability": {
+                    "cache_read": "unavailable",
+                    "cache_write": "unavailable",
+                    "input": "available",
+                    "output": "available",
+                    "reasoning": "unavailable"
+                  },
+                  "cost": {
+                    "availability": "unavailable",
+                    "cents": null,
+                    "quality": "estimated",
+                    "source": "unknown",
+                    "subtotal_cents": null
+                  },
+                  "input_semantics": "unknown",
+                  "provider_presence": "unknown",
+                  "quality": "reported",
+                  "reasoning_semantics": "unknown",
+                  "source": "model",
+                  "version": 1
+                },
+                "details": {},
+                "input_tokens": 7,
+                "output_tokens": 11
+              }
+            },
+            {
+              "ancestors": {
+                "root": {
+                  "accounting": {
+                    "availability": {
+                      "cache_read": "unavailable",
+                      "cache_write": "unavailable",
+                      "input": "available",
+                      "output": "available",
+                      "reasoning": "unavailable"
+                    },
+                    "cost": {
+                      "availability": "unavailable",
+                      "cents": null,
+                      "quality": "estimated",
+                      "source": "unknown",
+                      "subtotal_cents": null
+                    },
+                    "input_semantics": "unknown",
+                    "provider_presence": "unknown",
+                    "quality": "reported",
+                    "reasoning_semantics": "unknown",
+                    "source": "model",
+                    "version": 1
+                  },
+                  "details": {},
+                  "input_tokens": 7,
+                  "output_tokens": 11
+                },
+                "run_c435VHemvxg1Ehee2s0vWg": {
+                  "accounting": {
+                    "availability": {
+                      "cache_read": "unavailable",
+                      "cache_write": "unavailable",
+                      "input": "available",
+                      "output": "available",
+                      "reasoning": "unavailable"
+                    },
+                    "cost": {
+                      "availability": "unavailable",
+                      "cents": null,
+                      "quality": "estimated",
+                      "source": "unknown",
+                      "subtotal_cents": null
+                    },
+                    "input_semantics": "unknown",
+                    "provider_presence": "unknown",
+                    "quality": "reported",
+                    "reasoning_semantics": "unknown",
+                    "source": "model",
+                    "version": 1
+                  },
+                  "details": {},
+                  "input_tokens": 7,
+                  "output_tokens": 11
+                }
+              },
+              "complete": true,
+              "id": [
+                "tool",
+                "model_request_IPt9zsHUDC-DD11QDZoPcw",
+                "two"
+              ],
+              "run_id": "run_c435VHemvxg1Ehee2s0vWg",
+              "terminal_usage": {
+                "accounting": {
+                  "availability": {
+                    "cache_read": "unavailable",
+                    "cache_write": "unavailable",
+                    "input": "available",
+                    "output": "available",
+                    "reasoning": "unavailable"
+                  },
+                  "cost": {
+                    "availability": "unavailable",
+                    "cents": null,
+                    "quality": "estimated",
+                    "source": "unknown",
+                    "subtotal_cents": null
+                  },
+                  "input_semantics": "unknown",
+                  "provider_presence": "unknown",
+                  "quality": "reported",
+                  "reasoning_semantics": "unknown",
+                  "source": "model",
+                  "version": 1
+                },
+                "details": {},
+                "input_tokens": 7,
+                "output_tokens": 11
+              },
+              "usage": {
+                "accounting": {
+                  "availability": {
+                    "cache_read": "unavailable",
+                    "cache_write": "unavailable",
+                    "input": "available",
+                    "output": "available",
+                    "reasoning": "unavailable"
+                  },
+                  "cost": {
+                    "availability": "unavailable",
+                    "cents": null,
+                    "quality": "estimated",
+                    "source": "unknown",
+                    "subtotal_cents": null
+                  },
+                  "input_semantics": "unknown",
+                  "provider_presence": "unknown",
+                  "quality": "reported",
+                  "reasoning_semantics": "unknown",
+                  "source": "model",
+                  "version": 1
+                },
+                "details": {},
+                "input_tokens": 7,
+                "output_tokens": 11
+              }
+            },
+            {
+              "ancestors": {
+                "root": {
+                  "accounting": {
+                    "availability": {
+                      "cache_read": "unavailable",
+                      "cache_write": "unavailable",
+                      "input": "available",
+                      "output": "available",
+                      "reasoning": "unavailable"
+                    },
+                    "cost": {
+                      "availability": "unavailable",
+                      "cents": null,
+                      "quality": "estimated",
+                      "source": "unknown",
+                      "subtotal_cents": null
+                    },
+                    "input_semantics": "unknown",
+                    "provider_presence": "unknown",
+                    "quality": "reported",
+                    "reasoning_semantics": "unknown",
+                    "source": "model",
+                    "version": 1
+                  },
+                  "details": {},
+                  "input_tokens": 3,
+                  "output_tokens": 2
+                },
+                "run_c435VHemvxg1Ehee2s0vWg": {
+                  "accounting": {
+                    "availability": {
+                      "cache_read": "unavailable",
+                      "cache_write": "unavailable",
+                      "input": "available",
+                      "output": "available",
+                      "reasoning": "unavailable"
+                    },
+                    "cost": {
+                      "availability": "unavailable",
+                      "cents": null,
+                      "quality": "estimated",
+                      "source": "unknown",
+                      "subtotal_cents": null
+                    },
+                    "input_semantics": "unknown",
+                    "provider_presence": "unknown",
+                    "quality": "reported",
+                    "reasoning_semantics": "unknown",
+                    "source": "model",
+                    "version": 1
+                  },
+                  "details": {},
+                  "input_tokens": 3,
+                  "output_tokens": 2
+                }
+              },
+              "complete": true,
+              "id": [
+                "model",
+                "model_request_ACGsTLaQ15g19ZDUNI4Iyg"
+              ],
+              "run_id": "run_c435VHemvxg1Ehee2s0vWg",
+              "terminal_usage": {
+                "accounting": {
+                  "availability": {
+                    "cache_read": "unavailable",
+                    "cache_write": "unavailable",
+                    "input": "available",
+                    "output": "available",
+                    "reasoning": "unavailable"
+                  },
+                  "cost": {
+                    "availability": "unavailable",
+                    "cents": null,
+                    "quality": "estimated",
+                    "source": "unknown",
+                    "subtotal_cents": null
+                  },
+                  "input_semantics": "unknown",
+                  "provider_presence": "unknown",
+                  "quality": "reported",
+                  "reasoning_semantics": "unknown",
+                  "source": "model",
+                  "version": 1
+                },
+                "details": {},
+                "input_tokens": 3,
+                "output_tokens": 2
+              },
+              "usage": {
+                "accounting": {
+                  "availability": {
+                    "cache_read": "unavailable",
+                    "cache_write": "unavailable",
+                    "input": "available",
+                    "output": "available",
+                    "reasoning": "unavailable"
+                  },
+                  "cost": {
+                    "availability": "unavailable",
+                    "cents": null,
+                    "quality": "estimated",
+                    "source": "unknown",
+                    "subtotal_cents": null
+                  },
+                  "input_semantics": "unknown",
+                  "provider_presence": "unknown",
+                  "quality": "reported",
+                  "reasoning_semantics": "unknown",
+                  "source": "model",
+                  "version": 1
+                },
+                "details": {},
+                "input_tokens": 3,
+                "output_tokens": 2
+              }
+            },
+            {
+              "ancestors": {
+                "root": {
+                  "accounting": {
+                    "availability": {
+                      "cache_read": "unavailable",
+                      "cache_write": "unavailable",
+                      "input": "available",
+                      "output": "available",
+                      "reasoning": "unavailable"
+                    },
+                    "cost": {
+                      "availability": "unavailable",
+                      "cents": null,
+                      "quality": "estimated",
+                      "source": "unknown",
+                      "subtotal_cents": null
+                    },
+                    "input_semantics": "unknown",
+                    "provider_presence": "unknown",
+                    "quality": "reported",
+                    "reasoning_semantics": "unknown",
+                    "source": "model",
+                    "version": 1
+                  },
+                  "details": {},
+                  "input_tokens": 3,
+                  "output_tokens": 2
+                },
+                "run_c435VHemvxg1Ehee2s0vWg": {
+                  "accounting": {
+                    "availability": {
+                      "cache_read": "unavailable",
+                      "cache_write": "unavailable",
+                      "input": "available",
+                      "output": "available",
+                      "reasoning": "unavailable"
+                    },
+                    "cost": {
+                      "availability": "unavailable",
+                      "cents": null,
+                      "quality": "estimated",
+                      "source": "unknown",
+                      "subtotal_cents": null
+                    },
+                    "input_semantics": "unknown",
+                    "provider_presence": "unknown",
+                    "quality": "reported",
+                    "reasoning_semantics": "unknown",
+                    "source": "model",
+                    "version": 1
+                  },
+                  "details": {},
+                  "input_tokens": 3,
+                  "output_tokens": 2
+                }
+              },
+              "complete": true,
+              "id": [
+                "model",
+                "model_request_IPt9zsHUDC-DD11QDZoPcw"
+              ],
+              "run_id": "run_c435VHemvxg1Ehee2s0vWg",
+              "terminal_usage": {
+                "accounting": {
+                  "availability": {
+                    "cache_read": "unavailable",
+                    "cache_write": "unavailable",
+                    "input": "available",
+                    "output": "available",
+                    "reasoning": "unavailable"
+                  },
+                  "cost": {
+                    "availability": "unavailable",
+                    "cents": null,
+                    "quality": "estimated",
+                    "source": "unknown",
+                    "subtotal_cents": null
+                  },
+                  "input_semantics": "unknown",
+                  "provider_presence": "unknown",
+                  "quality": "reported",
+                  "reasoning_semantics": "unknown",
+                  "source": "model",
+                  "version": 1
+                },
+                "details": {},
+                "input_tokens": 3,
+                "output_tokens": 2
+              },
+              "usage": {
+                "accounting": {
+                  "availability": {
+                    "cache_read": "unavailable",
+                    "cache_write": "unavailable",
+                    "input": "available",
+                    "output": "available",
+                    "reasoning": "unavailable"
+                  },
+                  "cost": {
+                    "availability": "unavailable",
+                    "cents": null,
+                    "quality": "estimated",
+                    "source": "unknown",
+                    "subtotal_cents": null
+                  },
+                  "input_semantics": "unknown",
+                  "provider_presence": "unknown",
+                  "quality": "reported",
+                  "reasoning_semantics": "unknown",
+                  "source": "model",
+                  "version": 1
+                },
+                "details": {},
+                "input_tokens": 3,
+                "output_tokens": 2
+              }
+            }
+          ],
+          "retry_batches": [],
+          "root_run_id": "root",
+          "scope_version": 2
+        }
+      }
+    },
+    "run_id": "root",
+    "state": "claimed"
+  },
+  "key": [
+    "output-_intact",
+    "agent",
+    "output-_intact"
+  ],
+  "receipts": {
+    "operation--_z0rYRjlvaFbTAb_oe0-w": {
+      "actor_id": "exagent-runtime",
+      "attempt_id": null,
+      "continuation_id": "continuation-WF1LSC9voDI25_3DgUDVdA",
+      "digest": "e2ecff339b4f05b863cff5889966adc4564db8c5742ab79c43e7cce5e363b895",
+      "operation": "node_checkpoint",
+      "revision": 6,
+      "run_id": "root",
+      "state": "claimed"
+    },
+    "operation-4JcFwT8P9cJz1mlNp3v3Fw": {
+      "actor_id": "exagent-runtime",
+      "attempt_id": "attempt-zkY5CpYQy0MotDLPOFRusQ",
+      "continuation_id": "continuation-WF1LSC9voDI25_3DgUDVdA",
+      "digest": "9b8c4b33015b97ea7ea7825e41fbf3acbf3076a348a0755d4fc298f448326a1d",
+      "operation": "claim",
+      "revision": 2,
+      "run_id": "root",
+      "state": "claimed"
+    },
+    "operation-68DZ67K7u9ybT2gWYbZMQg": {
+      "actor_id": "exagent-runtime",
+      "attempt_id": null,
+      "continuation_id": "continuation-WF1LSC9voDI25_3DgUDVdA",
+      "digest": "52c7233da49c4b6e53ee5d530c5435175a74c93668760aab54c47ddc0b2fb039",
+      "operation": "create",
+      "revision": 1,
+      "run_id": "root",
+      "state": "ready"
+    },
+    "operation-Dk6m9xSimM0hbcVTuTtCzw": {
+      "actor_id": "exagent-runtime",
+      "attempt_id": null,
+      "continuation_id": "continuation-WF1LSC9voDI25_3DgUDVdA",
+      "digest": "95d3fe83ab50d18db1af6ab6cff814ca7f5bf01e25413208fbd38c6720b90286",
+      "operation": "begin_effect",
+      "revision": 7,
+      "run_id": "root",
+      "state": "claimed"
+    },
+    "operation-HP-DdYM_OhcuxlqlX1yjTw": {
+      "actor_id": "exagent-runtime",
+      "attempt_id": null,
+      "continuation_id": "continuation-WF1LSC9voDI25_3DgUDVdA",
+      "digest": "c3c121997fa781d673e27b10db6c7a89f54e46760fba4a96ddab76ae46302a85",
+      "operation": "finalize_call",
+      "revision": 11,
+      "run_id": "root",
+      "state": "claimed"
+    },
+    "operation-JkNDTY73EMeQlnDaTZgT2w": {
+      "actor_id": "exagent-runtime",
+      "attempt_id": null,
+      "continuation_id": "continuation-WF1LSC9voDI25_3DgUDVdA",
+      "digest": "2194b5b7e686abf7633f5e3078a5baf6cfd639444a28a15423569171e336eab9",
+      "operation": "outcome",
+      "revision": 5,
+      "run_id": "root",
+      "state": "claimed"
+    },
+    "operation-LaZQpaGFj3rsyKkW7j2IhQ": {
+      "actor_id": "exagent-runtime",
+      "attempt_id": null,
+      "continuation_id": "continuation-WF1LSC9voDI25_3DgUDVdA",
+      "digest": "bf0d68d85eee5a0e7a1a23dd29ee53b95a95c199666535cb778bc21f595a08ff",
+      "operation": "finalize_call",
+      "revision": 12,
+      "run_id": "root",
+      "state": "claimed"
+    },
+    "operation-TY1UISDRT64P9nPxC5ULqg": {
+      "actor_id": "exagent-runtime",
+      "attempt_id": null,
+      "continuation_id": "continuation-WF1LSC9voDI25_3DgUDVdA",
+      "digest": "e6d4efce6e6b2171b6f537dbf7eb7cbf3aa53f123e9a24464d97f46405fea428",
+      "operation": "step_input",
+      "revision": 3,
+      "run_id": "root",
+      "state": "claimed"
+    },
+    "operation-VTFdgn8XBIp_QsUZkPdnlg": {
+      "actor_id": "exagent-runtime",
+      "attempt_id": null,
+      "continuation_id": "continuation-WF1LSC9voDI25_3DgUDVdA",
+      "digest": "35884d93de972f534c823dc1c7ba755ee7dc045179ae5073ebe2fbc21b8c280d",
+      "operation": "outcome",
+      "revision": 14,
+      "run_id": "root",
+      "state": "claimed"
+    },
+    "operation-bTxwxUdtdEmWNcZDz_XD2g": {
+      "actor_id": "exagent-runtime",
+      "attempt_id": null,
+      "continuation_id": "continuation-WF1LSC9voDI25_3DgUDVdA",
+      "digest": "3f9cf7027158bb6506169fed98f76043c12191259bbf2b341dc746a55f58e67f",
+      "operation": "begin_effect",
+      "revision": 4,
+      "run_id": "root",
+      "state": "claimed"
+    },
+    "operation-p_9Pk8CdTazlt0tM3IMAiA": {
+      "actor_id": "exagent-runtime",
+      "attempt_id": null,
+      "continuation_id": "continuation-WF1LSC9voDI25_3DgUDVdA",
+      "digest": "e505b52c2425401ebb90c0bbdd6dfb31e4df7a873ad89645f543ca8f38bc5ee1",
+      "operation": "outcome",
+      "revision": 9,
+      "run_id": "root",
+      "state": "claimed"
+    },
+    "operation-ssTXapcnFACtErQWdEnznQ": {
+      "actor_id": "exagent-runtime",
+      "attempt_id": null,
+      "continuation_id": "continuation-WF1LSC9voDI25_3DgUDVdA",
+      "digest": "3d25b340c03c3037dddbdcff58e0de00612ede4b74542f741e66db257cd6b9c9",
+      "operation": "outcome",
+      "revision": 10,
+      "run_id": "root",
+      "state": "claimed"
+    },
+    "operation-tSMW2bu7KeFUhHqNfak6tw": {
+      "actor_id": "exagent-runtime",
+      "attempt_id": null,
+      "continuation_id": "continuation-WF1LSC9voDI25_3DgUDVdA",
+      "digest": "857de1844a1e4ac55d2a9c6db34e0dd12bcea6e9be97eb38ceb87866c6a30d41",
+      "operation": "begin_effect",
+      "revision": 13,
+      "run_id": "root",
+      "state": "claimed"
+    },
+    "operation-ynU4U88z5r-SrSTr3rTIpw": {
+      "actor_id": "exagent-runtime",
+      "attempt_id": null,
+      "continuation_id": "continuation-WF1LSC9voDI25_3DgUDVdA",
+      "digest": "68314751f039050022cdbe8e1a6546b8d2ec1a2486f82c7b9f98e63f2e820a7c",
+      "operation": "begin_effect",
+      "revision": 8,
+      "run_id": "root",
+      "state": "claimed"
+    }
+  },
+  "record_id": "record-dPtNMYZzzI4Hsg7klu9BjA",
+  "record_version": 2,
+  "revision": 14,
+  "snapshot": {
+    "binding": {
+      "composition_definition_version": 1,
+      "fingerprint": "e7e9aa122dcac0770d154d0b59a0016f349d7f5467855c8dfdc3c5f7fd657f38",
+      "id": "output-_intact",
+      "kind": "sequence",
+      "steps": [
+        {
+          "definition": {
+            "id": "leaf",
+            "version": "1"
+          },
+          "id": "A",
+          "input_kind": "initial",
+          "input_version": null,
+          "model_ref": {
+            "id": "model",
+            "version": "1"
+          },
+          "output_ref": {
+            "id": "output",
+            "version": "1"
+          },
+          "policy": {
+            "id": "policy",
+            "version": "1"
+          }
+        }
+      ],
+      "version": "1"
+    },
+    "composition_id": "output-_intact",
+    "composition_snapshot_version": 1,
+    "revision": 0,
+    "run_id": "root"
+  },
+  "updated_at": 1790593201699
+}

@@ -15,7 +15,7 @@ defmodule ExAgent.TestingAuditHarness.PackageProbe do
     ebin = Path.expand(Keyword.fetch!(opts, :ebin))
 
     base =
-      Path.join("/tmp/opencode", "testing_audit_harness_package_#{System.os_time(:nanosecond)}")
+      Path.join(System.tmp_dir!(), "testing_audit_harness_package_#{System.os_time(:nanosecond)}")
 
     File.mkdir!(base)
     fixtures = Path.expand("../fixtures/package_acceptance", __DIR__)
@@ -79,11 +79,13 @@ defmodule ExAgent.TestingAuditHarness.PackageProbe do
 
       script = """
       Application.put_env(:opentelemetry, :processors, [])
+      Application.put_env(:req_llm, :load_dotenv, false)
       {:ok, _} = Application.ensure_all_started(:exagent)
       {:ok, _} = Application.ensure_all_started(:opentelemetry)
       Code.require_file("test/test_helper.exs")
       ExUnit.configure(autorun: false, seed: 37556, exclude: [:testing_audit_omitted])
       Code.require_file("test/package_test.exs")
+      Code.require_file("test/c7_extensible_test.exs")
       result = ExUnit.run()
       IO.inspect(result, label: "REAL_EXUNIT_RESULT")
       System.halt(if result.failures == 0, do: 0, else: 1)

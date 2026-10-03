@@ -17,11 +17,19 @@ end
 
 alias ExAgent.{Tool}
 
-# A free / very cheap model on OpenRouter. Swap for any slug you have access to.
+# Explicit Chat-compatible configuration; qualify the exact gateway/model before
+# production use. This is not a catalogue-wide capability claim or a G2 pass.
 model =
-  ExAgent.Models.OpenRouter.new(
-    model: System.get_env("OPENROUTER_MODEL", "openai/gpt-4o-mini"),
-    app_title: "exagent smoke test"
+  ExAgent.Models.ReqLLM.new(
+    model: %{
+      provider: :openai,
+      id: "openai/gpt-4o-mini",
+      capabilities: %{tools: %{enabled: true}, reasoning: %{enabled: false}},
+      extra: %{wire: %{protocol: "openai_chat"}}
+    },
+    api_key: key,
+    base_url: "https://openrouter.ai/api/v1",
+    tool_profile: :chat_tools_v1
   )
 
 # A simple function tool so we can see a real tool-call round trip.
@@ -44,7 +52,7 @@ agent =
     model: model,
     instructions: "Be concise. Use tools when asked about the weather.",
     tools: [weather],
-    model_settings: [max_tokens: 200, temperature: 0]
+    model_settings: [max_tokens: 200, temperature: 0.0]
   )
 
 prompt = "What's the weather like in Madrid? Then answer in one sentence."
@@ -53,7 +61,7 @@ prompt = "What's the weather like in Madrid? Then answer in one sentence."
 IO.puts("=== OUTPUT ===")
 IO.puts(result.output)
 
-IO.puts("\n=== USAGE (real) ===")
+IO.puts("\n=== USAGE (normalized, provider presence unknown) ===")
 IO.inspect(result.usage, label: "usage")
 
 IO.puts("\n=== MESSAGE COUNT ===")

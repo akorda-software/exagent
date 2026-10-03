@@ -1,5 +1,7 @@
 import Config
 
+config :req_llm, load_dotenv: false
+
 # The consumer owns SDK configuration; no default exporter or service is needed.
 if System.get_env("PACKAGE_ACCEPTANCE_MODE") in ["sdk", "exporter"] do
   config :opentelemetry, processors: []

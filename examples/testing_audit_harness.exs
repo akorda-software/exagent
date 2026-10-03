@@ -23,11 +23,13 @@ defmodule ExAgent.TestingAuditHarness do
   @saturation ~w(runs_finished_while_export_held finite_retention finite_batch loss_observed complete_local_accounting accepted_callbacks_completed observer_saw_bound cleanup)
   @package_common [
     "test consumer runtime contains only requested optional applications",
+    "test optional ReqLLM maintenance runs without attaching handlers or starting optional apps",
     "test one-shot, typed tool, lazy stream and ETS checkpoint restore from package",
     "test typed invalid input has zero effects and is not coerced",
     "test Ecto remains the final structured-output authority",
     "test model failure is one rich partial error in sync and stream"
   ]
+  @package_c7 "test installed package composes application Model, Tool, Store and PubSub through public continuation APIs"
 
   def c0_manifest, do: @c0
   def eval_manifest, do: @evals
@@ -61,26 +63,32 @@ defmodule ExAgent.TestingAuditHarness do
   def eval_case(_), do: ["eval missing name/criteria"]
 
   def package_names(mode) when mode in ~w(none api sdk exporter) do
+    package_manifest(mode) |> Enum.map(& &1.name) |> Enum.sort()
+  end
+
+  def package_manifest(mode) when mode in ~w(none api sdk exporter) do
     route =
       if mode in ~w(sdk exporter),
         do: "test app-owned native SDK exports package scenarios through its configured route",
         else: "test processor explicitly reports absent SDK"
 
-    Enum.sort([route | @package_common])
+    Enum.map([route | @package_common], &%{name: &1, module: "PackageAcceptanceTest", state: nil}) ++
+      [%{name: @package_c7, module: "PackageAcceptance.C7ExtensibleTest", state: nil}]
   end
 
   def package_result(%{stats: stats, tests: tests}, mode) when is_map(stats) and is_list(tests) do
     check(
       Map.take(stats, [:total, :failures, :excluded, :skipped]) ==
-        %{total: 6, failures: 0, excluded: 0, skipped: 0},
+        %{total: 8, failures: 0, excluded: 0, skipped: 0},
       "consumer ExUnit totals"
     ) ++
       check(
         Enum.sort(Enum.map(tests, &Map.get(&1, :name))) == package_names(mode),
-        "consumer six-name manifest"
+        "consumer eight-name manifest"
       ) ++
       check(
-        Enum.all?(tests, &(&1[:module] == "PackageAcceptanceTest" and &1[:state] == nil)),
+        Enum.sort(Enum.map(tests, &Map.take(&1, [:name, :module, :state]))) ==
+          Enum.sort(package_manifest(mode)),
         "consumer test outcomes"
       )
   end

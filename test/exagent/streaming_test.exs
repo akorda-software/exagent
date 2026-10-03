@@ -22,7 +22,12 @@ defmodule ExAgent.StreamingTest do
         )
 
       assert result.model == model
-      assert result.usage == %ExAgent.Message.Usage{input_tokens: 1, output_tokens: 1}
+
+      assert %ExAgent.Message.Usage{
+               input_tokens: 1,
+               output_tokens: 1,
+               accounting: %{"quality" => "reported"}
+             } = result.usage
     end
 
     test "a full reduction retains the text and successful terminal" do
@@ -59,7 +64,11 @@ defmodule ExAgent.StreamingTest do
 
       {:result, %{usage: usage}} = ExAgent.run_stream(agent, "x") |> Enum.to_list() |> List.last()
 
-      assert usage == %ExAgent.Message.Usage{input_tokens: 1, output_tokens: 1}
+      assert %ExAgent.Message.Usage{
+               input_tokens: 1,
+               output_tokens: 1,
+               accounting: %{"quality" => "reported"}
+             } = usage
     end
   end
 end

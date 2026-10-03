@@ -1,7 +1,16 @@
 defmodule ExAgent.MCP.Client do
   @moduledoc """
   A client for [Model Context Protocol](https://modelcontextprotocol.io) servers
-  over the **stdio** transport, exposing a server's tools as `ExAgent.Tool`s.
+  over **stdio** or opt-in **Streamable HTTP**, exposing tools as `ExAgent.Tool`s.
+
+  For HTTP use `transport: :streamable_http, url: url, finch: MyFinch` and an
+  application-owned HTTP1-only pool. See `ExAgent.MCP.StreamableHTTP` for limits
+  and configuration preconditions. HTTP uses MCP2025-06-18; stdio is unchanged.
+  After a session404, `reconnect/1` explicitly starts a new handshake. No tool
+  request is replayed. Direct `call_tool/3` is transport IO, not runtime approval.
+  Generated tools use the normal validation and permission boundary. Persisted
+  continuation requires explicit trusted endpoint/principal references through
+  `:continuation_binding`; ordinary tools work without those references.
 
   An MCP server is an external process that speaks JSON-RPC 2.0 over stdin/stdout
   (e.g. `npx -y @modelcontextprotocol/server-filesystem ./`). This client spawns
@@ -9,6 +18,9 @@ defmodule ExAgent.MCP.Client do
   `ExAgent.Tool` whose execution forwards a `tools/call` back to the server.
 
   ## Example
+
+  `chat_model` is an explicitly configured `ExAgent.Models.ReqLLM` instance with
+  credentials and the qualified tool profile (see the README recipe).
 
       # 1) start the server + handshake
       {:ok, client} =
@@ -18,10 +30,10 @@ defmodule ExAgent.MCP.Client do
         )
 
       # 2) discover its tools as ExAgent tools
-      tools = ExAgent.MCP.Client.tools(client)
+      {:ok, tools} = ExAgent.MCP.Client.tools(client)
 
       # 3) use them like any ExAgent tool
-      agent = ExAgent.new(model: "anthropic:claude-3-5-haiku", tools: tools)
+      agent = ExAgent.new(model: chat_model, tools: tools)
       ExAgent.run(agent, "list the files")
 
   ## Concurrency and request ownership
@@ -54,6 +66,8 @@ defmodule ExAgent.MCP.Client do
   use GenServer
 
   alias ExAgent.MCP.Protocol
+  alias ExAgent.MCP.StreamableHTTP, as: HTTP
+  alias ExAgent.MCP.StreamableHTTP.Message, as: HTTPMessage
 
   @default_timeout 5_000
   @default_max_pending 128
@@ -70,7 +84,14 @@ defmodule ExAgent.MCP.Client do
             ready: false,
             timeout: @default_timeout,
             max_pending: @default_max_pending,
-            max_frame_bytes: @default_max_frame_bytes
+            max_frame_bytes: @default_max_frame_bytes,
+            http: nil,
+            session: nil,
+            generation: 0,
+            workers: %{},
+            controls: %{},
+            execution_binding: :unbound,
+            closing: false
 
   @type t :: GenServer.server()
 
@@ -79,8 +100,8 @@ defmodule ExAgent.MCP.Client do
   # ---------------------------------------------------------------------------
 
   @doc """
-  Start the client, spawn the MCP server (stdio), and perform the `initialize`
-  handshake.
+  Start the client and perform the `initialize` handshake. Stdio spawns a server;
+  HTTP connects using the supplied application-owned Finch instance.
 
   ## Options
 
@@ -97,12 +118,50 @@ defmodule ExAgent.MCP.Client do
     * `:transport` — `{send_fun, ref}` test seam (see moduledoc). When set, no
       process is spawned; `send_fun.(ref, iodata)` must deliver bytes to the
       server and responses must arrive as `{ref, {:data, binary}}` messages.
+      Alternatively `:streamable_http` selects the HTTP adapter and requires
+      `:url` and `:finch`. `:headers` defaults to `[]`; HTTP protocol version is
+      fixed at `2025-06-18`. See `ExAgent.MCP.StreamableHTTP` and the implementation
+      guide for the positive integer HTTP byte/control/discovery limits.
+    * `:continuation_binding` — `%{endpoint: reference, principal: reference}`
+      for persisted tool identity; each reference is a non-secret
+      `%{"id" => stable_id, "version" => version}` supplied by the trusted host.
+      HTTP also binds a digest of its effective public URL and requires no
+      userinfo, query or fragment. Stdio's endpoint reference identifies the
+      command/args/environment's semantics without persisting those values.
+      Transport and protocol are bound by the client. References do not
+      authenticate the peer or prove the principal of supplied credentials;
+      the host must maintain that association. Credential rotation for the
+      same principal uses a newly constructed client with unchanged references.
+      Headers, credentials, Finch names, PIDs and session IDs are never in this
+      binding. Missing binding leaves ordinary IO usable but durable execution
+      fails before model/tool IO; invalid explicit binding rejects startup.
   """
   @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts) do
     name = Keyword.get(opts, :name)
-    GenServer.start_link(__MODULE__, opts, name: name)
+
+    case GenServer.start_link(__MODULE__, opts, name: name) do
+      {:ok, client} = ok ->
+        if opts[:transport] == :streamable_http do
+          case GenServer.call(client, :http_initialize, :infinity) do
+            :ok ->
+              ok
+
+            {:error, reason} ->
+              GenServer.stop(client, :normal)
+              {:error, reason}
+          end
+        else
+          ok
+        end
+
+      other ->
+        other
+    end
   end
+
+  @doc "Start a fresh HTTP handshake after session invalidation; never replay tools."
+  def reconnect(client), do: GenServer.call(client, :http_initialize, :infinity)
 
   @doc """
   List the server's tools as `ExAgent.Tool`s. Each tool's `call` forwards a
@@ -123,8 +182,8 @@ defmodule ExAgent.MCP.Client do
     GenServer.call(client, {:call_tool, name, arguments}, :infinity)
   end
 
-  @doc "Shut the client and its server process down."
-  @spec close(GenServer.server()) :: :ok
+  @doc "Shut down. HTTP makes a bounded DELETE when sessionful; errors still stop the client."
+  @spec close(GenServer.server()) :: :ok | {:error, term()}
   def close(client) do
     GenServer.call(client, :close, :infinity)
   end
@@ -135,11 +194,12 @@ defmodule ExAgent.MCP.Client do
 
   @impl true
   def init(opts) do
-    with {:ok, timeout} <- positive_option(opts, :timeout, @default_timeout),
+    with {:ok, binding} <- ExAgent.MCP.Binding.from_options(opts),
+         {:ok, timeout} <- positive_option(opts, :timeout, @default_timeout),
          {:ok, max_pending} <- positive_option(opts, :max_pending, @default_max_pending),
          {:ok, max_frame_bytes} <-
            positive_option(opts, :max_frame_bytes, @default_max_frame_bytes) do
-      init_transport(opts, timeout, max_pending, max_frame_bytes)
+      init_transport(opts, timeout, max_pending, max_frame_bytes, binding)
     else
       {:error, reason} -> {:stop, reason}
     end
@@ -152,7 +212,29 @@ defmodule ExAgent.MCP.Client do
     end
   end
 
-  defp init_transport(opts, timeout, max_pending, max_frame_bytes) do
+  defp init_transport(opts, timeout, max_pending, max_frame_bytes, binding) do
+    if opts[:transport] == :streamable_http do
+      case HTTP.config(opts) do
+        {:ok, config} ->
+          {:ok,
+           %__MODULE__{
+             http: config,
+             execution_binding: binding,
+             parent: parent_pid(),
+             timeout: timeout,
+             max_pending: max_pending,
+             max_frame_bytes: max_frame_bytes
+           }}
+
+        {:error, reason} ->
+          {:stop, reason}
+      end
+    else
+      init_stdio(opts, timeout, max_pending, max_frame_bytes, binding)
+    end
+  end
+
+  defp init_stdio(opts, timeout, max_pending, max_frame_bytes, binding) do
     {ref, send_fun} =
       case Keyword.get(opts, :transport) do
         {fun, transport_ref} when is_function(fun, 2) ->
@@ -169,6 +251,7 @@ defmodule ExAgent.MCP.Client do
 
     state = %__MODULE__{
       transport_ref: ref,
+      execution_binding: binding,
       parent: parent_pid(),
       send_fun: send_fun,
       timeout: timeout,
@@ -179,8 +262,9 @@ defmodule ExAgent.MCP.Client do
     # Consume initialize synchronously. A known response followed by a broken
     # frame still completes initialize, then leaves Client alive but not ready,
     # just as when those bytes arrive as separate chunks.
-    with {:ok, _result, state, frame_error} <-
+    with {:ok, result, state, frame_error} <-
            request_sync(state, "initialize", handshake_params(opts)),
+         :ok <- bound_stdio_protocol(state, result),
          :ok <- send_data(state, Protocol.encode_notification("notifications/initialized", %{})) do
       state = %{state | ready: true}
 
@@ -195,6 +279,14 @@ defmodule ExAgent.MCP.Client do
         close_transport(state)
         {:stop, reason}
     end
+  end
+
+  defp bound_stdio_protocol(%{execution_binding: :unbound}, _), do: :ok
+
+  defp bound_stdio_protocol(%{execution_binding: binding}, result) do
+    if is_map(result) and result["protocolVersion"] === binding["protocol_version"],
+      do: :ok,
+      else: {:error, :mcp_protocol_binding_mismatch}
   end
 
   # GenServer handles its parent's EXIT in the normal loop. During the inline
@@ -234,12 +326,45 @@ defmodule ExAgent.MCP.Client do
   end
 
   @impl true
+  def handle_call(:http_initialize, from, %{http: http, ready: false, closing: false} = state)
+      when not is_nil(http) do
+    if map_size(state.pending) == 0,
+      do: {:noreply, http_request(state, :initialize, %{}, from)},
+      else: {:reply, {:error, :busy}, state}
+  end
+
+  def handle_call(:http_initialize, _from, state),
+    do: {:reply, {:error, :not_available}, state}
+
+  def handle_call(:close, from, %{http: http, closing: false} = state) when not is_nil(http) do
+    state = state |> fail_all(:closed) |> stop_controls()
+
+    if state.session do
+      {:noreply, http_request(%{state | closing: true}, :delete, %{}, from)}
+    else
+      {:stop, :normal, :ok, state}
+    end
+  end
+
+  def handle_call(:close, _from, %{closing: true} = state),
+    do: {:reply, {:error, :closed}, state}
+
   def handle_call(:close, _from, state) do
     {:stop, :normal, :ok, fail_all(state, :closed)}
   end
 
   def handle_call(:tools, from, %__MODULE__{ready: true} = state) do
     {:noreply, async_request(state, "tools/list", %{}, from)}
+  end
+
+  def handle_call({:call_tool, name, arguments}, from, %{http: http, ready: true} = state)
+      when not is_nil(http) do
+    if is_binary(name) and name != "" and is_map(arguments) and not is_struct(arguments) do
+      {:noreply,
+       http_request(state, "tools/call", %{"name" => name, "arguments" => arguments}, from)}
+    else
+      {:reply, {:error, :invalid_request}, state}
+    end
   end
 
   def handle_call({:call_tool, name, arguments}, from, %__MODULE__{ready: true} = state) do
@@ -252,7 +377,34 @@ defmodule ExAgent.MCP.Client do
 
   # Incoming data from the transport (Port or injected ref). Buffer + split lines.
   @impl true
-  def handle_info({ref, {:data, chunk}}, %__MODULE__{transport_ref: ref, ready: true} = state) do
+  def handle_info({:mcp_http, generation, id, worker, result}, %{generation: generation} = state) do
+    case state.pending[id] do
+      %{worker: ^worker, deadline: deadline, method: method} ->
+        result = if HTTP.now() >= deadline, do: {:error, :timeout}, else: result
+        state = http_result(state, id, result)
+        if method == :delete, do: {:stop, :normal, state}, else: {:noreply, state}
+
+      _ ->
+        case state.controls[id] do
+          %{worker: ^worker} ->
+            state = remove_control(state, id)
+
+            if result == {:error, :session_expired},
+              do: {:noreply, invalidate_session(state)},
+              else: {:noreply, state}
+
+          _ ->
+            {:noreply, state}
+        end
+    end
+  end
+
+  def handle_info({:mcp_http, _, _, _, _}, state), do: {:noreply, state}
+
+  def handle_info(
+        {ref, {:data, chunk}},
+        %__MODULE__{http: nil, transport_ref: ref, ready: true} = state
+      ) do
     case receive_frames(state, chunk) do
       {:ok, lines, state} ->
         {:noreply, Enum.reduce(lines, state, &handle_line(&2, &1))}
@@ -267,17 +419,20 @@ defmodule ExAgent.MCP.Client do
   # Transport exited — fail any pending callers and mark not-ready. The client
   # process is left alive (ready: false) so the host can observe the failure and
   # shut it down cleanly, rather than racing a reply against an EXIT.
-  def handle_info({ref, {:exit_status, status}}, %__MODULE__{transport_ref: ref} = state) do
+  def handle_info(
+        {ref, {:exit_status, status}},
+        %__MODULE__{http: nil, transport_ref: ref} = state
+      ) do
     close_transport(state)
     {:noreply, fail_all(state, {:server_exited, status})}
   end
 
-  def handle_info({ref, {:eof, _}}, %__MODULE__{transport_ref: ref} = state) do
+  def handle_info({ref, {:eof, _}}, %__MODULE__{http: nil, transport_ref: ref} = state) do
     close_transport(state)
     {:noreply, fail_all(state, :eof)}
   end
 
-  def handle_info({ref, :eof}, %__MODULE__{transport_ref: ref} = state) do
+  def handle_info({ref, :eof}, %__MODULE__{http: nil, transport_ref: ref} = state) do
     close_transport(state)
     {:noreply, fail_all(state, :eof)}
   end
@@ -294,15 +449,35 @@ defmodule ExAgent.MCP.Client do
 
   def handle_info({:timeout, timer, {:request_timeout, id}}, state) do
     case Map.get(state.pending, id) do
-      %{timer: ^timer} -> {:noreply, finish_pending(state, id, {:error, :timeout})}
-      _ -> {:noreply, state}
+      %{timer: ^timer, method: :delete} ->
+        {:stop, :normal, finish_pending(state, id, {:error, :timeout})}
+
+      %{timer: ^timer} ->
+        {:noreply, finish_pending(state, id, {:error, :timeout})}
+
+      _ ->
+        {:noreply, state}
     end
   end
 
   def handle_info({:DOWN, monitor, :process, _pid, _reason}, state) do
-    case Map.fetch(state.monitors, monitor) do
-      {:ok, id} -> {:noreply, finish_pending(state, id, :no_reply)}
-      :error -> {:noreply, state}
+    cond do
+      id = state.workers[monitor] ->
+        pending = state.pending[id]
+        reason = if HTTP.now() >= pending.deadline, do: :timeout, else: :http_worker_down
+        state = finish_pending(state, id, {:error, reason})
+        if pending.method == :delete, do: {:stop, :normal, state}, else: {:noreply, state}
+
+      id = state.monitors[monitor] ->
+        method = state.pending[id].method
+        state = finish_pending(state, id, :no_reply)
+        if method == :delete, do: {:stop, :normal, state}, else: {:noreply, state}
+
+      true ->
+        case Enum.find(state.controls, fn {_, control} -> control.monitor == monitor end) do
+          {id, _} -> {:noreply, remove_control(state, id)}
+          nil -> {:noreply, state}
+        end
     end
   end
 
@@ -311,6 +486,7 @@ defmodule ExAgent.MCP.Client do
   @impl true
   def terminate(reason, state) do
     fail_all(state, {:client_stopped, reason})
+    stop_controls(state)
     close_transport(state)
     :ok
   end
@@ -343,6 +519,12 @@ defmodule ExAgent.MCP.Client do
   # An async request from a GenServer.call: store `from`, send, reply later when
   # the response arrives (in handle_info/handle_line). Returns the new state.
   defp async_request(state, method, params, from) do
+    if state.http,
+      do: http_request(state, method, params, from),
+      else: stdio_request(state, method, params, from)
+  end
+
+  defp stdio_request(state, method, params, from) do
     if map_size(state.pending) >= state.max_pending do
       GenServer.reply(from, {:error, :busy})
       state
@@ -468,21 +650,33 @@ defmodule ExAgent.MCP.Client do
       {nil, _} ->
         state
 
-      {%{from: from, method: method, timer: timer, monitor: monitor}, pending} ->
+      {%{from: from, method: method, timer: timer, monitor: monitor} = request, pending} ->
         Process.cancel_timer(timer)
         Process.demonitor(monitor, [:flush])
 
         unless reply == :no_reply do
-          GenServer.reply(from, map_reply(method, reply))
+          GenServer.reply(from, map_reply(method, reply, state))
         end
 
-        %{state | pending: pending, monitors: Map.delete(state.monitors, monitor)}
+        state = %{state | pending: pending, monitors: Map.delete(state.monitors, monitor)}
+
+        if Map.has_key?(request, :worker) do
+          Process.exit(request.worker, :kill)
+          Process.demonitor(request.worker_monitor, [:flush])
+          state = %{state | workers: Map.delete(state.workers, request.worker_monitor)}
+
+          if reply in [:no_reply, {:error, :timeout}] and is_binary(method),
+            do: cancel_request(state, id),
+            else: state
+        else
+          state
+        end
     end
   end
 
-  defp map_reply(method, reply) do
+  defp map_reply(method, reply, state) do
     case method do
-      "tools/list" -> map_tools_reply(reply)
+      "tools/list" -> map_tools_reply(reply, state)
       "tools/call" -> tools_call_reply(reply)
       _ -> reply
     end
@@ -490,20 +684,26 @@ defmodule ExAgent.MCP.Client do
     error -> {:error, {:invalid_response, error}}
   end
 
-  defp map_tools_reply({:ok, %{"tools" => _} = result}), do: {:ok, map_tools(result, nil)}
-  defp map_tools_reply({:ok, _}), do: {:ok, []}
-  defp map_tools_reply({:error, _} = e), do: e
+  defp map_tools_reply({:ok, %{"tools" => _} = result}, state),
+    do: {:ok, map_tools(result, state)}
+
+  defp map_tools_reply({:ok, _}, _state), do: {:ok, []}
+  defp map_tools_reply({:error, _} = e, _state), do: e
 
   defp tools_call_reply({:ok, result}), do: Protocol.result_to_text(result)
   defp tools_call_reply({:error, _} = e), do: e
 
-  defp map_tools(%{"tools" => tools}, _state) when is_list(tools) do
+  defp map_tools(%{"tools" => tools}, state) when is_list(tools) do
     client = self()
 
     Enum.map(tools, fn spec ->
-      Protocol.to_tool(spec, fn name, args ->
-        __MODULE__.call_tool(client, name, args)
-      end)
+      Protocol.to_tool(
+        spec,
+        fn name, args ->
+          __MODULE__.call_tool(client, name, args)
+        end,
+        state.execution_binding
+      )
     end)
   end
 
@@ -514,6 +714,108 @@ defmodule ExAgent.MCP.Client do
       finish_pending(state, id, {:error, reason})
     end)
   end
+
+  defp http_request(state, method, params, from) do
+    if map_size(state.pending) >= state.max_pending do
+      GenServer.reply(from, {:error, :busy})
+      state
+    else
+      id = state.id
+      timeout = if method == :delete, do: state.http.control_timeout, else: state.timeout
+      deadline = HTTP.now() + timeout
+      config = state.http
+      session = state.session
+
+      fun = fn ->
+        case method do
+          :initialize -> HTTP.initialize(config, id, deadline)
+          :delete -> HTTP.delete(config, session, deadline)
+          _ -> HTTP.request(config, method, params, id, session, deadline)
+        end
+      end
+
+      {worker, worker_monitor} = HTTP.spawn_request(self(), state.generation, id, deadline, fun)
+      monitor = Process.monitor(elem(from, 0))
+      timer = :erlang.start_timer(timeout, self(), {:request_timeout, id})
+
+      pending = %{
+        from: from,
+        method: method,
+        timer: timer,
+        monitor: monitor,
+        worker: worker,
+        worker_monitor: worker_monitor,
+        deadline: deadline
+      }
+
+      %{
+        state
+        | id: id + 1,
+          pending: Map.put(state.pending, id, pending),
+          monitors: Map.put(state.monitors, monitor, id),
+          workers: Map.put(state.workers, worker_monitor, id)
+      }
+    end
+  end
+
+  defp http_result(state, id, {:error, :session_expired}),
+    do: state |> finish_pending(id, {:error, :session_expired}) |> invalidate_session()
+
+  defp http_result(state, id, {:error, _} = error), do: finish_pending(state, id, error)
+
+  defp http_result(state, id, {:ok, result, session}) do
+    case state.pending[id].method do
+      :initialize -> finish_pending(%{state | ready: true, session: session}, id, :ok)
+      :delete -> finish_pending(state, id, :ok)
+      "tools/list" -> finish_pending(state, id, HTTPMessage.tools(result, state.http.max_tools))
+      "tools/call" -> finish_pending(state, id, HTTPMessage.tool_result(result))
+    end
+  end
+
+  defp invalidate_session(state) do
+    state = state |> fail_all(:session_expired) |> stop_controls()
+    %{state | session: nil, generation: state.generation + 1}
+  end
+
+  defp cancel_request(state, request_id) do
+    if map_size(state.controls) < state.http.max_control_workers do
+      id = make_ref()
+      deadline = HTTP.now() + state.http.control_timeout
+      config = state.http
+      session = state.session
+
+      {worker, monitor} =
+        HTTP.spawn_request(self(), state.generation, id, deadline, fn ->
+          HTTP.notification(
+            config,
+            "notifications/cancelled",
+            %{"requestId" => request_id},
+            session,
+            deadline
+          )
+        end)
+
+      %{state | controls: Map.put(state.controls, id, %{worker: worker, monitor: monitor})}
+    else
+      state
+    end
+  end
+
+  defp remove_control(state, id) do
+    {control, controls} = Map.pop(state.controls, id)
+    Process.exit(control.worker, :kill)
+    Process.demonitor(control.monitor, [:flush])
+    %{state | controls: controls}
+  end
+
+  defp stop_controls(state),
+    do: Enum.reduce(Map.keys(state.controls), state, &remove_control(&2, &1))
+
+  @impl true
+  def format_status(%{state: %{http: http}} = status) when not is_nil(http),
+    do: Map.merge(status, %{state: :redacted, message: :redacted, log: []})
+
+  def format_status(status), do: status
 
   defp receive_frames(state, chunk) do
     chunk = IO.iodata_to_binary(chunk)

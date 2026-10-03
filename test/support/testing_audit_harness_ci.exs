@@ -9,14 +9,16 @@ true = mode in ["suite", "harness"]
 evidence = Path.expand(evidence)
 File.mkdir_p!(evidence)
 beam = Path.expand("_build/test/lib")
+check_format = System.get_env("EXAGENT_CI_CHECK_FORMAT", "true")
+true = check_format in ["true", "false"]
 
 commands =
   if mode == "suite" do
-    [
-      {"compile", "mix", ["compile", "--force", "--warnings-as-errors"]},
-      {"format", "mix", ["format", "--check-formatted"]},
-      {"test", "mix", ["test", "--warnings-as-errors", "--seed", "37556"]}
-    ]
+    [{"compile", "mix", ["compile", "--force", "--warnings-as-errors"]}] ++
+      if(check_format == "true",
+        do: [{"format", "mix", ["format", "--check-formatted"]}],
+        else: []
+      ) ++ [{"test", "mix", ["test", "--warnings-as-errors", "--seed", "37556"]}]
   else
     [
       {"compile", "mix", ["compile", "--force", "--warnings-as-errors"]},
@@ -50,8 +52,12 @@ results =
   Enum.map(commands, fn {name, executable, args} ->
     IO.puts("GATE #{name}: #{executable} #{Enum.join(args, " ")}")
 
+    # The integrated suite previously took 2482.5s. Give that finite workload
+    # its own 50-minute runner deadline; runtime/test deadlines remain unchanged.
+    timeout_seconds = if name == "test", do: 3000, else: 300
+
     {output, status} =
-      System.cmd("timeout", ["--kill-after=10s", "300s", executable | args],
+      System.cmd("timeout", ["--kill-after=10s", "#{timeout_seconds}s", executable | args],
         stderr_to_stdout: true
       )
 
@@ -61,6 +67,7 @@ results =
     result = %{
       gate: name,
       command: [executable | args],
+      timeout_seconds: timeout_seconds,
       exit_code: status,
       warning_lines:
         output |> String.split("\n") |> Enum.filter(&Regex.match?(~r/\bwarning:/i, &1))
@@ -90,6 +97,7 @@ report = %{
   build_path: beam,
   offline: System.get_env("EXAGENT_OFFLINE"),
   mix_env: System.get_env("MIX_ENV"),
+  check_format: check_format,
   results: results,
   source_sha256: Map.new(sources),
   beam_sha256: Map.new(beams)

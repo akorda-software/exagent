@@ -4,6 +4,25 @@ defmodule PackageAcceptanceTest do
   alias ExAgent.Models.Test, as: TestModel
   alias PackageAcceptance.Scenario
 
+  test "optional ReqLLM maintenance runs without attaching handlers or starting optional apps" do
+    alias ExAgent.Observability.ReqLLM.Maintenance
+    applications = Application.started_applications() |> Enum.map(&elem(&1, 0)) |> Enum.sort()
+    handlers = :telemetry.list_handlers([:req_llm, :request, :start])
+    worker = start_supervised!({Maintenance, ttl_ms: 100, interval_ms: 10})
+
+    stats =
+      Enum.find_value(1..100, fn _ ->
+        stats = Maintenance.stats()
+        if stats.ticks >= 2, do: stats, else: (Process.sleep(5); nil)
+      end)
+
+    assert %{status: :detached, passes: 0, pruned_entries: 0} = stats
+    assert handlers == :telemetry.list_handlers([:req_llm, :request, :start])
+    assert applications == Application.started_applications() |> Enum.map(&elem(&1, 0)) |> Enum.sort()
+    assert :ok == stop_supervised(Maintenance)
+    refute Process.alive?(worker)
+  end
+
   test "consumer runtime contains only requested optional applications" do
     mode = System.fetch_env!("PACKAGE_ACCEPTANCE_MODE")
     apps = Application.started_applications() |> Enum.map(&elem(&1, 0))
@@ -21,6 +40,8 @@ defmodule PackageAcceptanceTest do
     Scenario.typed(tracing, false)
     Scenario.typed(tracing, true)
     Scenario.checkpoint(tracing)
+    PackageAcceptance.ReqLLMProbe.custom()
+    PackageAcceptance.ReqLLMProbe.buffered()
   end
 
   test "typed invalid input has zero effects and is not coerced" do

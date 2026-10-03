@@ -71,6 +71,9 @@ defmodule ExAgent.Compaction.Summary do
 
   ## Wiring
 
+  Supply a trusted, explicitly configured `model` and `summarizer_agent`; ReqLLM
+  credentials and tool/stream qualification belong to those instances.
+
       compaction = %ExAgent.Compaction.Capability{
         compactor: ExAgent.Compaction.Summary,
         opts: [
@@ -83,7 +86,7 @@ defmodule ExAgent.Compaction.Summary do
         ]
       }
 
-      ExAgent.new(model: "anthropic:claude-3-5-haiku", capabilities: [compaction])
+      ExAgent.new(model: model, capabilities: [compaction])
   """
 
   @behaviour ExAgent.Compaction

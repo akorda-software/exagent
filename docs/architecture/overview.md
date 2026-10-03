@@ -19,7 +19,7 @@ contratos; la [migración](../guides/migration.md) explica su impacto sobre 1.x.
 ```text
 Definición de agente
   └─ run / stream_text / run_stream → un loop canónico
-       ├─ Model → adapters de protocolo → transporte HTTP acotado
+       ├─ Model → ReqLLM stock (o custom/Test) → interacción pública cualificada
        ├─ Tool → schema + permiso + ejecución + resultado JSON
        └─ run_child → mismo scope, autoridad y presupuesto de ancestros
 
@@ -35,12 +35,16 @@ Event / telemetry / OpenTelemetry → canales distintos, con proyecciones explí
   Deltas son provisionales; el output final proviene del resultado validado.
 - **Model:** `ExAgent.Model` es el behaviour de proveedor. Un stream termina con
   `{:response, response, final_model}` o error; EOF incompleto no es éxito.
-  Se preservan helpers OpenAIChat usados por adapters de consumidores.
+  ReqLLM es el único backend general; los helpers wire propios se retiran en R1.8.
+  Buffered/Stream/Envelope son fronteras host: ownership, límites postdecode y
+  validación del sobre, no parsers privados ni hard RAM predecode upstream.
 - **Tools:** se valida antes de efectos. El hook previo determina la tool y args
   efectivos, conservando identidad. Denegación, error de validación, fallo y efecto
   desconocido no son el mismo outcome. Sólo `ModelRetry` autoriza retry correctivo.
 - **Uso:** admisión por árbol y reconciliación por identidad. Los totales de un
-  padre son inclusivos; no se vuelven a sumar sus hijos. Coste desconocido no es cero.
+  padre son inclusivos; no se vuelven a sumar sus hijos. Contadores host exactos,
+  uso normalizado/reportado y coste estimado se califican por separado; coste
+  desconocido no es cero ni un umbral retrospectivo es techo de factura.
 - **Historial:** compaction produce una proyección para la request; no sustituye el
   historial canónico ni convierte una restauración en permiso para repetir efectos.
 - **Persistencia:** con Store, el ACK positivo requiere save confirmado. Dirty
@@ -57,7 +61,7 @@ IO externo. Para detalle y límites comprobados consulta
 ## Extensibilidad
 
 Model, Tool, Store, PubSub, Compaction y TurnPolicy son las fronteras de extensión.
-Las particularidades de un producto se quedan en su aplicación. Se conservaron
-los adapters actuales tras evaluar ReqLLM: no se reabre esa decisión por moda,
-sino ante una integración acotada que demuestre menor responsabilidad sin pérdida
-de contratos. Los flags de capacidades no prueban aceptación de cada modelo real.
+Las particularidades de un producto se quedan en su aplicación. R1.8 delega wire/
+HTTP en ReqLLM oficial stock, conserva Model custom y Test y documenta la migración
+major de specs, auth, envelope/history y accounting. Los flags de capacidades no
+prueban aceptación de cada modelo real; los perfiles no cualificados siguen cerrados.

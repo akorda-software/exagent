@@ -38,7 +38,9 @@ defmodule ExAgent.ServerOwnershipTest do
         )
 
       assert {:ok, request_id} = Server.send_message(server, "go")
-      assert_receive {:working, worker}
+      # Readiness took 155ms under the full async suite; cancellation is measured
+      # only after this barrier, with the unchanged DOWN assertions below.
+      assert_receive {:working, worker}, 1000
       {:monitored_by, monitors} = Process.info(worker, :monitored_by)
       # The runtime guardian and the execution-scope owner both monitor the run.
       # Check cleanup of every run-owned monitor rather than a fixed process count.
@@ -144,7 +146,9 @@ defmodule ExAgent.ServerOwnershipTest do
       )
 
     assert {:ok, _} = Server.send_message(server, "go")
-    assert_receive {:tool, worker}
+    # Wait for tool readiness before measuring owner-death cancellation, just
+    # like the model-worker barriers above. Startup has no 100 ms latency contract.
+    assert_receive {:tool, worker}, 1000
     ref = Process.monitor(worker)
     run = :sys.get_state(server).current.pid
 

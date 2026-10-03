@@ -1,9 +1,7 @@
 name: CI
 
 on:
-  push:
-    branches: [main]
-  pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -20,20 +18,18 @@ jobs:
   test:
     name: Elixir ${{ matrix.elixir }} / OTP ${{ matrix.otp }}
     runs-on: ubuntu-22.04
-    timeout-minutes: 30
+    timeout-minutes: 65
 
     strategy:
       fail-fast: false
       matrix:
         include:
-          - elixir: "1.17"
-            otp: "25"
-          - elixir: "1.17"
-            otp: "26"
-          - elixir: "1.18"
-            otp: "26"
-          - elixir: "1.18"
-            otp: "27"
+          - elixir: "1.18.4"
+            otp: "28.0"
+            check-format: false
+          - elixir: "1.20.0"
+            otp: "29.0.5"
+            check-format: true
 
     steps:
       - uses: actions/checkout@v4
@@ -47,6 +43,8 @@ jobs:
         run: mix deps.get
 
       - name: Compile, format and offline suite (warnings as errors)
+        env:
+          EXAGENT_CI_CHECK_FORMAT: ${{ matrix.check-format }}
         run: elixir test/support/testing_audit_harness_ci.exs suite "$RUNNER_TEMP/exagent-suite"
 
       - name: Preserve command exits, warnings and test totals/exclusions
@@ -64,8 +62,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: erlef/setup-beam@v1
         with:
-          otp-version: "29"
-          elixir-version: "1.20"
+          otp-version: "29.0.5"
+          elixir-version: "1.20.0"
       - name: Install dependencies
         run: mix deps.get
       - name: C0, documentation snippets, isolated R3, evals and load smoke
@@ -77,7 +75,67 @@ jobs:
           name: harness-1.20-otp-29
           path: ${{ runner.temp }}/exagent-harness
 
-  # TAR consumer CI remains pending: package_acceptance.exs currently requires a
-  # new /tmp/opencode/exagent-night-package* directory and isolated Hex/Rebar
-  # bootstrap. Porting that bootstrap needs a separately reviewed scope; root
-  # tests do not certify none/API/SDK/exporter consumer graphs or their warnings.
+  package:
+    name: Freeze package bytes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: "29.0.5"
+          elixir-version: "1.20.0"
+      - name: Resolve package metadata dependencies
+        run: mix deps.get
+      - name: Build preview without publication or version change
+        run: |
+          mkdir "$RUNNER_TEMP/exagent-package"
+          mix hex.build --output "$RUNNER_TEMP/exagent-package/exagent.tar"
+          cd "$RUNNER_TEMP/exagent-package"
+          sha256sum exagent.tar > exagent.tar.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: exagent-package-bytes
+          path: ${{ runner.temp }}/exagent-package
+
+  package-consumers:
+    name: TAR consumers / Elixir ${{ matrix.elixir }} / OTP ${{ matrix.otp }}
+    needs: package
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - elixir: "1.18.4"
+            otp: "28.0"
+          - elixir: "1.20.0"
+            otp: "29.0.5"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: ${{ matrix.otp }}
+          elixir-version: ${{ matrix.elixir }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: exagent-package-bytes
+          path: ${{ runner.temp }}/exagent-package
+      - name: Verify frozen bytes and isolated none/API/SDK/exporter consumers
+        run: |
+          cd "$RUNNER_TEMP/exagent-package"
+          sha256sum --check exagent.tar.sha256
+          EXAGENT_TAR_SHA256=$(cut -d ' ' -f 1 exagent.tar.sha256)
+          cd "$GITHUB_WORKSPACE"
+          elixir test/support/package_acceptance_isolation.exs "$RUNNER_TEMP/exagent-package/exagent.tar"
+          elixir test/support/package_acceptance.exs \
+            --tar "$RUNNER_TEMP/exagent-package/exagent.tar" \
+            --checksum "$EXAGENT_TAR_SHA256" \
+            --work-dir "$RUNNER_TEMP/exagent-package-consumers" \
+            --mode all --seed 771506
+      - name: Preserve package provenance, phase exits and consumer contracts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: package-consumers-${{ matrix.elixir }}-otp-${{ matrix.otp }}
+          path: ${{ runner.temp }}/exagent-package-consumers

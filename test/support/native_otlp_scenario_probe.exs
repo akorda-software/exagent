@@ -92,11 +92,12 @@ defmodule ExAgent.Test.NativeOTLPScenarioProbe do
     end
 
     Application.put_env(:opentelemetry, :processors, [])
+    Application.put_env(:req_llm, :load_dotenv, false)
     {:ok, _} = Application.ensure_all_started(:exagent)
     {:ok, _} = Application.ensure_all_started(:inets)
     {:ok, _} = Application.ensure_all_started(:opentelemetry)
     :ok = Application.load(:opentelemetry_exporter)
-    assert to_string(Application.spec(:opentelemetry_exporter, :vsn)) == "1.10.0"
+    assert to_string(Application.spec(:opentelemetry_exporter, :vsn)) == "1.11.0"
     assert to_string(Application.spec(:opentelemetry, :vsn)) == "1.7.0"
     assert to_string(Application.spec(:opentelemetry_api, :vsn)) == "1.5.0"
 
@@ -225,12 +226,14 @@ defmodule ExAgent.Test.NativeOTLPScenarioProbe do
 
       for compact <- kind(spans, :compaction) do
         assert compact.parent_id == root.id
-        # Known 1.10 boolean type loss, deliberately not a bool fidelity claim.
-        assert compact.attrs["exagent.compaction.changed"] in ["true", "false"]
+        assert is_boolean(compact.attrs["exagent.compaction.changed"])
+
+        assert compact.types["exagent.compaction.changed"] ==
+                 {:bool_value, compact.attrs["exagent.compaction.changed"]}
       end
 
       [changed] =
-        Enum.filter(kind(spans, :compaction), &(&1.attrs["exagent.compaction.changed"] == "true"))
+        Enum.filter(kind(spans, :compaction), &(&1.attrs["exagent.compaction.changed"] == true))
 
       assert changed.attrs["exagent.compaction.output_messages"] <
                changed.attrs["exagent.compaction.input_messages"]
@@ -243,7 +246,8 @@ defmodule ExAgent.Test.NativeOTLPScenarioProbe do
       assert failed.parent_id == root.id
       assert failed.end_time <= root.end_time
       assert retry.parent_id == span_id(caller)
-      assert retry.attrs["exagent.checkpoint.retry"] == "true"
+      assert retry.attrs["exagent.checkpoint.retry"] == true
+      assert retry.types["exagent.checkpoint.retry"] == {:bool_value, true}
       assert retry.start_time >= root.end_time
       refute Enum.any?(spans, &String.contains?(&1.name, "delta"))
       assert :atomics.get(observed.counts, 3) == observed.estimates
@@ -365,7 +369,8 @@ defmodule ExAgent.Test.NativeOTLPScenarioProbe do
       assert partial.usage["input_tokens"] == 10
       assert partial.usage["output_tokens"] == 2
       assert partial.cost_status == :unknown
-      assert partial.cost_cents == before_abort.cost_cents
+      assert partial.cost_cents == nil
+      assert partial.usage["accounting"]["cost"]["subtotal_cents"] == before_abort.cost_cents
       assert Server.health(server).status == :idle
       assert clean_server_context?(server)
       GenServer.stop(server)

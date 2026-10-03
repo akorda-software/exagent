@@ -42,8 +42,12 @@ end
 
 ### 2. Wire it into an agent
 
+For this unreleased major, build `chat_model` with explicit credentials and the
+qualified profile from `exagent-run-agent`/README; a catalogue string alone does
+not configure auth or enable tools. Reuse that instance in the examples below.
+
 ```elixir
-agent = ExAgent.new(model: "openai:gpt-4o", tools: MyApp.Tools.tools())
+agent = ExAgent.new(model: chat_model, tools: MyApp.Tools.tools())
 ```
 
 `use ExAgent.Tools` generates `tools/0` (list of `ExAgent.Tool.t()`),
@@ -108,7 +112,7 @@ Any Model Context Protocol server's tools become plain `ExAgent.Tool`s:
 {:ok, fs} = ExAgent.MCP.Client.start_link(command: "npx",
   args: ["-y", "@modelcontextprotocol/server-filesystem", "./data"])
 {:ok, tools} = ExAgent.MCP.Client.tools(fs)
-agent = ExAgent.new(model: "anthropic:claude-3-5-haiku", tools: tools)
+agent = ExAgent.new(model: chat_model, tools: tools)
 ```
 
 ## Gotchas

@@ -3,6 +3,7 @@ Code.require_file("../runtime_formatter.exs", __DIR__)
 ExUnit.start(formatters: [ExUnit.CLIFormatter, PackageAcceptance.RuntimeFormatter])
 ExUnit.after_suite(fn stats -> File.write!("runtime-stats.etf", :erlang.term_to_binary(stats)) end)
 Code.require_file("../package_smoke.exs", __DIR__)
+Code.require_file("../req_llm_probe.exs", __DIR__)
 
 if System.fetch_env!("PACKAGE_ACCEPTANCE_MODE") in ["sdk", "exporter"] do
   Code.require_file("../package_tracing.exs", __DIR__)

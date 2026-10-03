@@ -172,7 +172,7 @@ defmodule ExAgent.Tool.SchemaBoundary do
   defp reference_targets(_, _, _), do: []
 
   defp targets(fragment, resources, nodes) do
-    # Match JSV 0.22's fragment handling: split first, then decode each pointer
+    # Match JSV 0.25's fragment handling: split first, then decode each pointer
     # segment. Decoding before splitting would miss keys with encoded slashes.
     case fragment || "" do
       "" ->

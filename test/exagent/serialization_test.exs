@@ -68,7 +68,8 @@ defmodule ExAgent.SerializationTest do
               kind: :function
             }
           ],
-          usage: %M.Usage{input_tokens: 5, output_tokens: 3, details: %{"total" => 8}},
+          usage:
+            M.Usage.qualify(%M.Usage{input_tokens: 5, output_tokens: 3, details: %{"total" => 8}}),
           model_name: "gpt",
           finish_reason: :tool_calls,
           timestamp: nil

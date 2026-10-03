@@ -112,7 +112,9 @@ defmodule ExAgent.CoordinationTest do
 
         assert output == result.output
         assert result.request_count == 3
-        assert result.usage == %Usage{input_tokens: 3, output_tokens: 3}
+
+        assert %Usage{input_tokens: 3, output_tokens: 3, accounting: %{"quality" => "reported"}} =
+                 result.usage
       end
     end
   end

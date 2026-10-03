@@ -36,6 +36,17 @@ defmodule ExAgent.Observability.BoundedProcessor do
   worker does not guarantee remote rollback
   or cleanup of processes created independently by a custom exporter.
 
+  `max_exporter_restarts` caps automatic worker replacements per processor
+  instance. It accepts a non-negative integer, or `:infinity` (the existing
+  default). Zero allows the initial worker only. After exhaustion, admission is
+  disabled, remaining queued spans are discarded as `dropped_unavailable`, and
+  the processor stays alive with status `:unavailable` until explicitly restarted.
+  `exporter_restarts` counts replacements, excluding initial startup;
+  `restart_limit_reached` counts exhaustion. Completed error callbacks do not
+  recreate a worker or spend this budget. It resets with the processor instance,
+  not across SDK/application/VM restarts. This limits recreation of exporter-owned
+  resources; it does not reclaim a native HTTP profile/socket or retained atoms.
+
   `force_flush/1` coalesces an asynchronous request to start/drain batches. Its
   `:ok` is **not** an exporter or remote-delivery acknowledgement. Use an exporter
   barrier when testing. `shutdown/1` closes admission and discards remaining
@@ -104,7 +115,9 @@ defmodule ExAgent.Observability.BoundedProcessor do
     :init_timed_out,
     :shutdown_dropped,
     :shutdown_failed,
-    :shutdown_timed_out
+    :shutdown_timed_out,
+    :exporter_restarts,
+    :restart_limit_reached
   ]
   @indexes @counter_names |> Enum.with_index(1) |> Map.new()
   @in_flight length(@counter_names) + 1
@@ -275,10 +288,10 @@ defmodule ExAgent.Observability.BoundedProcessor do
 
       :export ->
         state = finish_batch(state, failure)
-        {:noreply, start_worker(state)}
+        {:noreply, restart_worker(state)}
 
       _ ->
-        {:noreply, start_worker(state)}
+        {:noreply, restart_worker(state)}
     end
   end
 
@@ -435,6 +448,22 @@ defmodule ExAgent.Observability.BoundedProcessor do
     state
     |> Map.merge(%{worker: pid, monitor: monitor, operation: :init, operation_ref: ref})
     |> set_deadline()
+  end
+
+  defp restart_worker(state) do
+    :atomics.put(state.handle.counters, @accepting, 0)
+    restarts = :atomics.get(state.handle.counters, Map.fetch!(@indexes, :exporter_restarts))
+
+    if state.config.max_exporter_restarts == :infinity or
+         restarts < state.config.max_exporter_restarts do
+      increment(state.handle, :exporter_restarts)
+      start_worker(state)
+    else
+      increment(state.handle, :restart_limit_reached)
+      discard(state.handle, :dropped_unavailable)
+      phase(state, :unavailable)
+      %{state | operation: :unavailable, operation_ref: nil}
+    end
   end
 
   defp stop_worker(%{pending_failure: nil} = state, failure) do
@@ -664,6 +693,7 @@ defmodule ExAgent.Observability.BoundedProcessor do
       scheduled_delay_ms: 1000,
       exporting_timeout_ms: 2000,
       shutdown_timeout_ms: 1000,
+      max_exporter_restarts: :infinity,
       resource: nil
     }
 
@@ -680,7 +710,9 @@ defmodule ExAgent.Observability.BoundedProcessor do
           integer_between?(config.max_export_batch_size, 1, config.max_queue_size) and
           integer_between?(config.scheduled_delay_ms, 1, 60_000) and
           integer_between?(config.exporting_timeout_ms, 1, 60_000) and
-          integer_between?(config.shutdown_timeout_ms, 1, 4000)
+          integer_between?(config.shutdown_timeout_ms, 1, 4000) and
+          (config.max_exporter_restarts == :infinity or
+             (is_integer(config.max_exporter_restarts) and config.max_exporter_restarts >= 0))
 
       if valid, do: {:ok, config}, else: {:error, :invalid_config}
     end

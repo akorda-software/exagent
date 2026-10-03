@@ -7,9 +7,9 @@
 
 <!-- MDOC -->
 
-> **Unreleased consolidation major:** these source docs describe the current
-> development checkout, not the published 1.x package. Use a local path dependency
-> to try it, and read the [migration guide](docs/guides/migration.md) before upgrading a consumer.
+> **ExAgent 2.0:** these docs describe the consolidation major. Published 1.x
+> packages have older contracts. Read the [migration guide](docs/guides/migration.md)
+> before upgrading and check [release status](docs/status.md) for acceptance and availability.
 
 **An agent framework for Elixir** — structured output, tool-calling, streaming,
 stateful agents, multi-agent sessions and durable persistence, powered by the
@@ -49,34 +49,55 @@ Layer 0  ExAgent.run/3            the one-shot model ⇄ tools loop
   hand-off between session participants.
 - **Robustness & safety** — context compaction, usage/cost limits, and per-tool
   permissions (`allow` / `ask` / `deny`).
-- **Model-agnostic** — OpenAI, OpenRouter, OpenCode Zen/Go, Anthropic and Z.AI; bring your
-  own by implementing the `ExAgent.Model` behaviour.
-- **External tools (MCP)** — consume stdio Model Context Protocol tools with
+- **Model-agnostic** — one stock ReqLLM backend with explicitly qualified profiles,
+  custom specs/gateways and the public `ExAgent.Model` extension behaviour.
+- **External tools (MCP)** — consume stdio or opt-in Streamable HTTP tools with
   caller-owned timeouts, pending limits and transport cleanup.
 - **Observable** — `:telemetry`, app-level `ExAgent.Event` envelopes and opt-in
   native OpenTelemetry with content disabled by default.
-- **Offline-first testing** — a deterministic [`ExAgent.Models.Test`] model drives the
+- **Offline-first testing** — a deterministic `ExAgent.Models.Test` model drives the
   full loop with no API key and no network.
 
 ## Requirements
 
-- Elixir 1.17+
-- Erlang/OTP 25+
+- Elixir 1.18+ (required by ReqLLM's mandatory `llm_db` dependency)
+- Runtime targets: Elixir 1.18 / OTP 28 and Elixir 1.20 / OTP 29
 
-Package-consumer contracts have been verified on Elixir 1.17.3 / OTP 27.3.4.17.
+Earlier Elixir 1.17 package evidence predates the ReqLLM dependency graph.
 See [project status](docs/status.md) for tested runtime/dependency combinations
 and the remaining acceptance gates; the declared floors are not an exhaustive matrix.
 
+ReqLLM starts its own supervisor and Finch pool alongside ExAgent. Its default
+startup loads `.env` in the host's working directory. Applications that manage
+credentials themselves should set `config :req_llm, load_dotenv: false` before
+startup. `ExAgent.Models.ReqLLM.new/1` is the general backend; custom Model/Test
+remain extension points. Tools, Ecto-tool output and streaming require the explicit
+`chat_tools_v1` profile below. Its mandatory arguments envelope, history binding,
+normalized usage/estimated cost and bounded host postdecode cleanup are qualified
+offline; fourteen live cases also qualify the minimal GPT-4o-mini/OpenRouter
+Chat profile on stock ReqLLM 1.26, Elixir 1.20/OTP 29. Other tools/stream profiles,
+affected Anthropic reasoning/continuation
+stay closed. Native JSON Schema is separately opt-in through
+`output_profile: :chat_json_schema_v1` and agent `output_mode: :native`, with local
+schema/Ecto validation and no remote strict guarantee. There is no legacy wire fallback and no upstream
+hard-RAM/predecode promise. See the migration guide and roadmap for exact limits;
+durable C7 has real PostgreSQL/VM qualification in its declared profile. Langfuse
+and Opik have equivalent native/API/UI acceptance for the finite A10 scenario.
+The status page records the current runtime checks and corrective tests.
+Strict stock-dependency diagnostics remain red and documented as upstream debt.
+
 ## Installation
 
-For this unreleased checkout, point your application at the source directory
-(adjust the path to your clone). The published 1.x package has older contracts.
+For the official 2.0 package, after its release is available on Hex:
 
 ```elixir
 def deps do
-  [{:exagent, path: "../exAgent"}]
+  [{:exagent, "~> 2.0"}]
 end
 ```
+
+To use this source checkout before publication, replace that dependency with
+`{:exagent, path: "../exAgent"}` and adjust the path to your clone.
 
 The library starts its own supervised `ExAgent.Finch` HTTP pool, a `Registry`
 (`ExAgent.PubSub.Local`), a `Task.Supervisor`, an `ExAgent.Store.ETS` table and
@@ -92,7 +113,7 @@ config :exagent, :finch_pools, %{:default => [size: 32]}
 ## Quick start
 
 The fastest way to try ExAgent is with [`Mix.install/2`] (Livebook or a script) —
-using the built-in [`ExAgent.Models.Test`] model, **no API key needed**:
+using the built-in `ExAgent.Models.Test` model, **no API key needed**:
 
 ```elixir
 Mix.install([
@@ -103,25 +124,18 @@ agent = ExAgent.new(model: "test", instructions: "Be concise.")
 {:ok, %{output: text}} = ExAgent.run(agent, "Hello!")
 ```
 
-Point it at a real provider with a `"provider:model"` string:
+Resolve a stock catalogue string or tuple with explicit instance credentials:
 
 ```elixir
-agent = ExAgent.new(model: "openai:gpt-4o", instructions: "Be concise.")
+{:ok, model} = ExAgent.Model.resolve({:openai, id: "gpt-4o"},
+  api_key: System.fetch_env!("OPENAI_API_KEY"))
+agent = ExAgent.new(model: model, instructions: "Be concise.")
 {:ok, %{output: text}} = ExAgent.run(agent, "Hello!")
 ```
 
 [hexdocs]: https://hexdocs.pm/exagent
 [source]: https://github.com/akorda-software/exagent
 [`Mix.install/2`]: https://hexdocs.pm/mix/Mix.html#install/2
-[`ExAgent.Model`]: https://hexdocs.pm/exagent/ExAgent.Model.html
-[`RunContext`]: https://hexdocs.pm/exagent/ExAgent.RunContext.html
-[`ExAgent.run/3`]: https://hexdocs.pm/exagent/ExAgent.html#run/3
-[`ExAgent.run_stream/3`]: https://hexdocs.pm/exagent/ExAgent.html#run_stream/3
-[`ExAgent.Server`]: https://hexdocs.pm/exagent/ExAgent.Server.html
-[`ExAgent.Session`]: https://hexdocs.pm/exagent/ExAgent.Session.html
-[`ExAgent.Models.Test`]: https://hexdocs.pm/exagent/ExAgent.Models.Test.html
-[`ExAgent.Event`]: https://hexdocs.pm/exagent/ExAgent.Event.html
-[`ExAgent.PubSub`]: https://hexdocs.pm/exagent/ExAgent.PubSub.html
 
 <!-- MDOC -->
 
@@ -146,6 +160,8 @@ agent = ExAgent.new(model: "openai:gpt-4o", instructions: "Be concise.")
 - [Contributing](#contributing)
 - [License](#license)
 
+<a id="layer-0--the-one-shot-loop"></a>
+
 ## Layer 0 — the one-shot loop
 
 The core is a small loop: `UserPromptNode → ModelRequestNode ⇄ CallToolsNode → End`.
@@ -168,6 +184,25 @@ projections for logs/events instead of serializing the whole result.
 
 ### Tools with derived schemas
 
+For tools/streaming, explicitly declare the actual protocol and capabilities of
+your chosen model/endpoint. These declarations are configuration, not proof that
+every model in a catalogue supports this profile. This example selects Chat with
+non-reasoning tools; qualify your exact backend before production use:
+
+```elixir
+chat_model = ExAgent.Models.ReqLLM.new(
+  model: %{provider: :openai, id: "gpt-4o-mini",
+    capabilities: %{tools: %{enabled: true}, reasoning: %{enabled: false}},
+    extra: %{wire: %{protocol: "openai_chat"}}},
+  api_key: System.fetch_env!("OPENAI_API_KEY"),
+  tool_profile: :chat_tools_v1
+)
+```
+
+Reuse `chat_model` in the following tool, output, runtime and coordination examples.
+
+### Define a tool
+
 ```elixir
 defmodule MyApp.Tools do
   use ExAgent.Tools
@@ -178,10 +213,10 @@ defmodule MyApp.Tools do
   end
 end
 
-agent = ExAgent.new(model: "openai:gpt-4o", tools: MyApp.Tools.tools())
+agent = ExAgent.new(model: chat_model, tools: MyApp.Tools.tools())
 ```
 
-`deftool` receives the [`RunContext`] as its first arg (named `ctx` by convention);
+`deftool` receives the `ExAgent.RunContext` as its first arg (named `ctx` by convention);
 `tool_plain` takes only parameters. Each parameter is `name :: Type`, so the JSON
 Schema is derived for you. A tool may return `value`, `{:ok, value}` or
 `{:error, reason}`. Arguments are validated locally before invocation, and results
@@ -215,10 +250,25 @@ end
 # → the model is told temp_c is a number in (-100, 100) and condition is one of
 #   the enum values, so it can comply instead of guessing and being retried.
 
-agent = ExAgent.new(model: "anthropic:claude-3-5-haiku", output: WeatherReport)
+agent = ExAgent.new(model: chat_model, output: WeatherReport)
 {:ok, %{output: %{__struct__: WeatherReport}}} =
   ExAgent.run(agent, "It's 22 and sunny in Madrid")
 ```
+
+Tool mode is the default. For native JSON Schema, set
+`output_profile: :chat_json_schema_v1` on the qualified Chat model above and use
+`ExAgent.new(model: native_model, output: WeatherReport, output_mode: :native)`.
+This sends a separate, non-strict schema without an output tool; function tools
+still use their validated envelope. Optional fields/defaults are preserved, and
+the final changeset remains authoritative. Corrective retries consume the same
+host request budget in sync, `stream_text` and `run_stream`; deltas are provisional.
+No automatic tool fallback or JSON repair is performed.
+
+Stock stream objects become semantic JSON text in history, not original bytes.
+Stock Chat 1.26 may discard a refusal field beside otherwise valid JSON: that JSON
+can produce a locally valid output. Exposed refusals, absent/invalid output and
+incomplete terminals fail; total wire refusal detection is not promised. See the
+[migration guide](docs/guides/migration.md) for exact qualification and limits.
 
 ### Streaming
 
@@ -232,12 +282,14 @@ end)
 |> Stream.run()
 ```
 
-[`ExAgent.run_stream/3`] uses the full loop, including tools, hooks, Ecto output
+`ExAgent.run_stream/3` uses the full loop, including tools, hooks, Ecto output
 validation and limits. Deltas are provisional across all model requests; the final
 result supplies the validated output. Each enumeration is a new run, so enumerate
 once. Halting closes owned resources; a deliberately suspended continuation must
 be resumed or halted. Custom Model adapters emit a terminal
 `{:response, response, final_model}` or an error.
+
+<a id="serialization--durable-runs"></a>
 
 ### Serialization / durable runs
 
@@ -251,20 +303,24 @@ json = ExAgent.Message.to_json(result.messages)   # store this
 ExAgent.run(agent, "follow up", message_history: history)
 ```
 
-For persistent job dispatch, an application can use **Oban** — see the limitations
-in `examples/durable_oban.exs`. Retrying a job can repeat requests/effects; storing
-history is not mid-run recovery. A Server with Store provides conversation
-checkpoints, with the same external-effect limitation.
+For persistent job dispatch, an application can use **Oban** with the public
+continuation APIs — see [the runnable job recipe](https://github.com/akorda-software/exagent/blob/main/examples/continuation_job.exs)
+and [its integration guide](docs/development/continuation-jobs.md). A duplicate
+job inspects the existing record and resumes only a ready/approved boundary.
+Storing message history alone does not provide mid-run recovery. The application
+owns its queue, database, authenticated decisions and uncertain-effect recovery.
+
+<a id="layer-1--a-stateful-supervised-agent"></a>
 
 ## Layer 1 — a stateful, supervised agent
 
-[`ExAgent.Server`] keeps an agent alive across runs: it preserves history,
+`ExAgent.Server` keeps an agent alive across runs: it preserves history,
 accumulates usage, threads stateful models, and emits events.
 
 ```elixir
 {:ok, dm} =
   ExAgent.AgentSupervisor.start_agent(
-    agent: ExAgent.new(model: "openai:gpt-4o", instructions: "You are a DM."),
+    agent: ExAgent.new(model: chat_model, instructions: "You are a DM."),
     agent_id: "dm",
     pubsub: :local
   )
@@ -280,6 +336,8 @@ ExAgent.Server.health(dm)     # %{status: :idle, pending: 0}
 
 While a run is in flight, `chat/3` returns `{:error, :busy}` and `send_message/3`
 enqueues up to `max_pending` (default `8`) then returns `{:error, :queue_full}`.
+
+<a id="layer-2--snapshots--resume"></a>
 
 ## Layer 2 — snapshots & resume
 
@@ -315,9 +373,11 @@ to retry only storage, not the model, tools or state-change function. Async queu
 admission remains volatile. Restore rejects corrupt/future/mismatched snapshots
 instead of starting empty; see the v1/v2 migration guidance.
 
+<a id="layer-3--multi-agent-sessions"></a>
+
 ## Layer 3 — multi-agent sessions
 
-[`ExAgent.Session`] coordinates participants (agents or humans) taking turns over
+`ExAgent.Session` coordinates participants (agents or humans) taking turns over
 a piece of shared state, through a pluggable `TurnPolicy`. The Session is the
 **single writer** of `shared_state`.
 
@@ -357,10 +417,10 @@ alias ExAgent.Coordination
 
 # Delegation (agent-as-tool): the parent calls a sub-agent; both runs' tokens
 # are counted together.
-helper = ExAgent.new(model: "openai:gpt-4o-mini", instructions: "You summarize.")
+helper = ExAgent.new(model: chat_model, instructions: "You summarize.")
 parent =
   ExAgent.new(
-    model: "openai:gpt-4o",
+    model: chat_model,
     tools: [Coordination.delegation_tool(helper, name: "summarize")]
   )
 
@@ -372,6 +432,16 @@ Delegation uses one owned execution scope: child rules cannot override ancestor
 denial/approval or expand their limits. `ExAgent.run_child(context, agent, prompt,
 opts)` is the explicit scoped entry point for custom auxiliary calls. Arbitrary
 IO outside that scope is not automatically accounted or sandboxed.
+
+For persisted workflows, `ExAgent.Coordination.Composition` runs a versioned
+sequence and `ExAgent.Coordination.Flow` runs trusted routing or bounded parallel
+branches with ordered merge and explicit failure policy. Both use the same
+continuation Store, shared limits and human decision contracts. The
+[coordination recipes](docs/development/coordination-recipes.md) demonstrate typed
+extraction, specialist selection and review before an effect; definitions and
+model codecs remain trusted host code.
+
+<a id="robustness--safety"></a>
 
 ## Robustness & safety
 
@@ -391,9 +461,10 @@ perms = Permissions.new!(rules: [{"*", :deny}, {"read", :allow}, {"bash", :ask}]
 
 agent =
   ExAgent.new(
-    model: "anthropic:claude-3-5-haiku",       # cache: true → prompt caching
+    model: chat_model,
     capabilities: [compaction],
-    usage_limits: %UsageLimits{request_limit: 20, tool_calls_limit: 15, max_budget_cents: 25}
+    usage_limits: %UsageLimits{request_limit: 20, tool_calls_limit: 15,
+      max_budget_cents: 25, accounting: :estimated}
   )
 
 ExAgent.run(agent, "go",
@@ -427,17 +498,22 @@ alias ExAgent.MCP.Client
   )
 
 {:ok, tools} = Client.tools(fs)   # [ExAgent.Tool.t(), ...]
-agent = ExAgent.new(model: "anthropic:claude-3-5-haiku", tools: tools)
+agent = ExAgent.new(model: chat_model, tools: tools)
 ```
 
 The client owns the stdio JSON-RPC connection (handshake, `tools/list`,
 `tools/call`, line buffering); transport exits and errors surface cleanly.
 Defaults are 128 pending requests and 8 MiB frames, configurable. A timeout/dead
 caller is cleaned up locally; that does not prove rollback of a remote effect.
+Streamable HTTP is opt-in and uses an application-owned HTTP1-only Finch pool.
+See [MCP setup](docs/guides/mcp.md) for protocol profiles, continuation binding
+and the qualified independent SDK scenarios.
+
+<a id="events--pubsub"></a>
 
 ## Events & PubSub
 
-Every layer emits versioned [`ExAgent.Event`] envelopes (distinct from
+Every layer emits versioned `ExAgent.Event` envelopes (distinct from
 `:telemetry`). Subscribe to drive a UI:
 
 ```elixir
@@ -449,7 +525,7 @@ receive do
 end
 ```
 
-[`ExAgent.PubSub`] is a behaviour: `None` (default, no-op), `Local` (Registry),
+`ExAgent.PubSub` is a behaviour: `None` (default, no-op), `Local` (Registry),
 `Phoenix` (delegates to `Phoenix.PubSub` dynamically — no hard dependency), or
 your own.
 
@@ -468,28 +544,39 @@ attributes reach the exporter. Request usage and inclusive run totals are kept
 separate to avoid double counting. The optional bounded processor provides an
 asynchronous export route with observable saturation and failures.
 
-See [observability](docs/guides/observability.md) for application configuration, context
-propagation, privacy and export limits. Langfuse/Opik comparison and external
-backend acceptance remain pending; neither platform is required or selected.
+For applications also tracing standalone ReqLLM calls, attach
+`ExAgent.Observability.ReqLLM.attach/1` once at host startup instead of the stock
+ReqLLM bridge. It enriches the existing ExAgent Model span and preserves standalone
+tracing. ExAgent keeps usage, cost, status, privacy and span lifecycle; conflicting
+stock bridges reject before provider IO. The host maintains ReqLLM's tracking TTL.
+
+See [observability](docs/guides/observability.md) for application configuration,
+context propagation, privacy and export limits. Langfuse and Opik have equivalent
+finite A10 native/API/UI acceptance. The integrated bridge's additional attributes
+have local SDK coverage, without a new cloud/UI or metric-export claim. Neither
+backend is a required dependency.
 
 ## Models
 
-Resolve from a string or pass a struct:
+Resolve stock specs with explicit options, or pass a custom Model struct:
 
 ```elixir
-ExAgent.new(model: "openai:gpt-4o")
-ExAgent.new(model: "openrouter:deepseek/deepseek-v4-flash")   # one gateway, many backends
-ExAgent.new(model: "opencode:deepseek-v4-flash")             # Go by default; Zen is configurable
-ExAgent.new(model: "anthropic:claude-3-5-haiku-20241022")
-ExAgent.new(model: "zai:glm-4.5-air")   # Z.AI's Anthropic-compatible endpoint (GLM)
+{:ok, model} = ExAgent.Model.resolve("openai:gpt-4o",
+  api_key: System.fetch_env!("OPENAI_API_KEY"))
+ExAgent.new(model: model)
+ExAgent.new(model: %ExAgent.Models.Test{script: ["offline"]})
 ```
 
-The loop is provider-agnostic and the parsers tolerate the malformed responses
-real providers occasionally return (empty `choices`, `content: null`, partial
-`usage`). Bring your own provider by implementing the [`ExAgent.Model`] behaviour.
-Native HTTP adapters disable automatic retries/redirects. Model `stream_options`
-controls bounded framing/response size and demand timeouts. Native streaming
-support and external-backend acceptance are separate from the offline tests.
+Strings alone resolve identity; they do not load credentials or enable tools/Chat.
+`resolve/2` accepts public stock map/tuple/LLMDB specs and instance options; custom
+Model structs remain unchanged through `resolve/1`. Unknown options reject.
+OpenCode Go/Zen require explicit endpoints; stock `zai:` means ZAI, **not** the old
+Anthropic gateway alias. See the exact migration recipes. Bring your own model by
+implementing `ExAgent.Model`, without private ReqLLM APIs. Automatic retries and
+redirects are disabled; stream limits are documented on `ExAgent.Models.ReqLLM`.
+Incomplete/invalid terminal responses fail before effects. Usage is normalized,
+provider presence unknown, and costs estimated; strict metric limits reject this
+contract, while host request/tool limits remain exact admission counters.
 
 ## Examples
 
@@ -504,6 +591,10 @@ support and external-backend acceptance are separate from the offline tests.
   domains, with typed output, scoped delegation and checkpoint-only recovery;
   `--json <path>` writes the machine-readable result.
 - `examples/multi_agent_session.exs` — two agents, round-robin, shared state.
+- `examples/coordination_workflows.exs --run` — offline typed extraction,
+  selected specialist and a human-reviewed sequence; run with `--no-start`.
+- `examples/flow_pipeline.exs --self-test` — offline router and bounded parallel
+  specialists with a delegated child, also usable as a native tracing callback.
 - `examples/dnd_session.exs` — a mini D&D round: DM + bot + human over a shared
   world, coordinated by a Session (SupervisorPolicy), offline.
 
@@ -516,6 +607,24 @@ fixture check, `--json <path>` for the report). Its percentiles and sampled reso
 maxima are synthetic framework evidence, not LLM latency or production SLOs.
 
 ## Documentation
+
+Start with the [documentation home](docs/home.md) or follow the
+[getting-started tutorial](docs/guides/getting-started.md). Task guides cover
+[tools/output](docs/guides/tools-and-output.md),
+[models/limits](docs/guides/models-and-limits.md),
+[runtime/events](docs/guides/runtime-and-events.md),
+[durability/approvals](docs/guides/durability-and-approvals.md),
+[coordination](docs/guides/coordination.md) and [testing](docs/guides/testing.md).
+[Coding-agent integration notes](docs/guides/agents.md) map tasks to public APIs;
+ExDoc generates `llms.txt` and Markdown pages from the same sources.
+
+For development in the source checkout, run `./bin/check` before committing and
+pushing. It checks formatting, strict compilation, finite probes, the complete
+offline suite, documentation and package construction/isolation. Use
+`./bin/check --package-consumers` for clean installed-package graphs when needed.
+Real-provider and PostgreSQL tests are separate opt-in gates. See the
+[verification guide](docs/development/verification.md) for exclusions and tooling.
+The GitHub compatibility matrix is configured for manual execution.
 
 - [Full module reference on hexdocs][hexdocs]
 - [Documentation index](docs/README.md) — guides, current state and maintenance rules.

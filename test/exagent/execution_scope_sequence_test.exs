@@ -11,6 +11,9 @@ defmodule ExAgent.ExecutionScopeSequenceTest do
     defstruct [:journal, :path, :owner, :tag, :parts, wait: false, index: 0]
     def system(_), do: "scope-boundary"
     def model_name(model), do: Enum.join(model.path, "/")
+    # This fixture emits logical tool batches; the tests below observe their
+    # effects and ancestor admission, rather than assuming catalogue support.
+    def profile(_), do: %ExAgent.ModelProfile{supports_tools: true}
 
     def request(model, _, _, _) do
       usage = %Usage{
@@ -77,11 +80,7 @@ defmodule ExAgent.ExecutionScopeSequenceTest do
             ExAgent.run(agent, "go", run_opts ++ [estimate_cost: price(journal, [1])])
           end)
 
-        ready = for _ <- 1..width, do: receive_ready(tag)
-        Enum.each(permute(ready, seed), fn {_, pid} -> send(pid, :launch) end)
-        attempts = for _ <- 1..width, do: receive_attempt(tag)
-        started = for {:started, path, pid} <- attempts, do: {path, pid}
-        rejected = for {:rejected, path, reason} <- attempts, do: {path, reason}
+        {started, rejected} = launch_leaves(width, tag, seed)
         assert length(started) == admitted
         assert length(rejected) == width - admitted
 
@@ -100,7 +99,7 @@ defmodule ExAgent.ExecutionScopeSequenceTest do
         assert length(requests) == depth + admitted
         assert result.request_count == length(requests)
         assert result.tool_calls == depth - 1 + width
-        assert result.usage == sum_usage(requests)
+        assert_usage(result.usage, sum_usage(requests))
         assert result.cost_cents == sum_price(requests)
         assert result.cost_status == :known
         assert result.usage_status == :complete
@@ -133,7 +132,7 @@ defmodule ExAgent.ExecutionScopeSequenceTest do
 
           expected =
             for {path, index, usage} <- requests(events), n <- 1..length(path) do
-              {Enum.take(path, n), path, index, usage}
+              {Enum.take(path, n), path, index, Usage.qualify(usage)}
             end
 
           priced =
@@ -149,8 +148,7 @@ defmodule ExAgent.ExecutionScopeSequenceTest do
                 usage.input_tokens == 0 and usage.output_tokens == 0,
                 do: {scope, path, index}
 
-          assert Enum.sort(admission_prices) ==
-                   Enum.sort(for {scope, path, index, _} <- expected, do: {scope, path, index})
+          assert admission_prices == []
 
           assert result.request_count == 2 * depth + width
           {result.usage, result.request_count, result.tool_calls, result.cost_cents}
@@ -260,7 +258,7 @@ defmodule ExAgent.ExecutionScopeSequenceTest do
     assert {:ok, result} = ExAgent.run(agent, "go", estimate_cost: price(journal, [1]))
     events = Agent.get(journal, & &1)
     assert [{[2], 0, usage}] = requests(events)
-    assert result.usage == usage
+    assert_usage(result.usage, usage)
     assert result.cost_cents == 4
     assert result.output == "new"
     assert result.request_count == 1
@@ -377,7 +375,7 @@ defmodule ExAgent.ExecutionScopeSequenceTest do
     for {path, result} <- outcomes do
       included = Enum.filter(all, fn {child, _, _} -> Enum.take(child, length(path)) == path end)
       assert result.request_count == length(included)
-      assert result.usage == sum_usage(included)
+      assert_usage(result.usage, sum_usage(included))
       if priced?, do: assert(result.cost_cents == sum_price(included))
       if path != [1], do: assert(result.root_run_id == root.run_id)
       calls = for %Part.ToolCall{tool_call_id: id} <- Message.parts(result.messages), do: id
@@ -396,8 +394,16 @@ defmodule ExAgent.ExecutionScopeSequenceTest do
     %Usage{
       input_tokens: Enum.sum(for {_, _, usage} <- requests, do: usage.input_tokens),
       output_tokens: Enum.sum(for {_, _, usage} <- requests, do: usage.output_tokens),
-      details: if(requests == [], do: %{}, else: %{observed: %{requests: length(requests)}})
+      details: if(length(requests) == 1, do: %{observed: %{requests: 1}}, else: %{})
     }
+  end
+
+  defp assert_usage(actual, expected) do
+    assert actual.input_tokens == expected.input_tokens
+    assert actual.output_tokens == expected.output_tokens
+    assert actual.details == expected.details
+    assert actual.accounting["version"] == 1
+    assert actual.accounting["quality"] == "reported"
   end
 
   defp sum_price(requests),
@@ -445,5 +451,24 @@ defmodule ExAgent.ExecutionScopeSequenceTest do
     after
       2_000 -> flunk("leaf admission did not settle")
     end
+  end
+
+  defp launch_leaves(remaining, tag, seed, started \\ [], rejected \\ [])
+
+  defp launch_leaves(0, _, _, started, rejected), do: {started, rejected}
+
+  defp launch_leaves(remaining, tag, seed, started, rejected) do
+    # The production tool stream bounds its workers by schedulers_online. A
+    # started provider stays at its release barrier, while rejected leaves free
+    # their worker slots. Waiting for the entire tree before launching any leaf
+    # would deadlock whenever the generated width exceeds the worker bound.
+    available = min(remaining, System.schedulers_online() - length(started))
+    assert available > 0, "held provider leaves exhausted the fixture's tool workers"
+    ready = for _ <- 1..available, do: receive_ready(tag)
+    Enum.each(permute(ready, seed), fn {_, pid} -> send(pid, :launch) end)
+    attempts = for _ <- 1..available, do: receive_attempt(tag)
+    started = started ++ for {:started, path, pid} <- attempts, do: {path, pid}
+    rejected = rejected ++ for {:rejected, path, reason} <- attempts, do: {path, reason}
+    launch_leaves(remaining - available, tag, seed, started, rejected)
   end
 end
