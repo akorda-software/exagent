@@ -6,6 +6,12 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.0.1]
+
+Released 2026-10-04 from tag `v2.0.1`. Versioned as a patch at the owner's
+request; the opt-in field below is additive and changes nothing for existing
+consumers.
+
 ### Added
 
 - Opt-in tool-call argument previews while streaming. `ModelRequestParameters`
