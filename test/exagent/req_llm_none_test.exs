@@ -487,6 +487,51 @@ defmodule ExAgent.ReqLLMNoneTest do
     refute_receive {:effect, _, _}, 0
   end
 
+  test "stock HTTP and SSE preserve large incomplete output without turning its cause into retention failure" do
+    value = String.duplicate("private-partial", 450)
+    args = Jason.encode!(%{"arguments" => %{"value" => 7}})
+
+    for stream? <- [false, true] do
+      {url, peer} =
+        peer([
+          %{
+            args: args,
+            name: "effect",
+            text: value,
+            finish: "length",
+            usage: %{prompt_tokens: 3, completion_tokens: 1500, total_tokens: 1503}
+          }
+        ])
+
+      agent = ExAgent.new(model: model(url), tools: [tool()], model_settings: [max_tokens: 1500])
+
+      assert {:error,
+              %ExAgent.RunError{
+                reason: {:model_request_failed, %ExAgent.RequestError{} = error},
+                partial: partial
+              }} = ExAgent.run(agent, "go", stream_text: stream?)
+
+      assert error.reason == {:incomplete_response, :length}
+      assert error.partial_response.payload_omitted["boundary"] == "error"
+      assert error.partial_response.parts == []
+      assert error.partial_response.usage == nil
+      assert :erlang.external_size({:model_request_failed, error}) <= 4096
+      assert partial.pending_response.finish_reason == :length
+      assert partial.pending_response.payload_omitted == nil
+      assert Message.Response.text(partial.pending_response) == value
+
+      assert [%Message.Part.ToolCall{args: %{"value" => 7}}] =
+               Message.Response.tool_calls(partial.pending_response)
+
+      assert partial.usage.input_tokens == 3 and partial.usage.output_tokens == 1500
+      assert partial.request_count == 1 and partial.tool_calls == 0
+      refute Enum.any?(partial.messages, &is_struct(&1, Message.Response))
+      assert_receive {:request, ^peer, 0, _}
+      refute_receive {:request, ^peer, _, _}, 0
+      refute_receive {:effect, _, _}, 0
+    end
+  end
+
   test "real public incomplete finish takes precedence over unprojectable tool arguments without effects" do
     valid = ~s({"arguments":{"value":7}})
     truncated = ~s({"arguments":{"value":)
@@ -591,7 +636,7 @@ defmodule ExAgent.ReqLLMNoneTest do
          choices: [
            %{
              index: 0,
-             message: %{role: "assistant", content: nil, tool_calls: [call]},
+             message: %{role: "assistant", content: reply[:text], tool_calls: [call]},
              finish_reason: finish
            }
          ]
@@ -604,7 +649,8 @@ defmodule ExAgent.ReqLLMNoneTest do
     initial = put_in(call(""), [:function, :name], name) |> Map.put(:index, 0)
 
     {"text/event-stream",
-     frame(%{tool_calls: [initial]}) <>
+     if(is_binary(reply[:text]), do: frame(%{content: reply[:text]}), else: "") <>
+       frame(%{tool_calls: [initial]}) <>
        frame(%{tool_calls: [%{index: 0, function: %{arguments: args}}]}) <>
        frame(%{}, finish, reply[:usage]) <> "data: [DONE]\n\n"}
   end

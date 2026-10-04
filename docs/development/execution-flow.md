@@ -16,6 +16,11 @@ publicación automática en Hex. El workflow compila y verifica documentación/T
 no repite las suites largas locales. Preview manual no publica ni recibe la clave.
 Ver [procedimiento de publicación](releasing.md).
 
+**Decisión2026-10-04:** trabajar directamente en `main` y subir allí los cambios
+verificados. Una PR no es un paso obligatorio del flujo de este mantenedor único.
+Commit/push y release siguen siendo operaciones distintas: el push a `main` no
+publica en Hex; publicar una release estable en GitHub activa el workflow.
+
 ## Un solo recorrido
 
 **Objetivo funcional → implementar y probar → una revisión como máximo →

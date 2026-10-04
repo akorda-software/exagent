@@ -8,6 +8,32 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [2.0.0]
 
+### Preserve incomplete-response failure causes — 2026-10-04
+
+- Preserve the Model request failure category when only the duplicate incomplete
+  Response makes its error-control copy exceed4KiB. Replace that copy's parts
+  and usage with an explicit error omission marker; retain the bounded original
+  in `RunError.partial.pending_response`, outside executable history. Small
+  copies are unchanged. Arbitrary control that still exceeds4KiB keeps the
+  original retention error and byte measurement. Five new regressions cover
+  exact/+1 boundaries, loop/stream/Server and stock HTTP/SSE;102 affected cases
+  and a separate58 runtime/persistence cases pass offline. Dragonex23 focales
+  verify one paid inventory effect across token retry. No larger limits,
+  internal retry, provider qualification, new complete framework suite or
+  publication/version bump. Consumers read omitted partial data from RunError.
+
+### Backend envelope guidance — 2026-10-04
+
+- Explain the mandatory `arguments` envelope once in the backend context when
+  qualified function tools are present. A Dragonex/DeepSeek4.1/Decart probe
+  returned flat `speaker`/`statement` objects in buffered and streaming stock
+  ReqLLM responses, which the existing envelope gate correctly rejected.
+  Caller messages, canonical history, schemas, codec and validation remain
+  unchanged; no unwrapping or JSON repair is added. 131 affected adapter cases
+  pass offline; Dragonex 21→28 records one attributed NPC statement with no
+  argument retries. This is a bounded consumer check, not universal model
+  acceptance or a new complete framework suite. No publication/version bump.
+
 ### Release preparation — 2026-10-03
 
 - Prepare version2.0.0 and align the installation guides and documentation footer.

@@ -89,7 +89,31 @@ defmodule ExAgent.Retention do
 
   def reason(nil), do: nil
 
+  # Incomplete Model output already has its own bounded pending_response in
+  # RunError.partial. Do not lose the operational cause merely because that
+  # response is duplicated in the 4KiB error-control copy. Omit only the copy;
+  # arbitrary remaining control still has to fit the original error ceiling.
+  def reason(
+        {:model_request_failed, %ExAgent.RequestError{partial_response: %Response{} = r} = e} =
+          reason
+      ) do
+    if bytes(reason) > @usage_bytes do
+      omitted = %{omit_response(r, @usage_bytes, :error) | usage: nil}
+      projected = {:model_request_failed, %{e | partial_response: omitted}}
+
+      if bytes(projected) <= @usage_bytes,
+        do: projected,
+        else: bounded_reason(reason)
+    else
+      reason
+    end
+  end
+
   def reason(reason) do
+    bounded_reason(reason)
+  end
+
+  defp bounded_reason(reason) do
     case check(reason, @usage_bytes, :error) do
       :ok -> reason
       {:error, bounded} -> bounded

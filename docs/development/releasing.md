@@ -1,9 +1,10 @@
 # Publicar ExAgent en Hex
 
-La versión2.0.0 y `.github/workflows/release.yml` están preparados. En el
-checkpoint2026-10-03 no hay merge, tag oficial ni publicación en Hex. El usuario
-ha pedido dejar la salida para la siguiente sesión. Las pruebas de runtime y
-backends ya aceptadas conservan sus recibos; preparar la publicación no las repite.
+La versión2.0.0 y `.github/workflows/release.yml` están preparados. Por decisión
+2026-10-04 se trabaja directamente en `main`: commit/push de cambios verificados,
+sin una PR obligatoria. Publicar una release estable en GitHub activa la subida
+a Hex. La clave `HEX_API_KEY`, el tag oficial y la publicación siguen pendientes.
+Las pruebas de runtime y backends aceptadas conservan sus recibos.
 
 ## TOTP y la clave de publicación
 
@@ -39,11 +40,12 @@ publica paquete y documentación. Véase
 
 ## Lanzar la versión oficial
 
-1. Antes de cerrar el commit de release, ejecutar la rutina local `./bin/check`
-   para cambios de runtime. Para una preparación sólo de versión/prosa/workflow,
-   reutilizar las pruebas de runtime cuyos bytes siguen idénticos y ejecutar los
-   controles afectados: guards, formato, docs y TAR. No reabrir R9 ni añadir
-   proveedores pagados a la publicación.
+1. Antes de cerrar el commit de release, validar los cambios localmente.
+   `./bin/check` es la rutina completa; un delta causal posterior conserva el
+   alcance y los bytes de la referencia anterior y verifica sus contratos
+   afectados. Para versión/prosa/workflow, ejecutar guards, formato, docs y TAR.
+   Documentar qué pruebas cubren cada fuente. No reabrir R9 ni añadir proveedores
+   pagados a la publicación.
 2. Mantener alineados `@version` en `mix.exs`, el encabezado de release en
    `docs/changelog.md`, las guías de instalación y el footer. Para esta salida
    están preparados como2.0.0. Comprobar localmente:
@@ -54,7 +56,7 @@ publica paquete y documentación. Véase
    ```
 
    `--prepare` valida metadatos; no demuestra un tag ni autoriza publicar.
-3. Comitear y pushear la preparación; hacer merge de la PR en `main`. La versión
+3. Comitear y pushear la preparación directamente en `main`. La versión
    oficial debe incluir el workflow y corresponder a un commit ya integrado.
 4. Crear un tag `v2.0.0` sobre ese commit y pushearlo, sin mover un tag existente.
    Un push del tag por sí solo no publica en Hex.
@@ -64,7 +66,7 @@ publica paquete y documentación. Véase
 6. Publicar en GitHub una release para ese tag, con **prerelease desactivado**.
    Publicar una release borrador dispara entonces el flujo automáticamente.
    Las notas propuestas están en
-   [el borrador de v2](https://github.com/akorda-software/exagent/blob/codex/v2-candidate-029/.github/release-notes-v2.0.0.md).
+   [el borrador de v2](https://github.com/akorda-software/exagent/blob/main/.github/release-notes-v2.0.0.md).
 
 El workflow escucha `release: published`; omite borradores/prereleases y rechaza
 tags con sufijos o versiones no canónicas. La selección del tag pasa por una
@@ -106,12 +108,16 @@ El primer envío real y la autenticación con la clave quedan pendientes hasta
 configurar `HEX_API_KEY` y publicar la release oficial. Los controles locales no
 se presentan como una ejecución remota de GitHub ni como una publicación en Hex.
 
-Verificación de esta preparación:17 controles offline de guards Git y recuperación
+Verificación de la preparación2026-10-03:17 controles offline de guards Git y recuperación
 contra un servidor loopback pasan; el CLI de publicación se sustituye por un
 recorder, sin escribir en Hex. Actionlint1.7.12 acepta el workflow. Compilación
 estricta dev/test,18 ejemplos documentados, ExDoc y enlaces, build repetible e
 aislamiento del TAR pasan. Un consumidor limpio instalado de2.0.0 pasa8contratos;
 su diagnóstico agregado conserva exit1 por38warnings stock. Las94fuentes de
-biblioteca y el lock son idénticos al FULL aceptado; no se repite aquella suite.
+biblioteca y el lock eran idénticos al FULL aceptado; no se repitió aquella suite.
+Los deltas de envelope y retención del2026-10-04 cambian dos fuentes y pasan
+159focales juntos en14,3s. El FULL anterior y su TAR no se presentan como nuevas
+pruebas de esos deltas. La preparación está integrada directamente en main;
+GitHub marcó la PR1 integrada al recibir el push, sin un merge adicional.
 El [recibo de preparación](https://github.com/akorda-software/exagent/blob/codex/v2-candidate-029/docs/orchestration/2026-10-01-v2-codex/RELEASE-PREPARATION.md)
 conserva identidades y alcance de artefactos.

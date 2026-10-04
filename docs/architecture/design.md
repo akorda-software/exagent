@@ -13,6 +13,87 @@
 > Conserva sus reproducciones y guards como estado runtime, no como aceptación
 > del nuevo contrato. C7 y los contratos de autoridad/recuperación permanecen.
 
+## Causa de errores Model con respuesta parcial duplicada (2026-10-04)
+
+**Problema demostrado:** Dragonex19447/51 falla con boundary:error,6300/4096
+bytes, antes de retirar un objeto entregado. Esa mesa no conserva el error
+original y no prueba por sí sola que fuera truncación. La reproducción offline
+sí demuestra que RequestError con una respuesta incompleta de6–8KiB, válida
+dentro de P, se transforma en retention_limit_exceeded al duplicar sus bytes
+en reason. Ocurre en run, stream_text, run_stream, Server y ReqLLM stock HTTP/SSE;
+el caller pierde length/content_filter aunque pending_response ya contiene
+la respuesta incompleta separada del historial ejecutable.
+
+**Decisión/beneficio general:** si la copia de RequestError excede4KiB, omitir
+solamente su partial_response duplicada mediante un marker:error. Conservar
+finish_reason, provider/status/reason y el original acotado en RunError.partial.
+pending_response. La copia omitida no conserva parts ni usage; el uso original
+sigue en partial/ledger. El error proyectado vuelve a comprobar el límite4KiB;
+body/reason/model arbitrarios que todavía lo excedan siguen rechazados. No
+ejecutar calls parciales ni añadir un retry dentro del framework.
+
+**Alternativas/impacto/migración:** subir el límite de error retendría datos
+duplicados y no solucionaría causas arbitrariamente grandes. El caller no debe
+adivinar length desde retention_limit_exceeded. Las copias pequeñas conservan
+su contrato exacto. Para las grandes, consultar el texto/calls diagnósticos en
+RunError.partial.pending_response; RequestError.partial_response lleva el marker
+y no es historial ejecutable. Es una corrección de la candidata local, sin
+cambio de codec/snapshot, SemVer publicado, version bump o publicación.
+
+**Verificación:** rojo39/42 en dos módulos: loop, Server y stock HTTP
+reproducen la pérdida de causa; el negativo de control arbitrario sigue cerrado.
+Primer estímulo stock usaba un argumento inválido y no proyectaba la respuesta;
+se cambia a argumento válido con texto parcial largo, sin cambiar el oráculo.
+Verde inicial42; una aserción adicional de bytes del control arbitrario reproduce
+26/27 y exige conservar la cifra original si la proyección tampoco cabe.
+Verde ampliado102 en11,8 s incluye cinco regresiones nuevas, límites exacto4096/
++1, stream/cancelación y proyección de eventos;58 de Server/Session/persistencia/
+ownership/core pasan aparte en0,6 s. Los102 incluyen diagnósticos existentes de
+peer cerrado y owner death; no se atribuye limpieza de esos fixtures al delta.
+Dragonex23 focales pasan en3,8 s: un corte nativo largo reintenta el mismo turno,
+retira inventario una vez pese al replay y registra el cierre una vez, sin texto
+privado en historia/eventos. No es cualificación live del arreglo ni una suite
+completa nueva del framework. El FULL2235 anterior conserva su identidad.
+
+## Guía del envelope de tools en el contexto backend (2026-10-04)
+
+**Problema demostrado:** Dragonex pregunta a Ada con DeepSeek 4.1/Decart.
+El flujo agota tres reintentos de invalid_tool_arguments. Dos llamadas frescas
+a las APIs públicas stock de ReqLLM, buffered y stream, devuelven
+record_npc_statement con speaker/statement en el nivel superior, sin el objeto
+arguments exigido. No hay error semántico explícito en metadata; streaming
+conserva sus diagnósticos de fragmentos. Esos argumentos no satisfacen el
+envelope obligatorio, que no debe relajarse. La muestra fresca no es una
+captura de las ocho respuestas fallidas de la mesa real.
+
+**Decisión:** cuando existen definiciones cualificadas, añadir una sola guía
+system al Context backend antes de normalizarlo. Explica el objeto exterior
+arguments y el caso sin parámetros. Sin tools no se añade. Es responsabilidad
+del perfil de transporte, aplicable a cualquier consumidor; no contiene reglas
+Dragonex ni cambia mensajes del caller/historial canónico. No añade reparaciones,
+unwrapping, defaults ejecutables o capacidades ficticias. Envelope1/validación
+lógica, continuation/routing/none y guards previos conservan sus contratos.
+
+**Alternativas/impacto:** el schema solo no bastó para este modelo; repetir la
+guía en cada descripción consume más contexto. Añadir instrucciones a cada app
+expone un detalle del adaptador a todos los consumidores. La guía soft mejora
+la codificación, sin prometer obediencia o aceptación universal; añade un pequeño
+prefijo al request efectivo. No requiere migración de snapshot/codec ni cambia
+la API lógica. No version bump/publicación.
+
+**Evidencia:** nuevo test de entrega, ausencia sin tools, caller intacto y guía
+única; rojo 14/15. Primer verde 14/15 descubre un índice absoluto antiguo en el
+fixture de history: se localiza el único assistant por rol y se mantiene la
+assertion de envelope único. 131 tests req_llm offline pasan en 14,5 s. No se repite
+FULL 2235 ni otras fronteras sin delta. El primer comando tomó tooling 1.20.0
+incompatible con Hex; seleccionar explícitamente 1.20.3/OTP 29.0.5 permite probar
+sin reparar configuración global. Diagnósticos previos con historial ajeno y
+adapter inyectado en stream rechazan antes de IO por sus guards, que siguen
+intactos. En Dragonex, 21→28 en 11,564 s da habla literal humana, respuesta PNJ y un
+testimonio atribuido, sin retries de argumentos; solo cambia facts y conserva
+reloj/recursos/otras mesas. Historial/proveedor estocásticos impiden concluir un
+SLA o una mejora semántica general. No se cambió stock ReqLLM.
+
 ## Operación prolongada de observabilidad (2026-10-03)
 
 **Problema demostrado:** owner death puede dejar tracking ReqLLM hasta prune;

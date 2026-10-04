@@ -78,6 +78,9 @@ defmodule ExAgent.Models.ReqLLM do
   does not guarantee cleanup of arbitrary external callback descendants.
   Instructions come from the supplied canonical/projected message history;
   `ModelRequestParameters.instructions` is not independently prepended.
+  Qualified function tools add one backend-only system message explaining their
+  mandatory arguments envelope. Caller messages and canonical history stay unchanged;
+  this guidance does not repair or admit invalid tool arguments.
 
   Streaming is lazy, consumes `ReqLLM.StreamResponse.process_stream/2` once, and
   shares buffered schema/history/response validation. Deltas are provisional;
@@ -122,6 +125,8 @@ defmodule ExAgent.Models.ReqLLM do
   alias Backend.Message, as: BackendMessage
   alias Backend.Message.ContentPart, as: Content
   alias ExAgent.Models.ReqLLMEnvelope, as: Envelope
+
+  @envelope_instruction "All function calls must use one outer JSON object with an \"arguments\" object containing the declared parameters. For a function with no parameters, use {\"arguments\": {}}. Do not send declared parameters at the top level."
 
   @derive {Inspect, except: [:api_key, :auth_token, :http_options]}
   defstruct [
@@ -694,6 +699,14 @@ defmodule ExAgent.Models.ReqLLM do
   defp context!(messages, resolved, endpoint, model, definitions) do
     unless ExAgent.Retention.executable?(messages), do: fail!(:omitted_payload_history)
     msgs = Enum.flat_map(messages, &message!(&1, resolved, endpoint, model, definitions))
+
+    # Wire guidance belongs to this qualified transport profile. Keep the
+    # caller's canonical history and logical tool arguments unchanged; the
+    # mandatory envelope and local validators remain authoritative.
+    msgs =
+      if map_size(definitions) > 0,
+        do: [Backend.Context.system(@envelope_instruction) | msgs],
+        else: msgs
 
     case Backend.Context.normalize(msgs) do
       {:ok, context} -> context

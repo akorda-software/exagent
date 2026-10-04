@@ -1,17 +1,37 @@
 # Support and release status
 
-Updated **2026-10-03**. These docs describe **ExAgent 2.0.0**. At this dated
-checkpoint, release metadata and the GitHub publication workflow are prepared on
-`codex/v2-candidate-029`; merge, official release and Hex publication are pending
-the next session. Availability is established by the
+Consumer delta2026-10-04 preserves the request failure category when a duplicate
+incomplete Response exceeds the4KiB error copy. Only the copy is omitted;
+the bounded original remains in RunError.partial.pending_response and never
+authorizes tools. Five new regressions are included in102 affected offline
+cases;58 separate runtime/persistence cases also pass. Dragonex23 focales verify
+a paid inventory receipt across token retry. The failed real delivery19447/52
+is preserved; no live fix or new complete framework run is claimed. The2,235
+baseline below predates both October4 deltas. No publication/version bump.
+
+Consumer delta 2026-10-04 adds one backend envelope-guidance message for
+qualified tools without changing schemas, canonical history or validation.
+131 affected ReqLLM tests pass offline; one Dragonex/DeepSeek4.1/Decart
+dialogue succeeds with an attributed statement and zero argument retries.
+The complete 2,235-case result below predates this delta. No new publication
+or universal provider acceptance is implied; see the2.0.0 changelog and design record.
+
+Updated **2026-10-04**. These docs describe **ExAgent 2.0.0**. The maintainer's
+workflow uses direct commits/pushes to `main`; a published stable GitHub release
+triggers package/docs publication. Release metadata and the workflow are prepared.
+The Hex API key, official tag/release and Hex publication are pending.
+Availability is established by the
 [Hex release](https://hex.pm/packages/exagent/2.0.0) and its versioned HexDocs,
 not by the version string alone. See [publishing](development/releasing.md).
 
-Release preparation verifies17 offline Git/loopback guards,18 executable
+October3 release preparation verifies17 offline Git/loopback guards,18 executable
 documentation cases, strict dev/test compilation and ExDoc/site/TAR checks.
 A fresh installed2.0.0 minimal graph passes8 contracts; its aggregate diagnostic
-remains exit1 from38 upstream warning lines. All94 library source files and the
-dependency lock match the accepted runtime freeze. The
+remains exit1 from38 upstream warning lines. At that checkpoint all94 library
+source files and the dependency lock match the accepted runtime freeze; the
+October4 adapter and retention deltas have a separate combined159-case offline
+qualification on Elixir1.20/OTP29, zero failures in14.3 seconds. This includes
+the131 adapter cases and the retention contracts, not a new complete suite. The
 [preparation receipt](https://github.com/akorda-software/exagent/blob/codex/v2-candidate-029/docs/orchestration/2026-10-01-v2-codex/RELEASE-PREPARATION.md)
 distinguishes the installed staging TAR from the final documentation artifact.
 

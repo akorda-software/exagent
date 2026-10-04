@@ -177,6 +177,44 @@ defmodule ExAgent.ReqLLMEnvelopeTest do
 
   defp prompt, do: Message.new_request([%Part.User{content: "go"}])
 
+  test "mandatory envelope guidance reaches the model once without replacing caller instructions" do
+    caller =
+      Message.new_request([
+        %Part.System{content: "Caller-owned policy."},
+        %Part.User{content: "go"}
+      ])
+
+    m = model([final(), final(), final()])
+
+    assert {:ok, _, _} = Model.request(m, [caller], %ModelSettings{}, %ModelRequestParameters{})
+    assert_receive {:request, 0, _, plain}
+    assert Enum.map(plain["messages"], & &1["role"]) == ["system", "user"]
+    refute Jason.encode!(plain["messages"]) =~ "one outer JSON object"
+
+    for index <- [1, 2] do
+      assert {:ok, _, _} = Model.request(m, [caller], %ModelSettings{}, params(@empty))
+      assert_receive {:request, ^index, _, body}
+      [guidance | original] = body["messages"]
+      assert guidance["role"] == "system"
+      encoded = Jason.encode!(guidance["content"])
+      assert encoded =~ "one outer JSON object"
+      assert encoded =~ "declared parameters"
+      assert encoded =~ Jason.encode!(~s({"arguments": {}})) |> String.trim("\"")
+      assert original == plain["messages"]
+
+      assert Enum.count(
+               body["messages"],
+               &(Jason.encode!(&1["content"]) =~ "one outer JSON object")
+             ) == 1
+
+      assert [tool] = body["tools"]
+      assert tool["function"]["parameters"]["required"] == ["arguments"]
+      assert tool["function"]["parameters"]["additionalProperties"] == false
+    end
+
+    refute_receive {:effect, _, _, _}, 0
+  end
+
   test "public response metadata: historical diagnostics survive but every explicit error rejects before effects" do
     # Public Req response steps expose synthetic semantic metadata after stock
     # decoding. TCP tests separately prove real fragment/loss diagnostics.
@@ -417,7 +455,9 @@ defmodule ExAgent.ReqLLMEnvelopeTest do
     assert {:ok, _, _} = Model.request(m, history, nil, params())
     assert_receive {:request, 1, _, payload}
 
-    assert Enum.at(payload["messages"], 1)["tool_calls"]
+    [assistant] = Enum.filter(payload["messages"], &(&1["role"] == "assistant"))
+
+    assert assistant["tool_calls"]
            |> hd()
            |> get_in(["function", "arguments"])
            |> Jason.decode!() == %{"arguments" => %{"value" => 7}}

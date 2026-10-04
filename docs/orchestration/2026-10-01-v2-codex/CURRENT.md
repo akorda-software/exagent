@@ -1,9 +1,10 @@
-# ExAgent v2 — estado vigente, 2026-10-03
+# ExAgent v2 — estado vigente, 2026-10-04
 
-Implementación autorizada; rama `codex/v2-candidate-029`, [PR1 borrador](https://github.com/akorda-software/exagent/pull/1).
-El usuario autorizó salida y luego pidió dejarla preparada para mañana.
-Versión2.0.0/workflow/docs preparados; commit/push de la preparación autorizado.
-No merge/tag/publicación esta noche; configurar HEX_API_KEY en la siguiente sesión.
+El usuario autoriza subir todo directamente a `main`, sin PR obligatoria.
+Versión2.0.0/workflow/docs ya en main; PR1 integrada automáticamente por el push.
+Deltas de otro dueño: guía backend y causa RequestError con copia Response omitida.
+159focales juntos pasan en copia propia1.20/29,14.3s; FULL anterior no cubre estos deltas.
+Pendientes clave HEX_API_KEY, tag oficial y release; push a main no publica.
 ReqLLM stock, R1.2/C7 aceptados, guards intactos; una revisión máxima, sin reruns rutinarios.
 
 ## Cierre operativo y aportaciones Dragonex
@@ -29,9 +30,10 @@ No hay nueva ola paid/cloud/SQL/R9. El usuario acepta deuda externa sin modifica
 Workflow release:published estable; manual preview nunca publica/recibe secretos.
 Guard version/changelog/docs/tag/main; compilación/docs/TAR sin suites largas en CI.
 API key package:hexpm/exagent evita TOTP por envío; creación web puede pedir2FA.
-Sin --replace; TAR ya publicado sólo permite docs si es idéntico. Readback compara
-bytes y docs versionadas.17guards/18doc y compile/docs/TAR pasan; consumidor2.0:
-8contratos0fallos/strictRED38warnings.94lib/lock intactos; [RELEASE-PREPARATION](RELEASE-PREPARATION.md).
+Sin --replace; TAR idéntico permite docs. Readback compara bytes y docs versionadas.
+17guards/18doc y compile/docs/TAR pasan; consumidor2.0:
+8contratos0fallos/strictRED38warnings.94lib/lock idénticos en ese checkpoint;
+[RELEASE-PREPARATION](RELEASE-PREPARATION.md) y [MAIN-INTEGRATION](MAIN-INTEGRATION.md) conservan identidades.
 
 ## Operación prolongada — recibo anterior
 
@@ -94,7 +96,5 @@ sus cambios/E2E están autorizados, su commit no está autorizado.
 Roadmap único: docs/development/roadmap.md. [FINAL-CANDIDATE](FINAL-CANDIDATE.md),
 [CRITICAL-REVIEW](CRITICAL-REVIEW.md), [E2E](E2E-ACCEPTANCE.md),
 [OPIK](OPIK-ACCEPTANCE.md) conservan identidad y límites de las candidatas previas.
-ROOT/_build exclusivo padre; workers con fuentes/deps/build/tooling privados.
-Offline EXAGENT_OFFLINE=1 MIX_ENV=test, dotenv deshabilitado.
-Próxima sesión: crear clave en el navegador, guardar secreto GitHub, merge,
-preview del tag estable y publicación oficial. No crear clave ni cambiar2FA esta noche.
+Offline EXAGENT_OFFLINE=1 MIX_ENV=test, dotenv deshabilitado. Siguiente: crear
+clave, guardar secreto GitHub y publicar release oficial; preview opcional. Commits directos a main.

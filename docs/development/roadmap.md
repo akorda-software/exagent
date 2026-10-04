@@ -1,10 +1,36 @@
 # Roadmap ejecutable de ExAgent v2.0.0
 
+**Delta de consumidor2026-10-04 — causa de cortes conservada:** una Response
+incompleta de6–8KiB, válida dentro de P, excedía el límite4KiB al copiarse
+también en RequestError y ocultaba length/content_filter. Ahora sólo esa copia
+se omite con marker; pending_response/contabilidad siguen separados del
+historial ejecutable, con control arbitrario y límites intactos. Cinco nuevas,
+rojo39/42 y26/27 por cifra del negativo, verde ampliado102 en11,8 s y58 runtime
+aparte en0,6 s. Dragonex23 focales en3,8 s preservan inventario pagado al retry.
+19447/52 conserva la entrega fallida original; no acredita corrección live.
+El FULL2235 anterior sigue fechado; sin rerun R9, release, bump o publicación.
+Ver diseño «Causa de errores Model» y changelog2.0.0, todavía sin publicar.
+
+**Integración directa2026-10-04:** el usuario pide llevar todo a `main` y trabajar
+sin PR obligatoria. La preparación2.0.0/workflow ya está en main y la PR1 figura
+integrada automáticamente. Los deltas de envelope y retención pasan juntos
+159pruebas offline sobre copia aislada en14,3s, exit0. Publicar una release
+estable dispara Hex; push a main sólo actualiza fuentes. Pendientes: HEX_API_KEY,
+tag oficial y publicación. No nueva ola paid/cloud/SQL ni reapertura R9.
+
+**Delta de consumidor 2026-10-04:** guía única de envelope en el Context backend
+para tools cualificadas, sin cambiar caller/history/schema/codec/guards.
+ReqLLM stock buffered/stream devolvía parámetros planos en un diálogo
+DeepSeek 4.1/Decart de Dragonex. 131 focales pasan; consulta real 21→28 con
+testimonio atribuido y cero retries de argumentos. Es evidencia acotada:
+FULL 2235 sigue siendo la referencia anterior a este delta. Sin nuevo R9,
+release, version bump o publicación. Ver diseño «Guía del envelope» y changelog2.0.
+
 **Preparación de publicación2026-10-03:** versión2.0.0 y documentación de entrada
 alineadas. Workflow de GitHub para releases estables, preview manual sin secretos
 y guard de tag/versión/changelog/main; suites largas siguen locales. El usuario
 acepta la deuda de warnings externa sin modificar upstream. Publicación diferida
-a la siguiente sesión: configurar HEX_API_KEY y hacer merge/tag/release.
+a la siguiente sesión: entonces quedaban HEX_API_KEY e integración/tag/release.
 No tag ni publicación en este checkpoint. [Procedimiento](releasing.md).
 17guards Git/loopback y18casos documentados pasan; compile dev/test, ExDoc,
 enlaces y TAR/aislamiento pasan. Consumidor nuevo2.0.0:8contratos pasan;
@@ -255,7 +281,7 @@ están en `docs/archive/2026-09-release-{roadmap,scope}.md`.
 | R6 | Composición multi-agente coherente | R3; R4/R5 para pausa durable | Implementado y revisado: secuencia9/delegación10/Flow11. Final00973+11; recetas públicas PASS y A8 SQL entreVMs sobre019. FULL2157sin fallos; guards generales no demostrados siguen cerrados |
 | R7 | Observabilidad e integraciones utilizables | R1/R2; cierre sobre R5/R6 | MCP SDK5/5, binding, retrieval/job y LiveView/Oban6/6; Langfuse y Opik A10 nativo/API/UI aceptados con los mismos criterios por mandato2026-10-02 |
 | R8 | Cualificación externa, consumidores, carga y CI | R1–R7 pertinentes | G2mínimo/G3/G6 aceptados; ocho grafos56contratos pasan también remotamente. E2E app27aceptados por modelo reutilizando26+08con required header; nullable previo sigue rojo. Cuatro complejos4/4por modelo. CI030 funcional aceptado; strictdeps RED upstream |
-| R9 | Revisión final, candidata y release2.0.0 | R0–R8 aceptados | Revisión única cerrada. Versión2.0.0 y workflow preparados; PR1 pendiente de merge. G5strict rojo upstream aceptado como deuda externa por el usuario2026-10-03. Publicación diferida, aún sin tag/release/Hex |
+| R9 | Revisión final, candidata y release2.0.0 | R0–R8 aceptados | Revisión única cerrada. Versión2.0.0/workflow preparados; política de integración directa en main2026-10-04. Delta envelope131focales con evidencia propia. G5strict rojo upstream aceptado como deuda externa. Pendientes clave/tag/release/Hex |
 
 ```text
 R0 → R1 → R2 → R3 ───────→ R6 ──┐

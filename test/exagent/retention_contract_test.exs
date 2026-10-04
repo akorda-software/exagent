@@ -542,6 +542,143 @@ defmodule ExAgent.RetentionContractTest do
     assert count(j, :request) == 1
   end
 
+  test "bounded incomplete responses preserve their cause when the duplicate error copy exceeds 4KiB",
+       %{journal: j} do
+    for finish <- [:length, :content_filter], surface <- [:sync, :stream_text, :stream] do
+      r = %{
+        response([call("never"), %Part.Text{content: String.duplicate("private", 900)}])
+        | finish_reason: finish
+      }
+
+      provider_error = %ExAgent.RequestError{
+        provider: :test,
+        reason: {:incomplete_response, finish},
+        partial_response: r
+      }
+
+      assert size({:model_request_failed, provider_error}) > 4096
+      a = agent(j, [{:error, provider_error}], nil)
+
+      assert {:error,
+              %RunError{
+                reason: {:model_request_failed, %ExAgent.RequestError{} = error},
+                partial: p
+              }} = terminal(a, surface, max_payload_bytes: 16_384)
+
+      assert error.reason == {:incomplete_response, finish}
+      assert error.partial_response.parts == []
+      assert error.partial_response.usage == nil
+      assert error.partial_response.finish_reason == finish
+
+      assert error.partial_response.payload_omitted == %{
+               "version" => 1,
+               "boundary" => "error",
+               "bytes" => size(r),
+               "limit" => 4096
+             }
+
+      assert size({:model_request_failed, error}) <= 4096
+      assert p.pending_response == r
+      assert p.request_count == 1 and p.tool_calls == 0
+      assert p.usage.output_tokens == 3
+      refute Enum.any?(p.messages, &is_struct(&1, Response))
+    end
+
+    assert count(j, :effect) == 0
+    assert count(j, :request) == 6
+  end
+
+  test "RequestError preserves an exact 4KiB copy and omits only the copy at plus one",
+       %{journal: j} do
+    base = %{text("") | finish_reason: :length}
+
+    error = %ExAgent.RequestError{
+      provider: :test,
+      reason: {:incomplete_response, :length},
+      partial_response: base
+    }
+
+    padding = 4096 - size({:model_request_failed, error})
+
+    for extra <- [0, 1] do
+      r = %{base | parts: [%Part.Text{content: String.duplicate("x", padding + extra)}]}
+      request_error = %{error | partial_response: r}
+      assert size({:model_request_failed, request_error}) == 4096 + extra
+
+      assert {:error,
+              %RunError{
+                reason: {:model_request_failed, %ExAgent.RequestError{} = retained},
+                partial: p
+              }} = ExAgent.run(agent(j, [{:error, request_error}], nil), "go")
+
+      assert retained.reason == {:incomplete_response, :length}
+      assert p.pending_response == r
+
+      if extra == 0 do
+        assert retained == request_error
+      else
+        assert retained.partial_response.parts == []
+        assert retained.partial_response.payload_omitted["boundary"] == "error"
+      end
+    end
+
+    assert count(j, :effect) == 0
+    assert count(j, :request) == 2
+  end
+
+  test "Server returns a bounded causal error and retains the incomplete response outside history",
+       %{journal: j} do
+    r = %{text(String.duplicate("partial", 900)) | finish_reason: :length}
+
+    provider_error = %ExAgent.RequestError{
+      provider: :test,
+      reason: {:incomplete_response, :length},
+      partial_response: r
+    }
+
+    server = start_supervised!({Server, agent: agent(j, [{:error, provider_error}], nil)})
+
+    assert {:error,
+            %RunError{
+              reason: {:model_request_failed, %ExAgent.RequestError{} = error},
+              partial: p
+            }} = Server.chat(server, "go")
+
+    assert error.reason == {:incomplete_response, :length}
+    assert size({:model_request_failed, error}) <= 4096
+    assert error.partial_response.payload_omitted["boundary"] == "error"
+    assert p.pending_response == r
+    refute Enum.any?(Server.history(server), &is_struct(&1, Response))
+    assert count(j, :effect) == 0
+    assert count(j, :request) == 1
+  end
+
+  test "a large partial response cannot hide oversized request error control", %{journal: j} do
+    r = %{text(String.duplicate("partial", 900)) | finish_reason: :length}
+
+    provider_error = %ExAgent.RequestError{
+      provider: :test,
+      reason: {:incomplete_response, :length},
+      body: String.duplicate("unbounded-error", 900),
+      partial_response: r
+    }
+
+    assert {:error,
+            %RunError{
+              reason: {:retention_limit_exceeded, %{boundary: :error, limit: 4096}},
+              partial: p
+            }} = ExAgent.run(agent(j, [{:error, provider_error}], nil), "go")
+
+    assert p.pending_response == r
+
+    assert {:retention_limit_exceeded, %{bytes: bytes}} =
+             ExAgent.Retention.reason({:model_request_failed, provider_error})
+
+    assert bytes == size({:model_request_failed, provider_error})
+    assert count(j, :effect) == 0
+    assert count(j, :request) == 1
+  end
+
   test "incomplete partial oversized Response and unknown terminal never authorize tools", %{
     journal: j
   } do

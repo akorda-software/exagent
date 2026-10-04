@@ -120,6 +120,13 @@ IO or guarantee cancellation of arbitrary application callbacks. Host retention
 limits apply after stock decoding; no upstream hard RAM bound before decoding is
 promised. [Migration](migration.md) documents option precedence and failure shapes.
 
+An incomplete response stays in `RunError.partial.pending_response`, outside
+executable history. Its duplicate in `RunError.reason` may carry an explicit
+`payload_omitted` marker when that error copy would exceed4KiB. Read the cause
+from the bounded RequestError and diagnostic partial data from RunError;
+neither authorizes tools or proves that a turn completed. Arbitrary oversized
+error control still fails the original retention limit.
+
 API: `ExAgent.Models.ReqLLM`,
 `ExAgent.Model`,
 `ExAgent.ModelSettings`.
