@@ -1937,6 +1937,8 @@ defmodule ExAgent do
 
   defp drive_stream(model, messages, settings, params, state) do
     on_delta = deps_on_text_delta(state.deps)
+    on_tool_delta = deps_on_tool_call_delta(state.deps)
+    params = if on_tool_delta, do: %{params | tool_call_deltas: true}, else: params
 
     initial = %{
       text: [],
@@ -1970,6 +1972,12 @@ defmodule ExAgent do
                   {:halt, fail(stream_partial(state, acc), :cancelled)}
               end
           end
+
+        # Argument previews never enter the partial response; the terminal
+        # response carries the authoritative tool calls.
+        {:tool_call_delta, %{} = delta}, acc ->
+          if on_tool_delta, do: safe_apply(on_tool_delta, delta)
+          {:cont, acc}
 
         {:usage, %Usage{} = usage}, acc ->
           {usage, error} = Retention.usage(usage)
@@ -2122,6 +2130,9 @@ defmodule ExAgent do
 
   defp deps_on_text_delta(%{on_text_delta: fun}) when is_function(fun, 1), do: fun
   defp deps_on_text_delta(_), do: nil
+
+  defp deps_on_tool_call_delta(%{on_tool_call_delta: fun}) when is_function(fun, 1), do: fun
+  defp deps_on_tool_call_delta(_), do: nil
 
   defp safe_apply(fun, arg) do
     fun.(arg)

@@ -734,6 +734,48 @@ defmodule ExAgent.CoreContractTest do
     refute_receive {:text, "thought"}
   end
 
+  defmodule ToolPreviewSource do
+    @behaviour ExAgent.Model
+    defstruct [:owner, :final]
+    def model_name(_), do: "tool-preview"
+    def system(_), do: "test"
+    def request(_, _, _, _), do: {:error, :stream_only}
+
+    def request_stream(model, _, _, params) do
+      send(model.owner, {:opt_in, params.tool_call_deltas})
+
+      [
+        {:tool_call_delta, %{index: 0, name: "final_result", fragment: ""}},
+        {:tool_call_delta, %{index: 0, name: nil, fragment: ~s({"text":"Ho)}},
+        {:tool_call_delta, %{index: 0, name: nil, fragment: ~s(la"})}},
+        {:response, model.final, %TestModel{index: 2}}
+      ]
+    end
+  end
+
+  test "tool-argument previews reach an opted-in callback and never the result" do
+    owner = self()
+    final = response([%Part.Text{content: "Hola"}])
+    agent = ExAgent.new(model: %ToolPreviewSource{owner: owner, final: final})
+
+    assert {:ok, result} =
+             ExAgent.run(agent, "go",
+               stream_text: true,
+               deps: %{on_tool_call_delta: &send(owner, {:preview, &1})}
+             )
+
+    assert result.output == "Hola"
+    assert_receive {:opt_in, true}
+    assert_receive {:preview, %{index: 0, name: "final_result", fragment: ""}}
+    assert_receive {:preview, %{fragment: ~s({"text":"Ho)}}
+    assert_receive {:preview, %{fragment: ~s(la"})}}
+
+    # Without a callback the request does not opt in, and stray previews are ignored.
+    assert {:ok, %{output: "Hola"}} = ExAgent.run(agent, "go", stream_text: true)
+    assert_receive {:opt_in, false}
+    refute_receive {:preview, _}
+  end
+
   test "tool statuses survive JSON round trips; invalid statuses reject" do
     for status <- [:succeeded, :validation_error, :denied, :failed, :unknown, :not_executed] do
       part = %Part.ToolReturn{

@@ -23,6 +23,11 @@ limpio; HEX_API_KEY guardada y workflow activo. El usuario pide lanzar v2 y
 comprobar el envío real. Se alinean los docs antes del tag; la disponibilidad
 se acreditará por el job y lectura del TAR/documentación públicos, no por la clave.
 
+**Delta de consumidor 2026-10-04 — vista previa de argumentos de tools:**
+evento opt-in `tool_call_delta` y `ModelRequestParameters.tool_call_deltas`
+para que una UI muestre la salida estructurada mientras se genera. Aditivo,
+sin publicar ni subir versión; producción de los consumidores sigue en 2.0.0.
+
 **Delta de consumidor2026-10-04 — causa de cortes conservada:** una Response
 incompleta de6–8KiB, válida dentro de P, excedía el límite4KiB al copiarse
 también en RequestError y ocultaba length/content_filter. Ahora sólo esa copia

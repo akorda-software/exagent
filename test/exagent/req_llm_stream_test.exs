@@ -569,6 +569,36 @@ defmodule ExAgent.ReqLLMStreamTest do
     refute_receive {:request, _, _}, 0
   end
 
+  test "tool-call argument fragments stream as previews only when requested" do
+    # The wire carries the mandatory envelope; previews expose it verbatim.
+    args = ~s({"arguments":{"value":"Las ratas chillan"}})
+
+    for opt_in <- [true, false] do
+      {url, _peer} = scripted([reply([call(args)])])
+      params = %ModelRequestParameters{function_tools: [tool()], tool_call_deltas: opt_in}
+      events = stream(model(url), params) |> Enum.to_list()
+      previews = for {:tool_call_delta, delta} <- events, do: delta
+
+      if opt_in do
+        assert [%{index: 0, name: "effect", fragment: ""} | fragments] = previews
+        assert Enum.map_join(fragments, & &1.fragment) == args
+        assert Enum.all?(fragments, &(&1.name == nil and &1.index == 0))
+      else
+        assert previews == []
+      end
+
+      assert {:response, response, _} = List.last(events)
+
+      assert [
+               %Message.Part.ToolCall{
+                 tool_name: "effect",
+                 args: %{"value" => "Las ratas chillan"}
+               }
+             ] =
+               response.parts
+    end
+  end
+
   test "halt and exception after a delta close real transport" do
     for mode <- [:halt, :raise] do
       {url, peer} = peer()

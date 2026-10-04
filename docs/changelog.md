@@ -6,6 +6,21 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Opt-in tool-call argument previews while streaming. `ModelRequestParameters`
+  gains `tool_call_deltas: false`; when a run's deps carry
+  `on_tool_call_delta` (arity 1), the request opts in and the callback receives
+  `%{index: index, name: name_or_nil, fragment: binary}` as arguments are
+  generated (the first event for an index carries the tool name). The ReqLLM
+  stream bridge maps stock `on_tool_call`/`on_meta` `tool_call_args` chunks to
+  `{:tool_call_delta, delta}`; `Model.request_stream/4` admits that event and
+  drops it unless requested, so existing consumers see no new events. Previews
+  never enter partial responses, history or retention; the terminal response
+  stays authoritative. Whether fragments arrive incrementally depends on the
+  upstream provider (some deliver arguments in one block). Two new cases cover
+  stock HTTP/SSE fragments with and without opt-in and the run callback.
+
 ### Documentation
 
 - Replace the public development-history navigation with a task-oriented manual

@@ -18,7 +18,8 @@ defmodule ExAgent.ModelRequestParameters do
             allow_text_output: true,
             output_object: nil,
             idempotency_key: nil,
-            instructions: []
+            instructions: [],
+            tool_call_deltas: false
 
   @type t :: %__MODULE__{
           function_tools: [Tool.t()],
@@ -27,7 +28,8 @@ defmodule ExAgent.ModelRequestParameters do
           allow_text_output: boolean(),
           output_object: output_object() | nil,
           idempotency_key: String.t() | nil,
-          instructions: [Message.Part.System.t()]
+          instructions: [Message.Part.System.t()],
+          tool_call_deltas: boolean()
         }
 end
 
@@ -71,6 +73,11 @@ defmodule ExAgent.Model do
   `{:usage, cumulative_request_usage}`, and exactly one terminal
   `{:response, response, final_model}` or `{:error, reason}`. Usage snapshots
   replace earlier snapshots for this request; they are not additive deltas.
+  When `params.tool_call_deltas` is true, implementations may also emit
+  `{:tool_call_delta, %{index: index, name: name_or_nil, fragment: binary}}`
+  as tool-call arguments are generated: the first event for an index carries
+  the tool name, later ones carry raw argument JSON fragments. They are a
+  preview only; the terminal response stays authoritative.
   Implementations must release resources when enumeration halts. A stream
   ending without a terminal is a protocol error. Implementations may return
   `{:error, _}` directly when streaming is unsupported.
@@ -208,12 +215,26 @@ defmodule ExAgent.Model do
     case reduced do
       {:suspended, event, continuation} ->
         case event do
-          {:text_delta, text} when is_binary(text) -> {[event], {:next, continuation}}
-          {:thinking_delta, text} when is_binary(text) -> {[event], {:next, continuation}}
-          {:usage, %Message.Usage{}} -> {[event], {:next, continuation}}
-          {:response, %Message.Response{}, %_{}} -> {[event], {:done, continuation}}
-          {:error, _} -> {[event], {:done, continuation}}
-          other -> {[{:error, {:invalid_stream_event, other}}], {:done, continuation}}
+          {:text_delta, text} when is_binary(text) ->
+            {[event], {:next, continuation}}
+
+          {:thinking_delta, text} when is_binary(text) ->
+            {[event], {:next, continuation}}
+
+          {:usage, %Message.Usage{}} ->
+            {[event], {:next, continuation}}
+
+          {:tool_call_delta, %{index: i, fragment: f}} when is_integer(i) and is_binary(f) ->
+            {[event], {:next, continuation}}
+
+          {:response, %Message.Response{}, %_{}} ->
+            {[event], {:done, continuation}}
+
+          {:error, _} ->
+            {[event], {:done, continuation}}
+
+          other ->
+            {[{:error, {:invalid_stream_event, other}}], {:done, continuation}}
         end
 
       {status, _} when status in [:done, :halted] ->

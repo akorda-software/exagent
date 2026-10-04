@@ -13,6 +13,31 @@
 > Conserva sus reproducciones y guards como estado runtime, no como aceptación
 > del nuevo contrato. C7 y los contratos de autoridad/recuperación permanecen.
 
+## Vista previa opt-in de argumentos de tools en streaming (2026-10-04)
+
+**Problema demostrado:** un consumidor (Dragonex) publica su prosa como argumento
+de una tool de salida estructurada. Durante el stream solo llegaban deltas de
+texto libre; ReqLLM decodifica fragmentos de argumentos (`tool_call_args`),
+pero el puente los ignoraba y `request_stream` rechazaba cualquier otro evento
+como `invalid_stream_event`, así que la interfaz no podía mostrar nada hasta
+el final de la respuesta.
+
+**Decisión/beneficio general:** `ModelRequestParameters.tool_call_deltas`
+(falso por defecto) y el evento `{:tool_call_delta, %{index, name, fragment}}`.
+El loop solo lo pide cuando `deps.on_tool_call_delta` es una función y entrega
+cada fragmento a ese callback. Los fragmentos son vista previa: no entran en la
+respuesta parcial, el historial ni la retención; las tool calls ejecutables
+siguen saliendo de la respuesta terminal validada.
+
+**Alternativas/impacto/migración:** emitir siempre el evento cambiaría lo que
+reciben consumidores existentes de `request_stream`; reconstruir tool calls
+desde fragmentos duplicaría la validación terminal. Aditivo y opt-in: sin
+migración. Que los fragmentos lleguen troceados depende del proveedor
+(medido en OpenRouter: algunos entregan los argumentos en un bloque).
+
+**Verificación:** HTTP/SSE stock con fragmentos por codepoint, con y sin opt-in,
+y callback en run; subconjunto offline de streaming/modelos/runtime en verde.
+
 ## Causa de errores Model con respuesta parcial duplicada (2026-10-04)
 
 **Problema demostrado:** Dragonex19447/51 falla con boundary:error,6300/4096

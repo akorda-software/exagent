@@ -32,13 +32,44 @@ defmodule ExAgent.Models.ReqLLMStream do
             true -> Process.put(key, {count + 1, bytes + size})
           end
         end,
-        on_result: fn text -> emit.({:text_delta, text}) end
+        on_result: fn text -> emit.({:text_delta, text}) end,
+        on_tool_call: fn chunk -> emit_tool_start(chunk, emit) end,
+        on_meta: fn chunk -> emit_tool_fragment(chunk, emit) end
       )
     after
       Process.delete(key)
       close_backend(stream)
     end
   end
+
+  # A tool call opens with its name; providers that stream arguments then send
+  # meta chunks with raw JSON fragments. A call delivered whole carries its
+  # arguments at once.
+  defp emit_tool_start(%{name: name, arguments: args, metadata: meta}, emit)
+       when is_binary(name) do
+    fragment =
+      if is_map(args) and map_size(args) > 0 and
+           not Map.get(meta || %{}, :expects_arg_fragments, false),
+         do: Jason.encode!(args),
+         else: ""
+
+    emit.({:tool_call_delta, %{index: tool_index(meta), name: name, fragment: fragment}})
+  end
+
+  defp emit_tool_start(_chunk, _emit), do: :ok
+
+  defp emit_tool_fragment(
+         %{metadata: %{tool_call_args: %{index: index, fragment: fragment}}},
+         emit
+       )
+       when is_binary(fragment) and fragment != "" do
+    emit.({:tool_call_delta, %{index: index, name: nil, fragment: fragment}})
+  end
+
+  defp emit_tool_fragment(_chunk, _emit), do: :ok
+
+  defp tool_index(%{index: index}) when is_integer(index), do: index
+  defp tool_index(_), do: 0
 
   defp open(operation, timeout) do
     owner = self()

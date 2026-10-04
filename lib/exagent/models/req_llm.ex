@@ -369,6 +369,15 @@ defmodule ExAgent.Models.ReqLLM do
     if is_integer(timeout) and timeout > 0 and timeout <= 300_000 do
       ExAgent.Models.ReqLLMStream.new(
         fn register, emit ->
+          # Tool-argument previews are opt-in; other consumers never see them.
+          emit =
+            if params.tool_call_deltas,
+              do: emit,
+              else: fn
+                {:tool_call_delta, _} -> :ok
+                event -> emit.(event)
+              end
+
           case interaction(model, messages, settings, params, {:stream, register, emit}) do
             {:ok, response, final_model} -> {:response, response, final_model}
             {:error, _} = error -> error
