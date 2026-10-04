@@ -68,6 +68,14 @@ Put that tuple in the processor's `exporter:` field from
 [Observability](../guides/observability.md). Credentials are resolved through
 trusted transport configuration, outside SDK bootstrap options and span data.
 
+For this recipe also set the processor's `max_export_batch_size: 8` or less:
+the 256-span direct-export example exceeds this transport's admission bound.
+With the shown `deadline_ms: 2000`, use `exporting_timeout_ms: 4000` so the
+processor allows the callback's deadline plus 1,500 ms cleanup/receipt margin.
+A shorter processor timeout can cancel before verified closure and leave the
+gate closed. Keep the queue finite and choose capacities for your application's
+traffic; these values are transport configuration, not a delivery guarantee.
+
 ## Use gRPC when needed
 
 Choose `protocol: :grpc`, use `vm_worker.exs`, and supply the receiver's loopback
