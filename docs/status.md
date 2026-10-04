@@ -9,6 +9,13 @@ This page retains dated maintainer evidence and is excluded from public ExDoc.
 The public capability reference is [Supported features](guides/support.md).
 Earlier "no publication" statements below describe their dated checkpoints.
 
+The public manual has been updated through docs-only
+[run37200325267](https://github.com/akorda-software/exagent/actions/runs/37200325267),
+success, from main1fe5e00.19 documentation cases and17 publication controls pass;
+HTML/Markdown/EPUB links and published content are checked. Internal roadmap,
+plans and receipts are excluded from ExDoc. The original package checksum is
+unchanged. [Documentation receipt](orchestration/2026-10-01-v2-codex/DOCUMENTATION-PUBLICATION.md).
+
 Consumer delta2026-10-04 preserves the request failure category when a duplicate
 incomplete Response exceeds the4KiB error copy. Only the copy is omitted;
 the bounded original remains in RunError.partial.pending_response and never

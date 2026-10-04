@@ -1,12 +1,11 @@
 # ExAgent v2 — estado vigente, 2026-10-04
 
-El usuario autoriza subir todo directamente a `main`, sin PR obligatoria.
-Versión2.0.0/workflow/docs ya en main; PR1 integrada automáticamente por el push.
-Deltas de otro dueño: guía backend y causa RequestError con copia Response omitida.
+Commits directos a main autorizados; PR1 integrada. Deltas envelope/Response: MAIN-INTEGRATION.
 159focales juntos pasan en copia propia1.20/29,14.3s; FULL anterior no cubre estos deltas.
-v2.0.0 publicada desde tag57c43a7; run37195029263 success, TAR remoto exacto y docs.
-[RELEASE-PUBLICATION](RELEASE-PUBLICATION.md) conserva checksum y contenido del tag.
-Ahora: manual público sin planes/historia; docs-only con AST/deps runtime intactos.
+v2tag57c43a7/run37195029263success, TAR/docs públicos: [RELEASE-PUBLICATION](RELEASE-PUBLICATION.md).
+Manual público actualizado sin planes/historia; docs-only con AST/deps intactos.
+[DOCUMENTATION-PUBLICATION](DOCUMENTATION-PUBLICATION.md):19casos/17guards pasan;
+run37200325267 success, readback público y checksum del paquete intacto.
 ReqLLM stock, R1.2/C7 aceptados, guards intactos; una revisión máxima, sin reruns rutinarios.
 
 ## Cierre operativo y aportaciones Dragonex
@@ -59,8 +58,7 @@ Lock45: revisión43paquetes/11actualizaciones y dos paquetes metric0.6 añadidos
 Gproc bloqueado por grpcbox; warnings upstream intactos. [DEPENDENCIES](DEPENDENCIES.md)
 conserva fuentes/recibos/TAR/rojos, FULL previo y G2/PG anteriores.
 
-ExDoc tiene portada, guías, mapa API para agentes y llms.txt/Markdown/EPUB;
-`bin/check` verifica enlaces. [DOCUMENTATION](DOCUMENTATION.md) conserva su recibo.
+ExDoc/llms/Markdown/EPUB y enlaces: [DOCUMENTATION](DOCUMENTATION.md), recibo anterior.
 
 ## Rutina local y CI
 
@@ -98,5 +96,5 @@ sus cambios/E2E están autorizados, su commit no está autorizado.
 Roadmap único: docs/development/roadmap.md. [FINAL-CANDIDATE](FINAL-CANDIDATE.md),
 [CRITICAL-REVIEW](CRITICAL-REVIEW.md), [E2E](E2E-ACCEPTANCE.md),
 [OPIK](OPIK-ACCEPTANCE.md) conservan identidad y límites de las candidatas previas.
-Offline EXAGENT_OFFLINE=1 MIX_ENV=test, dotenv deshabilitado. Siguiente: terminar
-manual y actualizar sólo HexDocs; no bump/tag/reemplazo/runtime nuevo. Commits a main.
+Offline EXAGENT_OFFLINE=1 MIX_ENV=test, dotenv deshabilitado. Publicación y manual
+cerrados. Commits a main; conservar estos recibos y el tag, sin reabrir olas aceptadas.

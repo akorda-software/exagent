@@ -10,6 +10,14 @@ El usuario pide ahora manual público sin roadmap ni historia de implementación
 se excluyen esos registros de ExDoc, se alinean las guías y se prepara actualización
 sólo de docs. R9 sigue cerrada; runtime/dependencias permanecen los publicados.
 
+**Manual publicado 2026-10-04:** docs-only desde main1fe5e00, run37200325267
+success y checksum del paquete intacto.19casos documentados y17guards pasan;
+102HTML/100Markdown/100EPUB locales sin enlaces rotos. Lectura de202entradas
+públicas conserva texto/estructura y sólo muestra las transformaciones nofollow/
+analytics de HexDocs. Roadmap, planes y recibos fuera de la navegación pública.
+Ver [recibo](../orchestration/2026-10-01-v2-codex/DOCUMENTATION-PUBLICATION.md).
+Sin nueva aceptación runtime/cloud/SQL ni pendiente de publicar esta v2.
+
 **Publicación autorizada2026-10-04:** cambios integrados en mainf4dc6ca, árbol
 limpio; HEX_API_KEY guardada y workflow activo. El usuario pide lanzar v2 y
 comprobar el envío real. Se alinean los docs antes del tag; la disponibilidad

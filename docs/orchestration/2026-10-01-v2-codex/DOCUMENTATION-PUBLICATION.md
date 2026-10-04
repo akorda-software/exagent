@@ -83,3 +83,31 @@ dejando margen de1.5s para closure/receipt; el ejemplo directo de256 no se copia
 sin ajustar. Generación estricta y4208/516/2519destinos siguen sin errores.
 El paquete existente debe conservar SHA256
 `c0402a9146b84d1e6f4a2fc04069502aa99e67e43809ccb1b8aca844a2d3be5d`.
+
+## Distribución cerrada
+
+Tercer envío desde main, commit `1fe5e006fd6ab68941c6865ecb6add95db9f3c70`:
+[run37200325267](https://github.com/akorda-software/exagent/actions/runs/37200325267)
+completado success. Job11:55:00–11:56:48UTC. Guard autenticado, compile, ExDoc,
+links, artefacto, publicación sólo de docs y lectura pública pasan. El tag original
+57c43a7 y SHA256 del paquete permanecen intactos. La consulta local autenticada
+también pasa usando el config existente de gh; el XDG privado de tooling no
+incluía ese login y se conserva su fallo local, sin modificar config global.
+
+La lectura del job coteja índice, welcome, índice de tareas, agentes, llms,
+README y sidebar con el artefacto retenido. Una lectura local posterior consulta
+202 entradas HTML/Markdown/llms/sidebar:201 coinciden byte a byte tras las dos
+transformaciones conocidas. api-reference difiere únicamente por rel=nofollow
+añadido al enlace externo de MCP; texto, estructura y destino son idénticos.
+No se trata esa transformación de HTML como un cambio de contenido del manual.
+EPUB se valida localmente; no se afirma igualdad raw del binario publicado.
+Las antiguas URLs roadmap, r4-implementation, production-acceptance y
+execution-flow devuelven404 con la versión actual. Recibo `removed-pages.json`.
+
+Recibos privados finales: `workflow-run03.json/log`, `github-artifact-final`,
+`documentation-final.json`, `metadata-authenticated-final.log`,
+`public-all-pages.json` y `api-reference.html.diff`.
+El manual queda disponible en [HexDocs](https://hexdocs.pm/exagent/2.0.0/),
+con [guía para agentes](https://hexdocs.pm/exagent/2.0.0/agents.html).
+README y notas de GitHub apuntan a los contratos de uso actuales. Sin pendiente
+de publicación, nuevo tag, bump, suite FULL o aceptación externa por este delta.
