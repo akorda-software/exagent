@@ -2,6 +2,7 @@
 import json
 import hashlib
 import importlib.util
+from importlib.machinery import SourceFileLoader
 from pathlib import Path
 import shutil
 import subprocess
@@ -15,6 +16,10 @@ HELPER = ROOT / "test/support/documentation_runtime_identity.exs"
 spec = importlib.util.spec_from_file_location("documentation_publication", ROOT / "test/support/documentation_publication.py")
 publication = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(publication)
+loader = SourceFileLoader("documentation_release", str(CHECK))
+release_spec = importlib.util.spec_from_loader(loader.name, loader)
+release_check = importlib.util.module_from_spec(release_spec)
+loader.exec_module(release_check)
 
 
 class DocumentationReleaseTest(unittest.TestCase):
@@ -155,6 +160,13 @@ end
 
 
 class DocumentationReadbackTest(unittest.TestCase):
+    def test_release_lookup_uses_authenticated_github_cli(self):
+        result = {"tag_name": "v2.0.0", "draft": False, "prerelease": False}
+        with patch.object(release_check.subprocess, "check_output", return_value=json.dumps(result)) as call:
+            self.assertEqual(release_check.read_github_release("v2.0.0"), result)
+            call.assert_called_once_with(
+                ["gh", "api", "repos/akorda-software/exagent/releases/tags/v2.0.0"], text=True)
+
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory(prefix="exagent-docs-readback-")
         self.addCleanup(self.temporary.cleanup)

@@ -26,6 +26,13 @@ def read_json(url):
         return json.load(response)
 
 
+def read_github_release(tag):
+    # gh uses the workflow's read-only GH_TOKEN, or the maintainer's existing
+    # login locally. Hex requests never receive that credential.
+    return json.loads(subprocess.check_output(
+        ["gh", "api", "repos/akorda-software/exagent/releases/tags/" + tag], text=True))
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("tag")
@@ -51,7 +58,7 @@ def main():
     result = {"tag": args.tag, "version": expected, "release_commit": git("rev-parse", args.tag + "^{commit}"),
               "docs_commit": git("rev-parse", "HEAD"), "mode": "prepare" if args.prepare else "published-docs-update"}
     if not args.prepare:
-        release = read_json("https://api.github.com/repos/akorda-software/exagent/releases/tags/" + args.tag)
+        release = read_github_release(args.tag)
         if release.get("tag_name") != args.tag or release.get("draft") or release.get("prerelease"):
             raise ValueError("expected an official stable GitHub release")
         package = read_json("https://hex.pm/api/packages/exagent/releases/" + expected)

@@ -39,6 +39,7 @@ jobs:
       - name: Require an existing release with unchanged executable source
         env:
           RELEASE_TAG: ${{ inputs.tag }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           python3 bin/docs-release-check "$RELEASE_TAG" > "$RUNNER_TEMP/documentation.json"
           cat "$RUNNER_TEMP/documentation.json"

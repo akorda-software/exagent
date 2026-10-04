@@ -30,7 +30,7 @@ offline y copia aislada, sin alterar build compartido/configuración global.
 | Comprobación | Resultado |
 |---|---|
 | Guard del runtime contra tag v2.0.0 | AST ejecutable/specs, proyecto/deps, config, ejemplos e inventarios iguales |
-| Guards de publicación de docs | 16 pruebas offline pasan; historias Git reales y controles de readback |
+| Guards de publicación de docs | 17 pruebas offline pasan; historias Git reales, CLI autenticado y controles de readback |
 | Ejemplos documentados | 19 casos pasan, incluida la proyección Opik tomada del bloque de la guía; los bloques de deps/Config/MCP externos son syntax-only, no ejecución externa |
 | Sintaxis de guías públicas | 61 bloques Elixir y un fragmento de lista válidos |
 | Compilación dev/test | Estricta, exit0 en ambos |
@@ -53,7 +53,7 @@ y tres páginas del artefacto real y sus respuestas públicas originales.
 Markdown y sidebar se comparan sin normalización. No afirmar igualdad raw del HTML.
 
 Recibos privados: `.exagent-local/docs20261004/final-commands.json`, logs finales,
-`final-source-identity.json`, `guards-16-final.log`, `quoted-doc-negative.log`,
+`final-source-identity.json`, `guards-17-final.log`, `quoted-doc-negative.log`,
 `api-final-commands.json` y logs `*-opik-final.log`. FULL, SQL, proveedores y servicios mantienen sus recibos
 anteriores; este delta no los repite ni reabre R9.
 
@@ -70,5 +70,16 @@ Con la normalización exacta corregida, lectura pública local del artefacto rem
 7entradas coinciden y checksum del TAR intacto, exit0. No se relabela el job rojo;
 un nuevo envío desde main debe acreditar el workflow completo en verde.
 Recibos: `workflow-run01.json/log`, `*.html.diff`, `run01-corrected-readback.json`.
+
+Segundo intento: commit `c96adafed2b5fab0aa7faae7feffc40a3b5c76ac`,
+[run37199832107](https://github.com/akorda-software/exagent/actions/runs/37199832107).
+Se detiene en lectura pública de GitHub: HTTP403rate limit. No compila ni publica.
+La consulta pasa a `gh api` con GH_TOKEN automático/read-only únicamente en ese
+paso; Hex no recibe ese token. Se verifica el despacho CLI y siguen pasando
+los guards offline. Recibos `workflow-run02.json/log`. Nuevo envío pendiente.
+
+La receta de VM explicita batch de8 o menos y timeout de4s para deadline2s,
+dejando margen de1.5s para closure/receipt; el ejemplo directo de256 no se copia
+sin ajustar. Generación estricta y4208/516/2519destinos siguen sin errores.
 El paquete existente debe conservar SHA256
 `c0402a9146b84d1e6f4a2fc04069502aa99e67e43809ccb1b8aca844a2d3be5d`.

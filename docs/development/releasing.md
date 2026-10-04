@@ -58,6 +58,9 @@ specs, proyecto/dependencias, configuración, ejemplos e inventario. Sólo permi
 prosa y funciones de configuración de ExDoc. Su modo prepare no autoriza escritura.
 
 El job exige checkout limpio de main y una release estable activa en GitHub/Hex.
+La consulta de GitHub usa `gh api` con el token automático de lectura del job,
+evitando el límite anónimo. El check local requiere `gh` y su login ya configurado;
+`--prepare` no consulta redes. Las lecturas de Hex no reciben ese token.
 Compila, genera ExDoc estricto y verifica HTML, Markdown, EPUB y ausencia de
 planes/historia de desarrollo en las páginas públicas. Conserva páginas y las
 identidades del tag y del commit documental. Sólo el paso `hex.publish docs --yes`
