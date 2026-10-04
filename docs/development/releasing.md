@@ -62,7 +62,8 @@ Compila, genera ExDoc estricto y verifica HTML, Markdown, EPUB y ausencia de
 planes/historia de desarrollo en las páginas públicas. Conserva páginas y las
 identidades del tag y del commit documental. Sólo el paso `hex.publish docs --yes`
 recibe la clave. La lectura pública exige los mismos bytes para entradas y sidebar,
-quitando únicamente el bloque exacto de analytics que HexDocs inserta en HTML,
+normalizando sólo el bloque exacto de analytics y el nofollow del enlace ExDoc
+que HexDocs añade en HTML,
 con reintentos de propagación, y que el TAR existente conserve su checksum.
 Las suites largas y los proveedores pagados no se vuelven a ejecutar por prosa.
 

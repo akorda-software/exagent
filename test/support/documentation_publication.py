@@ -13,11 +13,16 @@ HEXDOCS_ANALYTICS = (b'<script async defer src="https://s.hexdocs.pm/js/script.j
                     b'<script>window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},'
                     b'plausible.init=plausible.init||function(i){plausible.o=i||{}};'
                     b'plausible.init({endpoint:"https://s.hexdocs.pm/api/event"})</script>')
+EXDOC_FOOTER = (b'<a href="https://github.com/elixir-lang/ex_doc" title="ExDoc" '
+                b'target="_blank" rel="help noopener" translate="no">ExDoc</a>')
+HEXDOCS_FOOTER = EXDOC_FOOTER.replace(b'rel="help noopener"', b'rel="help noopener nofollow"')
 
 
 def documentation_bytes(name, value):
     if name.endswith(".html") and value.count(HEXDOCS_ANALYTICS) == 1:
-        return value.replace(HEXDOCS_ANALYTICS, b"", 1)
+        value = value.replace(HEXDOCS_ANALYTICS, b"", 1)
+    if name.endswith(".html") and value.count(HEXDOCS_FOOTER) == 1:
+        value = value.replace(HEXDOCS_FOOTER, EXDOC_FOOTER, 1)
     return value
 
 
@@ -53,7 +58,7 @@ def verify(metadata, root):
         if not pending:
             print(json.dumps({"version": version, "docs_commit": metadata["docs_commit"],
                               "verified_pages": names, "hex_checksum": metadata["hex_checksum"],
-                              "html_normalization": "exact HexDocs analytics block only"}))
+                              "html_normalization": "exact HexDocs analytics block and ExDoc footer nofollow only"}))
             return
         if attempt < 11:
             time.sleep(5)

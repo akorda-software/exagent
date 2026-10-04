@@ -30,7 +30,7 @@ offline y copia aislada, sin alterar build compartido/configuración global.
 | Comprobación | Resultado |
 |---|---|
 | Guard del runtime contra tag v2.0.0 | AST ejecutable/specs, proyecto/deps, config, ejemplos e inventarios iguales |
-| Guards de publicación de docs | 15 pruebas offline pasan; historias Git reales y controles de readback |
+| Guards de publicación de docs | 16 pruebas offline pasan; historias Git reales y controles de readback |
 | Ejemplos documentados | 19 casos pasan, incluida la proyección Opik tomada del bloque de la guía; los bloques de deps/Config/MCP externos son syntax-only, no ejecución externa |
 | Sintaxis de guías públicas | 61 bloques Elixir y un fragmento de lista válidos |
 | Compilación dev/test | Estricta, exit0 en ambos |
@@ -46,19 +46,29 @@ Ese negativo falla antes de la corrección y el caso pasa después. También se
 rechazan fuente/specs/deps/config/examples/version/inventario modificados,
 checkout sucio, rama sin integrar, paquete sustituido y páginas obsoletas.
 
-HexDocs inserta un bloque de analytics en HTML. La comparación pública elimina
-sólo ese bloque exacto; cualquier otra transformación falla. Esto se coteja con
-el index del artefacto de la publicación real y su respuesta pública original.
+HexDocs inserta un bloque de analytics en HTML y añade nofollow al enlace exacto
+de ExDoc en el footer. La comparación pública normaliza sólo esas dos
+transformaciones; cualquier otra diferencia falla. Esto se coteja con el index
+y tres páginas del artefacto real y sus respuestas públicas originales.
 Markdown y sidebar se comparan sin normalización. No afirmar igualdad raw del HTML.
 
 Recibos privados: `.exagent-local/docs20261004/final-commands.json`, logs finales,
-`final-source-identity.json`, `guards-final.log`, `quoted-doc-negative.log`,
+`final-source-identity.json`, `guards-16-final.log`, `quoted-doc-negative.log`,
 `api-final-commands.json` y logs `*-opik-final.log`. FULL, SQL, proveedores y servicios mantienen sus recibos
 anteriores; este delta no los repite ni reabre R9.
 
 ## Distribución
 
-Preparación local cerrada. Pendiente ejecutar `documentation.yml` desde main,
-actualizar sólo HexDocs y registrar commit, job y comparación pública.
+Primer envío: commit `4a933cc50f9c6b0fa193ab3e7986deb7f504c82e`,
+[run37199064798](https://github.com/akorda-software/exagent/actions/runs/37199064798).
+Guard, build, links, artefacto y publicación pasan. El readback falla por
+un nofollow añadido al enlace ExDoc del footer; los diffs de las tres páginas
+confirman únicamente esos9bytes tras quitar el analytics ya conocido.
+El índice, Markdown y sidebar ya coincidían. El negativo remoto se conserva.
+
+Con la normalización exacta corregida, lectura pública local del artefacto remoto:
+7entradas coinciden y checksum del TAR intacto, exit0. No se relabela el job rojo;
+un nuevo envío desde main debe acreditar el workflow completo en verde.
+Recibos: `workflow-run01.json/log`, `*.html.diff`, `run01-corrected-readback.json`.
 El paquete existente debe conservar SHA256
 `c0402a9146b84d1e6f4a2fc04069502aa99e67e43809ccb1b8aca844a2d3be5d`.

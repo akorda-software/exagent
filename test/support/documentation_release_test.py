@@ -201,6 +201,13 @@ class DocumentationReadbackTest(unittest.TestCase):
         actual = actual.replace(b"</head>", b"<script>unknown()</script></head>")
         self.assertNotEqual(publication.documentation_bytes("index.html", actual), original)
 
+    def test_exdoc_footer_nofollow_is_normalized_only_for_the_exact_link(self):
+        expected = b"<footer>" + publication.EXDOC_FOOTER + b"</footer>"
+        actual = b"<footer>" + publication.HEXDOCS_FOOTER + b"</footer>"
+        self.assertEqual(publication.documentation_bytes("welcome.html", actual), expected)
+        different_link = actual.replace(b'title="ExDoc"', b'title="changed"')
+        self.assertNotEqual(publication.documentation_bytes("welcome.html", different_link), expected)
+
 
 if __name__ == "__main__":
     unittest.main()

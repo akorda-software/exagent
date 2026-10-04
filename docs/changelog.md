@@ -15,7 +15,7 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Add an explicit docs-only publication workflow for an existing stable release.
   Require unchanged executable AST, project/dependency contracts and runtime
   inventories; verify generated links and public content bytes (allowing only
-  HexDocs' exact HTML analytics insertion) and preserve the
+  HexDocs' exact analytics insertion and ExDoc footer nofollow) and preserve the
   published package checksum. No runtime or dependency changes.
 
 ## [2.0.0]
