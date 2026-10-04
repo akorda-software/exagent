@@ -108,44 +108,23 @@ defmodule ExAgent.MixProject do
         "docs/guides/troubleshooting.md",
         "docs/guides/agents.md",
         "README.md",
-        {"docs/README.md", filename: "documentation", title: "Documentation index"},
-        "docs/status.md",
+        {"docs/guides/index.md", filename: "documentation", title: "Documentation index"},
+        {"docs/guides/support.md", filename: "status", title: "Supported features and limits"},
+        "docs/guides/known-limits.md",
         "docs/guides/migration.md",
         "docs/guides/observability.md",
         {"docs/architecture/overview.md", filename: "architecture"},
-        "docs/architecture/design.md",
-        "docs/development/roadmap.md",
-        "docs/development/r4-implementation.md",
-        "docs/development/r5-implementation.md",
-        "docs/development/r6-implementation.md",
-        "docs/development/r7-mcp-implementation.md",
         "docs/development/continuation-jobs.md",
         "docs/development/framework-integrations.md",
         "docs/development/coordination-recipes.md",
         "docs/development/external-retrieval.md",
         "docs/development/mcp-continuation-binding.md",
-        "docs/development/otlp-transport.md",
         "docs/development/otlp-isolated-transport.md",
         "docs/development/otlp-collector-transport.md",
-        "docs/development/release-scope.md",
-        "docs/development/production-acceptance.md",
-        "docs/development/jido-comparison.md",
-        "docs/development/framework-direction.md",
-        "docs/development/verification.md",
-        "docs/development/dependencies.md",
-        "docs/development/known-limits.md",
-        "docs/development/real-consumer-e2e.md",
-        "docs/development/testing-audit.md",
-        "docs/development/execution-flow.md",
-        "docs/development/environment.md",
-        "docs/development/releasing.md",
-        "docs/development/backend-evaluation.md",
-        "docs/development/handoff.md",
-        "docs/changelog.md",
         "LICENSE"
       ],
       groups_for_extras: [
-        "Start here": ["docs/home.md", "docs/guides/getting-started.md", "docs/README.md"],
+        "Start here": ["docs/home.md", "docs/guides/getting-started.md", "docs/guides/index.md"],
         "Build with ExAgent": [
           "docs/guides/tools-and-output.md",
           "docs/guides/models-and-limits.md",
@@ -170,12 +149,11 @@ defmodule ExAgent.MixProject do
           "docs/guides/agents.md",
           "docs/guides/migration.md",
           "README.md",
-          "docs/status.md",
-          "docs/changelog.md",
+          "docs/guides/support.md",
+          "docs/guides/known-limits.md",
           "LICENSE"
         ],
-        Architecture: ~r"docs/architecture/",
-        "Maintaining ExAgent": ~r"docs/development/"
+        Architecture: ~r"docs/architecture/"
       ],
       source_ref: System.get_env("EXAGENT_DOCS_SOURCE_REF", "main"),
       groups_for_modules: [
@@ -256,5 +234,5 @@ defmodule ExAgent.MixProject do
 
   defp docs_footer(:html),
     do:
-      ~s(<p class="exagent-release-note">ExAgent v#{@version} · <a href="status.html">Support and release status</a> · <a href="llms.txt">View llms.txt</a></p>)
+      ~s(<p class="exagent-release-note">ExAgent v#{@version} · <a href="status.html">Supported features and limits</a> · <a href="llms.txt">View llms.txt</a></p>)
 end

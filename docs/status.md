@@ -1,5 +1,14 @@
 # Support and release status
 
+**Published 2026-10-04:** ExAgent 2.0.0 is available on
+[Hex](https://hex.pm/packages/exagent/2.0.0) and
+[HexDocs](https://hexdocs.pm/exagent/2.0.0/). The stable tag is `57c43a7`;
+[publication run37195029263](https://github.com/akorda-software/exagent/actions/runs/37195029263)
+succeeded and the public TAR matches its retained artifact and tag source contents.
+This page retains dated maintainer evidence and is excluded from public ExDoc.
+The public capability reference is [Supported features](guides/support.md).
+Earlier "no publication" statements below describe their dated checkpoints.
+
 Consumer delta2026-10-04 preserves the request failure category when a duplicate
 incomplete Response exceeds the4KiB error copy. Only the copy is omitted;
 the bounded original remains in RunError.partial.pending_response and never

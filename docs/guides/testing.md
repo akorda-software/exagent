@@ -1,9 +1,8 @@
 # Test your integration
 
-Use TestModel for deterministic application tests. Reserve provider, database and
-tracing acceptance for the profiles that actually need those systems. A passing
-offline test establishes your local behavior; it does not establish a backend's
-wire compatibility.
+Use TestModel to test application behavior without credentials or a network.
+Test a real provider, database or exporter separately when your application
+depends on that system's actual behavior.
 
 ## Assert on the public result
 
@@ -21,21 +20,18 @@ defmodule DocumentationAgentTest do
 end
 ```
 
-This is an application test: put it in your app's `test/` directory and run
-`mix test`. The model never accesses the network. Use `script:` for sequential
-responses, `{:tool_calls, calls}` for tool invocation, and a function
-`fn messages, params -> response end` when you need to inspect the actual request.
-`messages` is the message list, including the history supplied to that request.
+Put this in your application's `test/` directory and run `mix test`.
+Use `script:` for sequential responses, `{:tool_calls, calls}` for tool requests
+and `fn messages, params -> response end` to inspect the actual request.
+The messages include the history supplied to that interaction.
 
 ## Script every expected request
 
 An initially empty script uses `label:` or the generic response. A nonempty
-script must cover the complete loop: after a tool or a corrective-output retry,
-the agent may request another response. Exhaustion produces a model failure;
-it does not invent a successful final answer.
+script must cover the whole loop, including the next response after a tool or an
+output-validation retry. Exhaustion fails instead of inventing a final answer.
 
-This deliberately incomplete script records one simulated effect, then fails
-on the next request. The failure retains the confirmed progress:
+This script records one simulated effect, then fails on the next request:
 
 ```elixir
 effects = :atomics.new(1, [])
@@ -60,80 +56,30 @@ agent = ExAgent.new(model: model, tools: [tool])
 
 ## Make effects observable
 
-For a tool, inject a dependency that records invocations or sends a message to
-the test owner. Assert on the actual arguments, number of effects and result,
-including failure paths. [Tools and output](tools-and-output.md) contains a
-scripted two-request tool run you can adapt.
+Inject a dependency that records tool invocations or sends a message to the test
+process. Assert on arguments, effect count, returned parts and terminal result.
+Use an observable admission or effect boundary rather than elapsed sleeps to
+prove ordering. [Tools and output](tools-and-output.md) contains a scripted tool run.
 
-Useful cases include invalid arguments before an effect, a provider failure
-after an effect, budget exhaustion, cancellation, a checkpoint failure and a
-duplicate approval/job wake-up. Avoid using elapsed sleeps as proof of ordering;
-make the relevant admission or effect boundary observable.
+Cover invalid arguments before an effect, failure after an effect, exhausted
+budgets, cancellation, failed checkpoint and duplicate approval/job wake-ups.
+A failed final result must not accidentally make the application repeat a
+completed tool. Verify that checkpoint retry only repeats storage.
 
-## Run the package's local routine
+## Test the external boundary separately
 
-When contributing to **this repository**, run the complete local gate before
-committing or pushing a runtime change:
+| Your application uses | Verify |
+|---|---|
+| A real model | Exact endpoint/model, tool envelope, reasoning settings, streaming and output schema. |
+| PostgreSQL | Confirmed saves, restart/restore, competing decisions and uncertain-effect recovery. |
+| MCP | Your server's protocol, identity, timeout behavior and remote outcome. |
+| LiveView or jobs | Scoped event correlation, reconnect, duplicate deliveries and authenticated approval. |
+| OpenTelemetry | Parentage, status, usage quality, permitted content and destination ingestion. |
 
-```bash
-bin/check
-```
+A skipped or excluded case never ran. A selected case that times out fails.
+TestModel covers local execution contracts; it cannot prove a provider's wire
+compatibility, database durability or successful trace ingestion.
 
-It runs format, strict compilation and finite probes, the complete offline suite,
-ExDoc and TAR/isolation checks. `bin/check --package-consumers` adds clean package
-consumer graphs. Tooling setup and exact commands are in
-[Verification](../development/verification.md) and
-[Environment](../development/environment.md). Do not change global Hex settings
-to repair a project-local tool problem.
+See [Supported features and limits](support.md) for the supported configurations.
 
-For a documentation-only change, use the documentation gate described below;
-the accepted full runtime suite does not need a routine rerun. GitHub's six-job
-compatibility workflow is manual on the candidate branch and becomes manual on
-`main` when the PR is integrated. It is retained for explicit compatibility runs.
-
-## Read exclusions correctly
-
-The latest complete Elixir 1.20/OTP 29 run has **2,198 passes, zero failures and
-28 excluded tests**. This count identifies that run; it is not a fixed acceptance
-target. The [status page](../status.md) distinguishes each runtime and dated receipt.
-
-| Filter | Cases | Why excluded offline |
-|---|---|---|
-| `integration` | 22 | Real-provider chat/tools/stream/structured-output requests. |
-| `postgres` | 6 | A real database is required. |
-
-An excluded test's body does not run. It is not a passing test, a timeout or a
-measurement of external compatibility. A timeout in a selected test is a failure.
-Real acceptance is recorded separately in [Support status](../status.md).
-
-## Choose verification by boundary
-
-| Boundary | Check | What a pass establishes |
-|---|---|---|
-| Agent loop, tools, accounting, ownership and recovery | Complete offline suite and relevant focal cases | Deterministic local contracts using TestModel or controlled transport fixtures. |
-| Documentation | Executed snippets, strict ExDoc and HTML/Markdown/EPUB link readback | Selected examples agree with public APIs; local navigation resolves. External setup blocks are checked separately. |
-| Installed package | TAR membership/isolation and clean none/API/SDK/exporter consumers | The identified package installs with its declared optional dependencies and passes its consumer contracts. |
-| Real models and application workflows | Explicit G2 and consumer E2E profiles | Only the named model/API/options and selected scenarios; retain unsuccessful attempts. |
-| SQL, MCP SDK and tracing backends | Their explicit acceptance runners and API/UI receipts | Only the declared database, SDK or backend profile. Offline exclusions provide no evidence here. |
-
-See [Support status](../status.md) for each result and limitation. A functional
-consumer pass and a failed strict dependency diagnostic are different results;
-neither should be relabelled to imply the other.
-
-## Check documentation examples
-
-The repository's `test/support/documentation_probe.exs` selects the actual
-Markdown codeblocks and executes their local contracts in a disposable VM:
-
-```bash
-EXAGENT_OFFLINE=1 elixir -pa '_build/test/lib/*/ebin' test/support/documentation_probe.exs
-```
-
-Compile the checkout first using the local environment guide. Setup blocks for
-credentials, configuration and external dependencies are explicitly parsed or
-resolved without external IO; they are not counted as live acceptance. New
-task-guide examples are exercised by the same probe. Build the site with
-`mix docs --warnings-as-errors` and inspect the generated pages and links.
-
-API: `ExAgent.Models.Test`,
-`ExAgent.RunError`.
+API: `ExAgent.Models.Test`, `ExAgent.RunError`.

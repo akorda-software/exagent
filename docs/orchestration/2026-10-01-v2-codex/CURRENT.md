@@ -4,7 +4,9 @@ El usuario autoriza subir todo directamente a `main`, sin PR obligatoria.
 Versión2.0.0/workflow/docs ya en main; PR1 integrada automáticamente por el push.
 Deltas de otro dueño: guía backend y causa RequestError con copia Response omitida.
 159focales juntos pasan en copia propia1.20/29,14.3s; FULL anterior no cubre estos deltas.
-HEX_API_KEY configurada; usuario autoriza tag/release v2 y verificar Hex. Push no publica.
+v2.0.0 publicada desde tag57c43a7; run37195029263 success, TAR remoto exacto y docs.
+[RELEASE-PUBLICATION](RELEASE-PUBLICATION.md) conserva checksum y contenido del tag.
+Ahora: manual público sin planes/historia; docs-only con AST/deps runtime intactos.
 ReqLLM stock, R1.2/C7 aceptados, guards intactos; una revisión máxima, sin reruns rutinarios.
 
 ## Cierre operativo y aportaciones Dragonex
@@ -96,5 +98,5 @@ sus cambios/E2E están autorizados, su commit no está autorizado.
 Roadmap único: docs/development/roadmap.md. [FINAL-CANDIDATE](FINAL-CANDIDATE.md),
 [CRITICAL-REVIEW](CRITICAL-REVIEW.md), [E2E](E2E-ACCEPTANCE.md),
 [OPIK](OPIK-ACCEPTANCE.md) conservan identidad y límites de las candidatas previas.
-Offline EXAGENT_OFFLINE=1 MIX_ENV=test, dotenv deshabilitado. Siguiente: lanzar
-release oficial estable y observar workflow/TAR/HexDocs; guardar su recibo. Commits a main.
+Offline EXAGENT_OFFLINE=1 MIX_ENV=test, dotenv deshabilitado. Siguiente: terminar
+manual y actualizar sólo HexDocs; no bump/tag/reemplazo/runtime nuevo. Commits a main.

@@ -31,21 +31,16 @@ trace can retain an earlier error followed by a valid checkpoint/resume; inspect
 the operation's place in the tree and its causal outcome. Historical error spans
 are not erased by later success.
 
-Both backends have equal finite native/API/UI acceptance. Read
-[Observability](observability.md) before enabling content capture or choosing an
+Read [Observability](observability.md) before enabling content capture or choosing an
 export route. Content redaction occurs before transport; the host owns credentials,
 SDK and exporter lifecycle.
 
 ## Distinguish test results
 
-An excluded test never executed. In the accepted offline suite, 22 provider and
-six SQL cases are excluded because their external profiles are run separately.
-An executing test that reaches its timeout fails.
-
-The latest accepted compatibility run has green suites and functional consumer
-contracts, but the overall result is red from strict upstream dependency warnings.
-[Support status](../status.md) preserves both facts. Suppressing warnings or adding
-timeouts does not provide evidence of a repaired contract.
+An excluded test never executed. Provider and SQL tests require their external
+systems and explicit configuration. An executing test that reaches its timeout
+fails. A passing TestModel test establishes local behavior, not provider
+compatibility. Use [Testing](testing.md) to select the relevant boundary.
 
 ## Report a reproducible problem
 

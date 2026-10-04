@@ -6,7 +6,7 @@ defmodule ExAgent.Session.TurnPolicy do
   `ExAgent.Session` owns no scheduling logic of its own — it delegates "who acts
   next" and "may this participant act now" to the policy, so the same Session can
   drive a round-robin chat, an initiative-ordered combat, or a supervisor that
-  delegates (Phase 4).
+  alternates with workers.
 
   Policy state is a struct whose module implements this behaviour; arbitrary map
   or tuple states are not dispatched. Handoff uses an explicit callback, or keeps
@@ -32,7 +32,7 @@ defmodule ExAgent.Session.TurnPolicy do
 
     * `ExAgent.Session.TurnPolicy.RoundRobin` — insertion order, cycling forever.
     * `ExAgent.Session.TurnPolicy.Initiative` — an explicit `:order`, cycling forever.
-    * (Phase 4) `SupervisorDriven` — a coordinator participant directs others.
+    * `ExAgent.Session.TurnPolicy.SupervisorPolicy` — a supervisor alternates with workers.
   """
 
   alias ExAgent.Session.Participant

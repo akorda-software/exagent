@@ -6,7 +6,23 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Documentation
+
+- Replace the public development-history navigation with a task-oriented manual
+  for people and coding agents. Align README installation, current model profiles,
+  accounting, persistence, tracing, metrics and application integration recipes.
+  Keep dated plans and evidence in the source repository, outside public ExDoc.
+- Add an explicit docs-only publication workflow for an existing stable release.
+  Require unchanged executable AST, project/dependency contracts and runtime
+  inventories; verify generated links and public content bytes (allowing only
+  HexDocs' exact HTML analytics insertion) and preserve the
+  published package checksum. No runtime or dependency changes.
+
 ## [2.0.0]
+
+Published 2026-10-04 on Hex from tag `v2.0.0` / commit `57c43a7`.
+[Publication receipt](orchestration/2026-10-01-v2-codex/RELEASE-PUBLICATION.md).
+Preparation and "no publication" entries below retain their dated scope.
 
 ### Preserve incomplete-response failure causes — 2026-10-04
 

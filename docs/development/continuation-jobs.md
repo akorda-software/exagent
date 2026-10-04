@@ -6,10 +6,10 @@ record first: a pending approval waits, an approved/ready record resumes its exa
 cursor, and a terminal record returns data without starting another run. A claimed
 attempt remains busy; uncertainty requires explicit host recovery/reconciliation.
 The demo uses ephemeral ETS and synthetic effects; PostgreSQL durability and an
-actual Oban worker remain separate consumer qualification.
+actual Oban worker require application configuration.
 
 ```bash
-EXAGENT_OFFLINE=1 mix run examples/continuation_job.exs
+EXAGENT_OFFLINE=1 MIX_ENV=test mix run examples/continuation_job.exs
 ```
 
 The trusted app supplies the template, scoped Store, stable run ID, versioned
@@ -30,7 +30,7 @@ useful queue admission and does not replace the continuation's CAS boundary.
 
 The library owns neither Oban nor the app's tables, authentication, jobs or
 database lifecycle. Replace the demo ETS store with the app-owned PostgreSQL Repo
-and `durability: :durable` after running the real SQL profile. A changed template
+and `durability: :durable` after configuring and verifying durable storage. A changed template
 must change its version/reference, and resumes still validate current tool,
 authority, Model and output bindings. The recipe does not provide transactional
 external effects or exactly-once delivery.

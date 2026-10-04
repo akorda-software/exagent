@@ -40,8 +40,8 @@ model = ExAgent.Models.ReqLLM.new(
 
 These declarations configure admission; they do not prove the endpoint behaves
 correctly. Qualify the exact gateway/model combination you deploy. The
-[support matrix](../status.md) records the accepted minimal OpenRouter profile
-and leaves unproven reasoning, modality and continuation combinations guarded.
+[supported profiles](support.md) describe the available tool/output combinations.
+Unrepresented reasoning, modality and continuation combinations reject explicitly.
 
 Native output is separate: `output_profile: :chat_json_schema_v1` plus agent
 `output_mode: :native`. See [Tools and output](tools-and-output.md).
@@ -122,7 +122,7 @@ promised. [Migration](migration.md) documents option precedence and failure shap
 
 An incomplete response stays in `RunError.partial.pending_response`, outside
 executable history. Its duplicate in `RunError.reason` may carry an explicit
-`payload_omitted` marker when that error copy would exceed4KiB. Read the cause
+`payload_omitted` marker when that error copy would exceed 4 KiB. Read the cause
 from the bounded RequestError and diagnostic partial data from RunError;
 neither authorizes tools or proves that a turn completed. Arbitrary oversized
 error control still fails the original retention limit.

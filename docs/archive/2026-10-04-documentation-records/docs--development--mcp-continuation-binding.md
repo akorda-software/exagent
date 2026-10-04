@@ -72,7 +72,20 @@ local snapshots/descriptors do not require migration. Tool schemas, descriptions
 argument validation, permissions and effective-argument checks remain independent
 authority and are still revalidated on resume.
 
-Binding validation does not authenticate the peer or establish your OAuth/TLS
-deployment. Verify those application transport boundaries separately. Use
-[MCP](../guides/mcp.md) for ordinary connections and
-[Durability](../guides/durability-and-approvals.md) for persisted execution.
+The dedicated offline tests are:
+
+```bash
+EXAGENT_OFFLINE=1 MIX_ENV=test mix test \
+  test/exagent/mcp/continuation_binding_test.exs \
+  --seed 0 --warnings-as-errors
+```
+
+They use deterministic models, real loopback HTTP and a test-only single-writer
+disk Store across five fresh VMs. Set `EXAGENT_MCP_BINDING_ARTIFACTS` to a private
+artifact parent to retain their serialized records/phase receipts; otherwise the
+temporary directories are removed. This demonstrates bounded host binding and
+byte recovery, not production SQL, peer authentication, OAuth/TLS, cloud providers
+or multileaf C7 acceptance. The twelve-path integration passes its eleven-case
+focal on the combined physical freeze, after the delegation delta. The single
+R7 integration review found no concrete additional MCP blocker in that profile;
+its receipt and remaining qualifications are in the [roadmap](roadmap.md).

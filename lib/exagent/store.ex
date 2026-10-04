@@ -5,7 +5,7 @@ defmodule ExAgent.Store do
    ExAgent never owns a database: the store is a pluggable behaviour. The optional
   `ExAgent.Store.ETS` keeps snapshots in an in-process ETS table (dev/test); a
   `ExAgent.Store.Postgres` uses the application's Repo. Its continuation SQL
-  protocol requires separate real-backend qualification before claiming G3.
+  protocol requires an application-owned Repo, migrations and durable database lifecycle.
 
   Atomic continuation operations are experimental, optional and data-only. They
   require a trusted `scoped/2` descriptor and explicit durability admission.
@@ -19,7 +19,7 @@ defmodule ExAgent.Store do
     * `list_agent_snapshots/1`  — list all persisted agent snapshots.
     * `delete_agent_snapshot/2` — remove a snapshot by `agent_id`.
     * `save_session_snapshot/2` / `load_session_snapshot/2` — the session
-      counterparts (used by `ExAgent.Session` from Phase 3).
+      counterparts used by `ExAgent.Session`.
 
   ## Portability rule
 
@@ -64,15 +64,15 @@ defmodule ExAgent.Store do
   @doc "Delete an agent snapshot by `agent_id`."
   @callback delete_agent_snapshot(config :: term(), agent_id :: String.t()) :: :ok
 
-  @doc "Persist a session snapshot, keyed by `session_id` (Phase 3)."
+  @doc "Persist a session snapshot, keyed by `session_id`."
   @callback save_session_snapshot(config :: term(), snapshot :: session_snapshot()) ::
               :ok | {:error, term()}
 
-  @doc "Load a session snapshot by `session_id` (Phase 3)."
+  @doc "Load a session snapshot by `session_id`."
   @callback load_session_snapshot(config :: term(), session_id :: String.t()) ::
               {:ok, session_snapshot()} | {:error, :not_found | term()}
 
-  @doc "Delete a session snapshot by `session_id` (Phase 3)."
+  @doc "Delete a session snapshot by `session_id`."
   @callback delete_session_snapshot(config :: term(), session_id :: String.t()) :: :ok
 
   @optional_callbacks [

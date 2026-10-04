@@ -1,13 +1,11 @@
 # Integration notes for coding agents
 
 This is a compact entry point for agents implementing an **application using
-ExAgent**. It describes the 2.0 contracts; published 1.x packages have older APIs.
-Repository-maintenance instructions live in `AGENTS.md` in the source checkout;
-archived execution prompts are not application integration tasks.
+ExAgent**. It describes public APIs, result shapes and application responsibilities.
 
 ## Read only what the task needs
 
-1. Check [Support status](../status.md) and the dependency version in the application.
+1. Check [Supported features and limits](support.md) and the application's dependency version.
 2. Read [Getting started](getting-started.md) for the result and environment contract.
 3. Select the task guide below and inspect its linked module/function docs.
 4. Implement with public APIs, verify locally with TestModel, then qualify any
@@ -16,7 +14,7 @@ archived execution prompts are not application integration tasks.
 The generated site's `llms.txt` indexes pages and modules. Each page also has a
 Markdown representation, for example `getting-started.md` beside
 `getting-started.html`. Use those files for retrieval rather than scraping the
-sidebar or loading all design/history documents into context. In a source clone,
+sidebar. In a source clone,
 paths below are relative to `docs/guides/`; generated ExDoc pages are flattened.
 
 ## API map
@@ -38,7 +36,7 @@ paths below are relative to `docs/guides/`; generated ExDoc pages are flattened.
 | Delegation | `Coordination.delegation_tool/2`, `ExAgent.run_child/4` | [Coordination](coordination.md) |
 | Durable sequence/router/parallel | `Coordination.Composition`, `Coordination.Flow` | [Coordination](coordination.md) |
 | MCP tools | `MCP.Client.start_link/1`, `tools/1`, `close/1` | [MCP](mcp.md) |
-| Retrieval/jobs | Host-owned integration recipes | [Documentation map](../README.md) |
+| Retrieval/jobs | Host-owned integration recipes | [Documentation map](index.md) |
 | Traces and mixed ReqLLM calls | `ExAgent.Observability.OpenTelemetry`, `ExAgent.Observability.ReqLLM.attach/1` | [Observability](observability.md) |
 | Long-lived tracing cleanup | Supervise `ExAgent.Observability.ReqLLM.Maintenance`; set a finite processor `max_exporter_restarts` when needed | [Observability](observability.md) |
 | ReqLLM metrics | `ReqLLM.attach(metrics: [models: [...]])`; host experimental API/SDK 0.6 and reader | [Observability](observability.md) |
@@ -54,7 +52,7 @@ paths below are relative to `docs/guides/`; generated ExDoc pages are flattened.
 - **Stream:** provisional `{:delta, text}` events, then `{:result, result}` or
   `{:error, error}`. Enumerate once; own and close suspended continuations.
 - **Model:** official stock ReqLLM. Catalogue resolution alone does not qualify
-  tools/streaming/native output. Configure explicit profiles; preserve unproven guards.
+  tools/streaming/native output. Configure an explicit compatible profile.
 - **Tools:** validate before invocation. Keep results JSON-portable. A tool timeout
   or failure is not evidence that its external effect never occurred.
 - **Authority:** derive namespace/actor from authenticated host state. Ancestor
@@ -86,6 +84,3 @@ Changes to a real provider profile need separate opt-in acceptance and credentia
 supplied by the host. Passing offline cases must not be reported as live compatibility.
 
 If upgrading 1.x, read [Migration](migration.md) before copying an old example.
-For ExAgent repository work, start at the checkout's `AGENTS.md` and
-[maintainer verification](../development/verification.md); do not modify an
-application or publish a package just because an archived prompt mentions it.

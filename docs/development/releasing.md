@@ -1,6 +1,8 @@
 # Publicar ExAgent en Hex
 
-La versión2.0.0 y `.github/workflows/release.yml` están preparados. Por decisión
+La versión2.0.0 ya está publicada: [release](https://github.com/akorda-software/exagent/releases/tag/v2.0.0),
+[Hex](https://hex.pm/packages/exagent/2.0.0) y [recibo](../orchestration/2026-10-01-v2-codex/RELEASE-PUBLICATION.md).
+Por decisión
 2026-10-04 se trabaja directamente en `main`: commit/push de cambios verificados,
 sin una PR obligatoria. Publicar una release estable en GitHub activa la subida
 a Hex. El usuario configuró `HEX_API_KEY` en GitHub el2026-10-04. El job de cada
@@ -38,6 +40,35 @@ preview no la recibe. No se automatiza el generador TOTP ni se desactiva2FA.
 El comando stock es `mix hex.publish --yes`, con `HEX_API_KEY` en el entorno;
 publica paquete y documentación. Véase
 [Hex publish](https://hex.hexdocs.pm/Mix.Tasks.Hex.Publish.html).
+
+## Actualizar únicamente HexDocs
+
+Para corregir el manual de una versión publicada, comitear los cambios verificados
+directamente en main y ejecutar **Update published HexDocs**:
+
+```bash
+gh workflow run documentation.yml --repo akorda-software/exagent --ref main -f tag=v2.0.0
+```
+
+Este flujo manual sí escribe documentación. El preview manual de `release.yml`
+continúa sin publicar. No crear otro tag, cambiar versión ni sustituir el paquete.
+`python3 bin/docs-release-check v2.0.0 --prepare` permite comprobar el delta local:
+analiza fuente Elixir sin evaluar el código del tag y compara AST ejecutable,
+specs, proyecto/dependencias, configuración, ejemplos e inventario. Sólo permite
+prosa y funciones de configuración de ExDoc. Su modo prepare no autoriza escritura.
+
+El job exige checkout limpio de main y una release estable activa en GitHub/Hex.
+Compila, genera ExDoc estricto y verifica HTML, Markdown, EPUB y ausencia de
+planes/historia de desarrollo en las páginas públicas. Conserva páginas y las
+identidades del tag y del commit documental. Sólo el paso `hex.publish docs --yes`
+recibe la clave. La lectura pública exige los mismos bytes para entradas y sidebar,
+quitando únicamente el bloque exacto de analytics que HexDocs inserta en HTML,
+con reintentos de propagación, y que el TAR existente conserve su checksum.
+Las suites largas y los proveedores pagados no se vuelven a ejecutar por prosa.
+
+Las páginas públicas usan links de fuente al commit documental. El tag conserva
+las fuentes originales del paquete; la equivalencia AST permite mejorar sus
+moduledocs sin alterar el comportamiento publicado. Nunca se usa `--replace`.
 
 ## Lanzar la versión oficial
 

@@ -108,7 +108,7 @@ Native JSON Schema uses `output_profile: :chat_json_schema_v1` on the model and
 does not create an output tool. The local changeset remains authoritative;
 there is no automatic fallback to tool mode or JSON repair.
 
-Read the [native-output migration contract](migration.md#explicit-native-output-r2-3)
+Read the [native-output migration contract](migration.md#4-validate-tools-and-typed-output-locally)
 for qualification, refusal and streaming limits before choosing this mode.
 
 API: `ExAgent.Tools`, `ExAgent.Tool`,

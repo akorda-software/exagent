@@ -1,67 +1,58 @@
-# Arquitectura actual
+# Architecture and ownership
 
-ExAgent es una definición reutilizable y un conjunto de capas opt-in. No exige
-un proceso conversacional, una base de datos o un servicio de trazas para ejecutar
-un agente. Los [principios y decisiones](design.md) explican el porqué de los
-contratos; la [migración](../guides/migration.md) explica su impacto sobre 1.x.
+ExAgent is a reusable agent definition with optional runtime layers. A one-shot
+run needs no conversation process, database or tracing service. Add the layers
+your application needs; each has a distinct owner and persistence boundary.
 
-## Capas y propietarios
-
-| Capa | Responsabilidad | No garantiza por sí sola |
+| Layer | Owns | Application responsibility |
 |---|---|---|
-| `%ExAgent{}` | Configuración reutilizable: modelo, tools, output, límites, hooks e instrumentación opcional. | Estado mutable compartido entre runs. |
-| Run | Loop modelo ⇄ tools, validación, progreso, resultado y uso. | Rollback o idempotencia de IO de aplicación. |
-| ExecutionScope | Ancestry, admisión y reconciliación del árbol de delegación. | Control de llamadas que la app ejecute fuera del scope. |
-| Server | Owner de conversación, historial/modelo entre solicitudes, cola y eventos. | Cola async durable o terminal después de morir su owner. |
-| Session | Participantes, política de turnos y single-writer del estado compartido. | Workflow engine o replay universal. |
-| Store | Checkpoints de conversación/coordinación y restauración validada. | Reanudar una tool en vuelo o deduplicar efectos externos. |
+| `%ExAgent{}` | Reusable model, tools, output, hooks and limit configuration. | Credentials, trusted callbacks and application data. |
+| Run | Model/tool loop, local validation, result and usage. | Reconcile external effects with uncertain outcomes. |
+| Execution scope | Delegation ancestry, shared admission and accounting. | Keep auxiliary execution inside that scope when it must inherit authority. |
+| Server | Conversation history/model, bounded queue and events. | Backpressure, authenticated namespace and lifecycle. |
+| Session | Participants, turn policy and one writer of shared state. | Trusted state transitions, policy and codecs. |
+| Store | Confirmed snapshots and atomic continuation records. | Database lifecycle and durable storage deployment. |
 
 ```text
-Definición de agente
-  └─ run / stream_text / run_stream → un loop canónico
-       ├─ Model → ReqLLM stock (o custom/Test) → interacción pública cualificada
-       ├─ Tool → schema + permiso + ejecución + resultado JSON
-       └─ run_child → mismo scope, autoridad y presupuesto de ancestros
+Agent definition
+  └─ run / stream_text / run_stream
+       ├─ Model → ReqLLM or a custom adapter
+       ├─ Tool → schema + permission + execution + JSON result
+       └─ run_child → inherited scope, authority and budgets
 
-Server → posee runs y conversación → Store opcional
-Session → coordina participantes y transiciones → Store opcional
+Server → runs and conversation → optional Store
+Session → turns and shared state → optional Store
 
-Event / telemetry / OpenTelemetry → canales distintos, con proyecciones explícitas
+Event / telemetry / OpenTelemetry → separate application-facing channels
 ```
 
-## Contratos que conectan las capas
+## Contracts between layers
 
-- **Resultados:** éxito completo o `RunError` con causa y progreso conocido.
-  Deltas son provisionales; el output final proviene del resultado validado.
-- **Model:** `ExAgent.Model` es el behaviour de proveedor. Un stream termina con
-  `{:response, response, final_model}` o error; EOF incompleto no es éxito.
-  ReqLLM es el único backend general; los helpers wire propios se retiran en R1.8.
-  Buffered/Stream/Envelope son fronteras host: ownership, límites postdecode y
-  validación del sobre, no parsers privados ni hard RAM predecode upstream.
-- **Tools:** se valida antes de efectos. El hook previo determina la tool y args
-  efectivos, conservando identidad. Denegación, error de validación, fallo y efecto
-  desconocido no son el mismo outcome. Sólo `ModelRetry` autoriza retry correctivo.
-- **Uso:** admisión por árbol y reconciliación por identidad. Los totales de un
-  padre son inclusivos; no se vuelven a sumar sus hijos. Contadores host exactos,
-  uso normalizado/reportado y coste estimado se califican por separado; coste
-  desconocido no es cero ni un umbral retrospectivo es techo de factura.
-- **Historial:** compaction produce una proyección para la request; no sustituye el
-  historial canónico ni convierte una restauración en permiso para repetir efectos.
-- **Persistencia:** con Store, el ACK positivo requiere save confirmado. Dirty
-  bloquea nuevas mutaciones; `checkpoint/1` sólo reintenta guardar. Sólo not_found
-  permite comenzar vacío; datos corruptos/futuros o policy/id incorrectos fallan.
-- **Observabilidad:** la aplicación posee SDK/provider/exporter. Contenido off y
-  redacción previa al transporte; trazas muestreadas no son un ledger de facturación.
+- A successful result contains validated final output. An operational failure
+  carries its cause and known partial progress in `RunError`.
+- Streaming deltas are provisional. A complete validated terminal response is
+  required before tool execution or successful final output.
+- Tools validate effective arguments before effects. Permissions, schema rejection,
+  retryable rejection, execution failure and unknown effect have distinct meanings.
+- Children inherit ancestor permissions and budgets. Parent usage includes its
+  subtree; tokens and estimated cost retain their quality/completeness fields.
+- Compaction projects the next model request while preserving canonical history.
+- A confirmed Store save precedes positive durable acknowledgement. An unconfirmed
+  transition blocks mutations; checkpoint retry only saves data.
+- Persisted approval binds an exact execution boundary. Resume uses trusted live
+  configuration and current authorization; recovery does not guess effect outcomes.
+- The application owns the OpenTelemetry SDK and exporter. Default traces omit
+  content and never serialize arbitrary live models or configuration.
 
-Los mecanismos OTP poseen y limpian tareas/recursos del framework; no deshacen
-IO externo. Para detalle y límites comprobados consulta
-[estado](../status.md), [verificación](../development/verification.md) y
-[observabilidad](../guides/observability.md).
+## Extension points
 
-## Extensibilidad
+Implement `ExAgent.Model`, `ExAgent.Store`, `ExAgent.PubSub` or a `TurnPolicy`
+when an application needs another model, persistence service, event bus or turn
+selection strategy. Tools, hooks, model codecs and state codecs remain trusted
+application code. OTP supervision cleans up owned framework resources; it cannot
+roll back arbitrary external IO.
 
-Model, Tool, Store, PubSub, Compaction y TurnPolicy son las fronteras de extensión.
-Las particularidades de un producto se quedan en su aplicación. R1.8 delega wire/
-HTTP en ReqLLM oficial stock, conserva Model custom y Test y documenta la migración
-major de specs, auth, envelope/history y accounting. Los flags de capacidades no
-prueban aceptación de cada modelo real; los perfiles no cualificados siguen cerrados.
+Read [Models](../guides/models-and-limits.md),
+[Durability](../guides/durability-and-approvals.md),
+[Coordination](../guides/coordination.md) and
+[Observability](../guides/observability.md) for configuration and exact boundaries.

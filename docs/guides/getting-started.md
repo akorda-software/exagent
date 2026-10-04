@@ -6,7 +6,7 @@ the result contract before introducing a provider, streaming or persistence.
 ## Install ExAgent 2.0
 
 This guide targets **ExAgent 2.0.0**. Published 1.x releases have older contracts.
-After the official 2.0 release is available on Hex, add:
+Add the published package:
 
 ```elixir
 def deps do
@@ -14,8 +14,8 @@ def deps do
 end
 ```
 
-Before publication, use `{:exagent, path: "../exAgent"}` with the clone beside
-your application. [Release status](../status.md) records the accepted scope.
+For local source development, use `{:exagent, path: "../exAgent"}` with the clone
+beside your application. See [Supported features and limits](support.md).
 
 Run `mix deps.get`, then `iex -S mix` in your application. The supported runtime
 targets are Elixir 1.18 / OTP 28 and Elixir 1.20 / OTP 29. ExAgent starts its own
@@ -92,9 +92,9 @@ profile. [Models and limits](models-and-limits.md) explains the difference and
 shows the constructor. Keep keys in application configuration, outside prompts,
 source code and serialized results.
 
-The live acceptance of GPT-4o-mini through OpenRouter covers a bounded Chat
-profile. It does not qualify every model that ReqLLM can resolve. Check
-[Support status](../status.md) before choosing a production combination.
+Check the endpoint's actual Chat, reasoning, tool and output capabilities before
+choosing a profile. Catalogue membership alone does not enable those features.
+See [Supported features and limits](support.md) for the available combinations.
 
 ## Next steps
 

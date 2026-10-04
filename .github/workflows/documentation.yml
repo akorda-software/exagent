@@ -1,0 +1,76 @@
+name: Update published HexDocs
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Published stable version whose documentation will be updated
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hex-release-${{ inputs.tag }}
+  cancel-in-progress: false
+
+env:
+  MIX_ENV: dev
+  EXAGENT_OFFLINE: "1"
+  EXAGENT_DOCS_SOURCE_REF: ${{ github.sha }}
+
+jobs:
+  documentation:
+    if: github.repository == 'akorda-software/exagent' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: erlef/setup-beam@54075bcc5e249e4758d363f27d099f55d843f124 # v1
+        with:
+          otp-version: "29.0.5"
+          elixir-version: "1.20.0"
+
+      - name: Require an existing release with unchanged executable source
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          python3 bin/docs-release-check "$RELEASE_TAG" > "$RUNNER_TEMP/documentation.json"
+          cat "$RUNNER_TEMP/documentation.json"
+
+      - name: Resolve locked dependencies and build strict documentation
+        run: |
+          mix local.hex 2.5.1 --force
+          elixir -e 'Application.put_env(:req_llm, :load_dotenv, false); Mix.CLI.main(System.argv())' -- deps.get --check-locked
+          elixir -e 'Application.put_env(:req_llm, :load_dotenv, false); Mix.CLI.main(System.argv())' -- compile --warnings-as-errors
+          elixir -e 'Application.put_env(:req_llm, :load_dotenv, false); Mix.CLI.main(System.argv())' -- docs --warnings-as-errors
+          python3 test/support/documentation_site.py doc
+
+      - name: Retain generated documentation and source identities
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: exagent-docs-${{ inputs.tag }}-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/documentation.json
+            doc
+
+      - name: Publish only documentation for the existing Hex version
+        env:
+          HEX_API_KEY: ${{ secrets.HEX_API_KEY }}
+        run: |
+          if [[ -z "$HEX_API_KEY" ]]; then
+            echo 'Configure the package-scoped HEX_API_KEY repository secret.' >&2
+            exit 1
+          fi
+          git diff --exit-code
+          elixir -e 'Application.put_env(:req_llm, :load_dotenv, false); Mix.CLI.main(System.argv())' -- hex.publish docs --yes
+
+      - name: Verify public content against generated pages and unchanged package checksum
+        run: |
+          python3 test/support/documentation_publication.py "$RUNNER_TEMP/documentation.json" doc
+          printf 'Updated HexDocs from %s; published package checksum unchanged.\n' "$GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"

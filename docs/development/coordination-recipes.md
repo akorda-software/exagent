@@ -1,51 +1,44 @@
-# Generic coordination recipes
+# Durable coordination recipes
 
-`examples/coordination_workflows.exs` ships three deterministic public API recipes:
-an Ecto-validated extraction, a trusted host router selecting one specialist, and
-an extraction→publish sequence with human review before the publish effect.
+`examples/coordination_workflows.exs` contains three deterministic recipes:
+Ecto-validated extraction, a host router selecting one specialist, and an
+extraction→publish sequence with human approval before publishing.
 
-```sh
+```bash
 EXAGENT_OFFLINE=1 MIX_ENV=test mix run --no-start examples/coordination_workflows.exs --run
 ```
 
-Run it in a disposable consumer VM. It uses the stock Test model and its own ETS
-owner/namespace, without keys, network services or a database. The script checks
-the selected output and actual callback/effect counters. The unselected specialist
-never runs. Guest approval is rejected; approved resume restores the model cursor,
-reuses the completed extraction and publishes exactly once. Reading the completed
-reference again executes no Model/tool/input mapping callback.
+The script uses TestModel and its own ephemeral ETS scope, without provider keys,
+network services or a database. Adapt its trusted definitions to your application.
 
-The router uses a versioned selector supplied by trusted host code. It does not
-ask a model to invent definitions or authorize a tool. Every branch descriptor
-includes agent/policy/model/output references and a host model codec; version them
-when their meaning changes. Portable binding data cannot reconstruct those live
-agents or authenticate the supplied actor.
+## Select one specialist
 
-The first recipe returns a validated Ecto struct. The sequence persists JSON
-text, validates that confirmed text with the same Ecto changeset in its versioned
-input mapper, and supplies a bounded JSON object to the publishing agent. The
-mapper returns `{:ok, input}` under the public composition contract. The
-mapper runs once before pause; resume uses the saved input. Application schema
-structs need a Jason encoder compiled with the application to be persisted as
-JSON; this standalone script uses portable data without altering consolidated
-protocols. `Continuation.decide` binds the authenticated host actor's decision
-to the record identity/revision, approval ID and payload hash. The fixture actor
-is deliberately a host callback example; application authentication and the
-decision endpoint remain the application's responsibility.
+The host supplies a versioned selector. The selected branch executes; unselected
+branches do not. Branch descriptors bind trusted agent, policy, model and output
+references plus a host model codec. Version a reference when its meaning changes.
+Portable binding data cannot reconstruct a live agent or authenticate an actor.
 
-ETS provides atomic in-process transitions and JSON roundtrip, with ephemeral
-durability. It cannot prove recovery after VM loss. An application needing that
-guarantee supplies its own Repo and `Store.Postgres`; migration, ambiguous external
-effects and explicit recovery keep the same continuation contracts. See the
-[framework integrations](framework-integrations.md) for LiveView/Oban delivery
-and the declared SQL qualification in [verification](verification.md).
+## Persist extraction before approval
 
-Flow bounds branches/concurrency and portable branch/merge results independently.
-Queue/history/journal admission can still reject a definition that fits those
-individual limits; a recipe does not remove the existing shared authority/budget
-or promise arbitrary fan-out/delegation depth. The demonstration passes on the
-common candidate019 (2026-10-02): typed extraction, exactly one selected
-specialist, authenticated human review, one mapper/publish effect and inert
-completed reads. Its source is included in the single review of the new R6 delta.
-The source and receipt hashes are recorded in the [roadmap](roadmap.md); this
-ETS recipe remains separate from the real SQL/VM qualification.
+The sequence persists JSON text, validates it with the Ecto changeset in a
+versioned input mapper and returns `{:ok, input}` for the publishing agent.
+The mapper runs before the pause; resume uses the saved input and completed
+extraction rather than executing them again.
+
+Compile application Jason encoders when persisting custom schema structs, or
+persist explicitly portable data as this standalone recipe does.
+`Continuation.decide/4` binds the authenticated actor's decision to the record
+ID/revision, approval ID and payload hash. Application authentication and its
+decision endpoint remain host responsibilities.
+
+## Choose durability and bounds
+
+ETS provides atomic transitions inside one VM; its data disappears with its
+table owner or VM. For durable recovery supply `Store.Postgres`, your Repo and
+database lifecycle. Changed definitions, uncertain effects and recovery retain
+the same explicit continuation contracts.
+
+Flow bounds branch/concurrency and portable branch/merge results separately.
+Journal or history admission can still reject a definition that fits individual
+branch limits. See [Coordination](../guides/coordination.md) for supported forms
+and [Framework integrations](framework-integrations.md) for LiveView/job delivery.

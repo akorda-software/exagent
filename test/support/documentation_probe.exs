@@ -490,6 +490,27 @@ defmodule DocumentationProbe do
     clean!(diagnostics)
   end
 
+  test "Opik guide projection preserves native identity, scalars, privacy and finite expansion" do
+    {_, _, diagnostics} =
+      evaluate(block("docs/guides/observability.md", "### Opik attribute presentation"))
+
+    clean!(diagnostics)
+
+    fixture =
+      @root
+      |> Path.join("test/support/langfuse_acceptance/opik_profile_control.exs")
+      |> File.read!()
+      |> String.replace(
+        ~s|Code.require_file(Path.expand("opik_profile.exs", __DIR__))|,
+        ""
+      )
+      |> String.replace("alias OpikAcceptance.Profile", "alias MyApp.OpikProjection, as: Profile")
+
+    capture_io(fn ->
+      Code.eval_string(fixture)
+    end)
+  end
+
   test "opt-in tracing snippets run with TestModel and content redaction reaches native spans" do
     # Literal construction/run first: API-only no-op, no SDK startup/configuration.
     model = %TestModel{label: "fixture output"}

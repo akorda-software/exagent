@@ -19,9 +19,8 @@ agents does not require a fixed researcher, worker and reviewer pipeline.
 | A resumable sequence | `Coordination.Composition` | Completed steps must survive a pause or restart. |
 | A selected branch or bounded parallel branches | `Coordination.Flow` | The host needs explicit routing or bounded fan-out. |
 
-Composition and Flow are experimental host-defined contracts in this candidate;
-their accepted profiles remain bounded. They do not imply a general distributed
-workflow engine.
+Composition and Flow are experimental host-defined APIs with bounded supported
+combinations. They do not provide a general distributed workflow engine.
 
 ## Delegate inside the parent's scope
 
@@ -91,8 +90,8 @@ Flow uses a host selector for routing or a flat set of bounded parallel branches
 Its `:collect` and `:fail_fast` policies have explicit outcomes; fail-fast cannot
 undo effects that a sibling already completed. Current limits include at most
 32 branches/concurrent workers, independent 64 KiB branch/merge JSON bounds and
-an 8 MiB journal. [R6 contracts](../development/r6-implementation.md) explain the
-accepted combinations and guards.
+an 8 MiB journal. See the module reference for the exact definitions, options,
+outcome shapes and unsupported nesting combinations.
 
 API: `ExAgent.Coordination`,
 `ExAgent.Session`,

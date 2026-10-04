@@ -55,14 +55,13 @@ defmodule ExAgent.Models.ReqLLM do
    OpenRouter writes continuation4 with bounded routing and disabled/none mode;
    both modes bind routing statically and reject changed or legacy routed history.
    Pre-envelope call history rejects, without repair
-  or migration by guessing. Other profiles retain the temporary tools guard because
-  stock normalization can turn non-object arguments into `{}`. This is offline
-  qualification only for the original profile; the OpenRouter extension also
-  has a consumer live smoke. Consult design8.23/design8.53 and migration. Custom Model and Test
-  remain independent. Anthropic thinking-enabled
-  requests and response continuation remain unqualified. ReqLLM 1.26 preserves
-  opaque redacted provider blocks; this adapter rejects them explicitly until a
-  complete canonical round-trip is qualified;
+  or migration by guessing. Other profiles reject tool requests because
+  stock normalization can turn non-object arguments into `{}`. Select the
+  explicit compatible profile described in the model and migration guides.
+  Custom Model and Test remain independent. Anthropic thinking-enabled
+  requests and response continuation are unsupported. ReqLLM 1.26 preserves
+  opaque redacted provider blocks; this adapter rejects them because its
+  canonical continuation contract cannot round-trip them;
   accepting the `:thinking` option for validation does not enable that route.
 
   Receive timeout precedence is request `ModelSettings.timeout`, instance
@@ -115,8 +114,8 @@ defmodule ExAgent.Models.ReqLLM do
   output, malformed/non-object JSON and incomplete terminals never succeed.
   Native output with qualified function tools is supported; tools retain their
   envelope, authority and effect accounting. Provider strict enforcement and
-  `parallel_tool_calls: false` are not promised. This is offline qualification,
-  pending fresh review/live acceptance as recorded in the roadmap.
+  `parallel_tool_calls: false` are not promised. Verify the exact endpoint/model
+  configuration before relying on its native output behavior.
   """
   @behaviour ExAgent.Model
   alias Elixir.ReqLLM, as: Backend

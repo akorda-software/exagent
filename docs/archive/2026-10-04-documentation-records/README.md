@@ -3,14 +3,13 @@
 [![Hex Version](https://img.shields.io/hexpm/v/exagent.svg)](https://hex.pm/packages/exagent)
 [![Hex Docs](https://img.shields.io/badge/hex-docs-lightgreen.svg)](https://hexdocs.pm/exagent)
 [![License](https://img.shields.io/hexpm/l/exagent.svg)](https://github.com/akorda-software/exagent/blob/main/LICENSE)
-[![Release](https://github.com/akorda-software/exagent/actions/workflows/release.yml/badge.svg)](https://github.com/akorda-software/exagent/actions/workflows/release.yml)
+[![CI](https://github.com/akorda-software/exagent/actions/workflows/ci.yml/badge.svg)](https://github.com/akorda-software/exagent/actions/workflows/ci.yml)
 
 <!-- MDOC -->
 
-> **ExAgent 2.0 is available on [Hex](https://hex.pm/packages/exagent/2.0.0).**
-> When upgrading from 1.x, read the [migration guide](docs/guides/migration.md)
-> for the runtime, model, event and snapshot changes. See
-> [supported features and limits](docs/guides/support.md) for deployment requirements.
+> **ExAgent 2.0:** these docs describe the consolidation major. Published 1.x
+> packages have older contracts. Read the [migration guide](docs/guides/migration.md)
+> before upgrading and check [release status](docs/status.md) for acceptance and availability.
 
 **An agent framework for Elixir** — structured output, tool-calling, streaming,
 stateful agents, multi-agent sessions and durable persistence, powered by the
@@ -47,10 +46,7 @@ Layer 0  ExAgent.run/3            the one-shot model ⇄ tools loop
 - **Multi-agent sessions** — coordinated turns over shared state with pluggable
   turn policies (`round_robin`, `initiative`, or your own).
 - **Orchestration** — scoped delegation with ancestor budgets/permissions and
-  hand-off between session participants, durable sequences, routing and bounded
-  parallel flows.
-- **Persisted human approval** — pause at an admitted boundary and resume using
-  versioned continuation records, explicit authority and recovery rules.
+  hand-off between session participants.
 - **Robustness & safety** — context compaction, usage/cost limits, and per-tool
   permissions (`allow` / `ask` / `deny`).
 - **Model-agnostic** — one stock ReqLLM backend with explicitly qualified profiles,
@@ -58,9 +54,7 @@ Layer 0  ExAgent.run/3            the one-shot model ⇄ tools loop
 - **External tools (MCP)** — consume stdio or opt-in Streamable HTTP tools with
   caller-owned timeouts, pending limits and transport cleanup.
 - **Observable** — `:telemetry`, app-level `ExAgent.Event` envelopes and opt-in
-  native OpenTelemetry tracing and metrics. ExAgent owns its execution spans;
-  the ReqLLM bridge supplies metadata without duplicate model spans. Content is
-  disabled by default; the application owns its SDK and exporter.
+  native OpenTelemetry with content disabled by default.
 - **Offline-first testing** — a deterministic `ExAgent.Models.Test` model drives the
   full loop with no API key and no network.
 
@@ -69,24 +63,32 @@ Layer 0  ExAgent.run/3            the one-shot model ⇄ tools loop
 - Elixir 1.18+ (required by ReqLLM's mandatory `llm_db` dependency)
 - Runtime targets: Elixir 1.18 / OTP 28 and Elixir 1.20 / OTP 29
 
-See [supported features and limits](docs/guides/support.md) for runtime and
-dependency requirements. These targets do not cover every patch release or
-dependency combination.
+Earlier Elixir 1.17 package evidence predates the ReqLLM dependency graph.
+See [project status](docs/status.md) for tested runtime/dependency combinations
+and the remaining acceptance gates; the declared floors are not an exhaustive matrix.
 
 ReqLLM starts its own supervisor and Finch pool alongside ExAgent. Its default
 startup loads `.env` in the host's working directory. Applications that manage
 credentials themselves should set `config :req_llm, load_dotenv: false` before
 startup. `ExAgent.Models.ReqLLM.new/1` is the general backend; custom Model/Test
-remain extension points. Tools, Ecto-tool output and streaming use an explicit
-Chat profile: `:chat_tools_v1`, or `:openrouter_chat_tools_v1` for OpenRouter
-provider routing. Native JSON Schema uses a separate opt-in profile. Catalogue
-resolution alone does not enable those capabilities. See
-[models and limits](docs/guides/models-and-limits.md) for credentials, profiles,
-routing, normalized usage and host retention boundaries.
+remain extension points. Tools, Ecto-tool output and streaming require the explicit
+`chat_tools_v1` profile below. Its mandatory arguments envelope, history binding,
+normalized usage/estimated cost and bounded host postdecode cleanup are qualified
+offline; fourteen live cases also qualify the minimal GPT-4o-mini/OpenRouter
+Chat profile on stock ReqLLM 1.26, Elixir 1.20/OTP 29. Other tools/stream profiles,
+affected Anthropic reasoning/continuation
+stay closed. Native JSON Schema is separately opt-in through
+`output_profile: :chat_json_schema_v1` and agent `output_mode: :native`, with local
+schema/Ecto validation and no remote strict guarantee. There is no legacy wire fallback and no upstream
+hard-RAM/predecode promise. See the migration guide and roadmap for exact limits;
+durable C7 has real PostgreSQL/VM qualification in its declared profile. Langfuse
+and Opik have equivalent native/API/UI acceptance for the finite A10 scenario.
+The status page records the current runtime checks and corrective tests.
+Strict stock-dependency diagnostics remain red and documented as upstream debt.
 
 ## Installation
 
-Add the published package to your application:
+For the official 2.0 package, after its release is available on Hex:
 
 ```elixir
 def deps do
@@ -94,7 +96,7 @@ def deps do
 end
 ```
 
-To develop against a source checkout, replace that dependency with
+To use this source checkout before publication, replace that dependency with
 `{:exagent, path: "../exAgent"}` and adjust the path to your clone.
 
 The library starts its own supervised `ExAgent.Finch` HTTP pool, a `Registry`
@@ -115,7 +117,7 @@ using the built-in `ExAgent.Models.Test` model, **no API key needed**:
 
 ```elixir
 Mix.install([
-  {:exagent, "~> 2.0"}
+  {:exagent, path: "../exAgent"}
 ])
 
 agent = ExAgent.new(model: "test", instructions: "Be concise.")
@@ -198,11 +200,6 @@ chat_model = ExAgent.Models.ReqLLM.new(
 ```
 
 Reuse `chat_model` in the following tool, output, runtime and coordination examples.
-
-For OpenRouter, select `tool_profile: :openrouter_chat_tools_v1` and configure
-provider routing through `provider_options: [openrouter_provider: ...]`.
-Routing is bound to the conversation; a follow-up cannot silently change it.
-The [model guide](docs/guides/models-and-limits.md) shows the full constructor.
 
 ### Define a tool
 
@@ -553,15 +550,11 @@ ReqLLM bridge. It enriches the existing ExAgent Model span and preserves standal
 tracing. ExAgent keeps usage, cost, status, privacy and span lifecycle; conflicting
 stock bridges reject before provider IO. The host maintains ReqLLM's tracking TTL.
 
-The same bridge can opt into four metric instruments with bounded model labels.
-Long-lived applications can supervise the optional
-`ExAgent.Observability.ReqLLM.Maintenance` child to clean up expired tracking.
-Neither option installs a metric SDK or exporter for the application.
-
 See [observability](docs/guides/observability.md) for application configuration,
-context propagation, privacy, Langfuse/Opik configuration and export limits.
-The application supplies its backend credentials and chooses a separate metric
-destination when needed. Neither backend is a required dependency.
+context propagation, privacy and export limits. Langfuse and Opik have equivalent
+finite A10 native/API/UI acceptance. The integrated bridge's additional attributes
+have local SDK coverage, without a new cloud/UI or metric-export claim. Neither
+backend is a required dependency.
 
 ## Models
 
@@ -608,6 +601,11 @@ contract, while host request/tool limits remain exact admission counters.
 Run any of them with `mix run examples/<name>.exs` (live ones need an API key in
 the environment).
 
+The source checkout also includes `test/support/framework_load_probe.exs` for
+bounded local concurrency/observability measurements (`--smoke` for a small
+fixture check, `--json <path>` for the report). Its percentiles and sampled resource
+maxima are synthetic framework evidence, not LLM latency or production SLOs.
+
 ## Documentation
 
 Start with the [documentation home](docs/home.md) or follow the
@@ -620,22 +618,44 @@ Start with the [documentation home](docs/home.md) or follow the
 [Coding-agent integration notes](docs/guides/agents.md) map tasks to public APIs;
 ExDoc generates `llms.txt` and Markdown pages from the same sources.
 
+For development in the source checkout, run `./bin/check` before committing and
+pushing. It checks formatting, strict compilation, finite probes, the complete
+offline suite, documentation and package construction/isolation. Use
+`./bin/check --package-consumers` for clean installed-package graphs when needed.
+Real-provider and PostgreSQL tests are separate opt-in gates. See the
+[verification guide](docs/development/verification.md) for exclusions and tooling.
+The GitHub compatibility matrix is configured for manual execution.
+
 - [Full module reference on hexdocs][hexdocs]
-- [Documentation index](docs/guides/index.md) — task guides and integration recipes.
-- [Supported features and limits](docs/guides/support.md) — profiles and deployment boundaries.
-- [Architecture](docs/architecture/overview.md) — layers and ownership.
-- [Migration](docs/guides/migration.md) — upgrading contracts from 1.x to 2.0.
+- [Documentation index](docs/README.md) — guides, current state and maintenance rules.
+- [Project status](docs/status.md) — verified baseline, recap and open gates.
+- [Architecture](docs/architecture/overview.md) and
+  [design decisions](docs/architecture/design.md) — layers, contracts and evolution policy.
+- [Roadmap](docs/development/roadmap.md) — current priorities and acceptance criteria.
+- [Changelog](docs/changelog.md) — release history and unreleased changes.
+- [Migration](docs/guides/migration.md) — upcoming-major caller/adapter/snapshot migration.
 - [Observability](docs/guides/observability.md) — optional native OTel setup and privacy.
-- [Testing](docs/guides/testing.md) — deterministic tests for your application.
+- [Verification](docs/development/verification.md) — offline tests, snippets and package checks.
 
 ## Contributing
 
 Bug reports and pull requests are welcome on [GitHub][source].
 
-For source contributions, follow `AGENTS.md` in the repository and run
-`./bin/check` using the project-local tooling. Integration issues should include
-a minimal public-API example, package and Elixir/OTP versions, and a sanitized
-error. Keep provider credentials and application data out of reports.
+ExAgent aims to make reliable agents and tool use straightforward across a broad
+range of providers, from one-shot calls to layered stateful workflows. The current
+priority is a solid, maintainable foundation, not adding features at the expense
+of coherent contracts. This is a product direction, not a claim that every
+provider or capability is already supported.
+
+Preserve compatibility where practical. Breaking changes are acceptable when
+they solve a demonstrated design problem and their general benefit justifies
+the migration cost; cosmetic API churn is not. Document the rationale,
+alternatives, observable impact, migration and verification. Published stable
+contracts still follow SemVer, even while the author's own applications are
+pre-production. Once the foundation is validated, favor additive extensions and
+planned deprecations over repeated structural changes. See the policy in
+[design principles](docs/architecture/design.md) and the current
+[roadmap](docs/development/roadmap.md).
 
 ```bash
 EXAGENT_OFFLINE=1 MIX_ENV=test mix compile --warnings-as-errors

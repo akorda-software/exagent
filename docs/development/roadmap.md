@@ -1,5 +1,15 @@
 # Roadmap ejecutable de ExAgent v2.0.0
 
+**Publicado 2026-10-04:** v2.0.0 corresponde a main/tag `57c43a7`.
+GitHub Actions run37195029263 termina success; Hex sirve el TAR exacto del
+artefacto remoto, activo y con docs. Sus175 contenidos coinciden con el tag;
+SHA256 `c0402a9146b84d1e6f4a2fc04069502aa99e67e43809ccb1b8aca844a2d3be5d`.
+El [recibo de publicación](../orchestration/2026-10-01-v2-codex/RELEASE-PUBLICATION.md)
+distingue publicación de la aceptación runtime previa y del TAR local distinto.
+El usuario pide ahora manual público sin roadmap ni historia de implementación:
+se excluyen esos registros de ExDoc, se alinean las guías y se prepara actualización
+sólo de docs. R9 sigue cerrada; runtime/dependencias permanecen los publicados.
+
 **Publicación autorizada2026-10-04:** cambios integrados en mainf4dc6ca, árbol
 limpio; HEX_API_KEY guardada y workflow activo. El usuario pide lanzar v2 y
 comprobar el envío real. Se alinean los docs antes del tag; la disponibilidad

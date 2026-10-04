@@ -87,10 +87,10 @@ authenticate the peer nor persist the credentials. On resume, reconnect the
 trusted client and rediscover the current inventory before validating the call.
 
 Follow the [MCP continuation recipe](../development/mcp-continuation-binding.md)
-for the complete binding. The [transport contract](../development/r7-mcp-implementation.md)
-records bounds and protocol details; [Support status](../status.md) records the
-five accepted official SDK profiles. Other SDK/protocol combinations and OAuth
-deployments need their own qualification.
+for the complete binding. The client defaults to 128 pending requests and 8 MiB
+frames; configure tighter limits when your application needs them. Use the
+module reference for exact options. Verify your server's protocol and OAuth
+deployment separately from the agent's local tool validation.
 
 API: `ExAgent.MCP.Client`,
 `ExAgent.MCP.StreamableHTTP`.

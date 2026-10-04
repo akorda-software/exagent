@@ -1,8 +1,9 @@
 # Documentation map
 
-These pages describe **ExAgent 2.0.0**; see [release status](status.md) for availability.
-Published 1.x releases have older contracts. Start with a task guide; use the API
-reference to inspect exact options, return values and errors.
+This is the source repository's maintainer index. The public manual starts at
+[Documentation for applications](guides/index.md); its navigation contains usage
+guides and API contracts. Internal plans and dated records below are not published
+in HexDocs. ExAgent 2.0.0 is available on [Hex](https://hex.pm/packages/exagent/2.0.0).
 
 ## Learn and build
 

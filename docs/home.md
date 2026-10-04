@@ -10,10 +10,10 @@
 [Integrate with a coding agent](guides/agents.md)
 {: .exagent-actions}
 
-> #### About this checkout {: .info}
+> #### Using ExAgent 2.0 {: .info}
 >
 > These pages describe **ExAgent 2.0.0**; published 1.x packages have older
-> contracts. Check [release status](status.md), use the dependency in
+> contracts. Check [supported features and limits](guides/support.md), use the dependency in
 > [Getting started](guides/getting-started.md), or read
 > [Migration](guides/migration.md) when upgrading an existing application.
 
@@ -70,6 +70,6 @@ result shapes, responsibilities and a reading route. ExDoc also generates
 `llms.txt` and Markdown versions of these pages from the same source. Use the
 **View llms.txt** action at the bottom of the generated page.
 
-[Support and release status](status.md) states what has actually been verified.
-[The documentation map](README.md) connects the tutorials, integration recipes,
-architecture and maintainer records.
+[Supported features and limits](guides/support.md) explains deployment boundaries.
+[The documentation map](guides/index.md) connects tutorials, integration recipes
+and the API reference.

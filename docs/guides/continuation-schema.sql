@@ -13,6 +13,6 @@ CREATE TABLE IF NOT EXISTS "exagent_snapshots" (
 -- Atomic command revision, record lifetime ID, execution fence and operation
 -- receipts live inside the envelope and change under SELECT ... FOR UPDATE.
 -- The application must stop old writers before an explicit format migration.
--- SQL locks/recovery/backup are qualified in the finite PostgreSQL G3 profile.
--- See docs/status.md and docs/development/production-acceptance.md for its limits;
--- this template alone does not qualify another database/deployment combination.
+-- The application owns SQL permissions, backups, restoration and deployment
+-- validation. See docs/guides/durability-and-approvals.md for Store semantics;
+-- installing the table alone does not validate database recovery behavior.

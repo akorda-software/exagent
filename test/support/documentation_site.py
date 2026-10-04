@@ -51,9 +51,28 @@ def main(root):
                           "markdown_pages": 0, "markdown_targets": 0}
 
     for name in ["index.html", "welcome.html", "getting-started.html", "agents.html",
-                 "agents.md", "llms.txt"]:
+                 "agents.md", "llms.txt", "documentation.html", "status.html", "known-limits.html"]:
         if not (root / name).is_file():
             errors.append(f"missing entry point {name}")
+
+    internal = ["roadmap", "design", "r4-implementation", "r5-implementation",
+                "r6-implementation", "r7-mcp-implementation", "release-scope",
+                "production-acceptance", "jido-comparison", "framework-direction",
+                "verification", "dependencies", "real-consumer-e2e", "testing-audit",
+                "execution-flow", "environment", "releasing", "backend-evaluation",
+                "handoff", "changelog"]
+    for name in internal:
+        if (root / (name + ".html")).exists() or (root / (name + ".md")).exists():
+            errors.append(f"internal development record published: {name}")
+
+    history = re.compile(r"\broadmap\b|\bdesign8\.\d+|\bR[0-9](?:\.\d+)*\b|\bPhase [0-9]+|"
+                         r"unreleased v2 candidate|Maintaining ExAgent", re.I)
+    for path in list(root.glob("*.html")) + list(root.glob("*.md")) + [root / "llms.txt"]:
+        for line in path.read_text().splitlines():
+            # External API source links are permitted; roadmap prose is not.
+            if history.search(line):
+                errors.append(f"development history in public page {path.name}: {history.search(line)[0]}")
+                break
 
     def check(source, destination, fragment=False):
         uri = urlsplit(destination)

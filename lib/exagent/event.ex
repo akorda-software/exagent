@@ -8,15 +8,17 @@ defmodule ExAgent.Event do
   may be emitted in parallel.
 
   Events flow through `ExAgent.PubSub`. A subscriber receives messages shaped as
-  `{:exagent_event, %ExAgent.Event{}}` on topics such as
-  `"exagent:agent:<agent_id>"` (see `agent_topic/1`) and
-  `"exagent:session:<session_id>"` (see `session_topic/1`).
+  `{:exagent_event, %ExAgent.Event{}}`. Build scoped topics with
+  `agent_topic(agent_id, namespace)` and `session_topic(session_id, namespace)`.
+  The one-argument helpers produce legacy `"exagent:agent:<agent_id>"` and
+  `"exagent:session:<session_id>"` topics; a nil namespace preserves those topics.
 
   ## Fields
 
     * `version`     — envelope schema version (currently `1`).
     * `id`          — unique event id (`"evt_..."`).
     * `seq`         — monotonic within one emitter incarnation, not durable.
+    * `emitter_id`  — identifies that incarnation; changes after a runtime restart.
     * `type`        — one of the event types listed below.
     * `source`      — `:run`, `:server`, `:session`, `:coordination`, …
     * `occurred_at` — `DateTime.utc_now/0` at emission.
@@ -42,12 +44,12 @@ defmodule ExAgent.Event do
       :server_request_queued · :server_request_cancelled
       :approval_requested
 
-  Session / coordination (Phase 3+):
+  Session / coordination:
 
       :session_started · :participant_joined · :participant_left
       :session_turn_changed · :shared_state_updated · :session_closed
 
-  Compaction (Phase 5):
+  Compaction:
 
       :compaction_started · :compaction_finished
   """

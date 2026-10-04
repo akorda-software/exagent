@@ -10,7 +10,7 @@ that boundary needs.
 |---|---|---|
 | A later follow-up with the same messages | Serialized history | Save history and retain the model state your adapter needs. |
 | A restarted Server or Session | Confirmed snapshot | Supply the trusted agent/policy template and Store. |
-| Approval or restart at an admitted execution boundary | C7 continuation record | Supply versioned bindings, authorization, codecs and explicit recovery. |
+| Approval or restart at an admitted execution boundary | Persisted continuation record | Supply versioned bindings, authorization, codecs and explicit recovery. |
 | An uncertain payment, write or remote request | External reconciliation | Establish the real outcome before deciding what may execute next. |
 
 None of these makes an arbitrary external effect transactional or exactly once.
@@ -88,9 +88,9 @@ Checkpoint retry tokens authorize the exact data transition only. A storage ACK
 does not authorize new model/tool IO. Resume validates current authority and
 bindings, and completed steps are data rather than replay instructions.
 
-The accepted SQL profile includes PostgreSQL 17.4, lost ACKs, competing resumers
-and restart across VMs. Read [Support status](../status.md) for its scope;
-arbitrary cluster failover and external-effect rollback are not qualified.
+PostgreSQL persists confirmed records across VM restarts. Applications own database
+availability, backup/restore, effect reconciliation and deployment coordination;
+the Store does not provide arbitrary cluster failover or external-effect rollback.
 
 API: `ExAgent.Store`,
 `ExAgent.Continuation`,

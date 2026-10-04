@@ -8,7 +8,7 @@ defmodule ExAgent.Docs.Markdown do
     config = %{
       config
       | description:
-          "Unreleased ExAgent v2 candidate (nominal version #{config.version}); published 1.x contracts differ. " <>
+          "ExAgent #{config.version}: usage guides and public API reference. " <>
             (config.description || "")
     }
 

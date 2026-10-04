@@ -1,11 +1,12 @@
 defmodule ExAgent.Continuation.Checkpoint do
   @moduledoc """
-  Experimental persistence-only retry seam for a runtime owner integrating R4.
+  Experimental persistence-only retry state for a continuation runtime owner.
 
   Unlike snapshot RuntimeCheckpoint, the pending value is an exact CAS command
   with its operation ID, not a callback rebuilding state. While pending, new
   commands are rejected. Retry performs only Store IO. This does not pause/resume
-  a run or authorize external IO; R5 must integrate the runtime mutation gate.
+  a run or authorize external IO. The runtime owner must block other mutations
+  until the pending command has been confirmed.
   """
   alias ExAgent.Store
   alias ExAgent.Continuation.Transition
