@@ -27,6 +27,11 @@ receipts have different dates and scopes; publication does not repeat them or
 turn exclusions into passes. See
 [support status](https://hexdocs.pm/exagent/2.0.0/status.html) for exact evidence.
 
+The final October4 envelope-guidance and incomplete-response failure-cause
+adjustments pass159 focused offline cases together. The earlier complete-suite
+receipt predates those two changes; caller history, tool validation, effect
+authority and retention ceilings remain intact.
+
 Known limits remain explicit: stock TOML/WebSockex/gproc compiler diagnostics,
 qualified provider profiles, normalized rather than invoiced usage, and no
 upstream hard RAM bound before decoding. Direct native in-process OTLP HTTP has

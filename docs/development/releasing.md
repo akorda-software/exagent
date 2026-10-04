@@ -3,8 +3,9 @@
 La versión2.0.0 y `.github/workflows/release.yml` están preparados. Por decisión
 2026-10-04 se trabaja directamente en `main`: commit/push de cambios verificados,
 sin una PR obligatoria. Publicar una release estable en GitHub activa la subida
-a Hex. La clave `HEX_API_KEY`, el tag oficial y la publicación siguen pendientes.
-Las pruebas de runtime y backends aceptadas conservan sus recibos.
+a Hex. El usuario configuró `HEX_API_KEY` en GitHub el2026-10-04. El job de cada
+release comprueba la publicación y sus bytes públicos; tener el secreto guardado
+por sí solo no acredita autenticación. Las pruebas aceptadas conservan sus recibos.
 
 ## TOTP y la clave de publicación
 
@@ -104,9 +105,9 @@ paquete ya aceptado. Se puede reintentar el mismo workflow y commit. Para un
 paquete con bytes distintos hace falta investigar y decidir una versión nueva,
 no mover el tag ni forzar una sustitución.
 
-El primer envío real y la autenticación con la clave quedan pendientes hasta
-configurar `HEX_API_KEY` y publicar la release oficial. Los controles locales no
-se presentan como una ejecución remota de GitHub ni como una publicación en Hex.
+La autenticación y la publicación real se comprueban en el job de la release
+oficial. Los controles locales no se presentan como una ejecución remota de
+GitHub ni como una publicación en Hex.
 
 Verificación de la preparación2026-10-03:17 controles offline de guards Git y recuperación
 contra un servidor loopback pasan; el CLI de publicación se sustituye por un

@@ -18,8 +18,9 @@ or universal provider acceptance is implied; see the2.0.0 changelog and design r
 
 Updated **2026-10-04**. These docs describe **ExAgent 2.0.0**. The maintainer's
 workflow uses direct commits/pushes to `main`; a published stable GitHub release
-triggers package/docs publication. Release metadata and the workflow are prepared.
-The Hex API key, official tag/release and Hex publication are pending.
+triggers package/docs publication. Release metadata and the workflow are prepared;
+the maintainer configured the GitHub Hex API key on2026-10-04. Each release job
+records authentication, publication and readback of the public artifact.
 Availability is established by the
 [Hex release](https://hex.pm/packages/exagent/2.0.0) and its versioned HexDocs,
 not by the version string alone. See [publishing](development/releasing.md).

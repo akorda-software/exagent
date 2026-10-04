@@ -180,6 +180,6 @@ El usuario acepta conservar esa deuda externa sin modificar upstream y solicita
 preparar la publicación automática para la siguiente sesión. Versión2.0.0,
 documentación y workflow quedan preparados; merge/tag/release/Hex estaban pendientes
 en el checkpoint2026-10-03. El usuario decide integración directa en main2026-10-04;
-clave/tag/release/Hex siguen pendientes. Ver [publicación](releasing.md). La release será
+la clave se configura y autoriza lanzar v2 el mismo día. Ver [publicación](releasing.md). La release será
 **publicada** sólo tras verificar el artefacto Hex2.0.0. Los perfiles adicionales
 no cualificados y los tests excluidos no se presentan como garantías aceptadas.

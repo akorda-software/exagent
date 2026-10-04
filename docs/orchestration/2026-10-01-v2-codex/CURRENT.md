@@ -4,7 +4,7 @@ El usuario autoriza subir todo directamente a `main`, sin PR obligatoria.
 Versión2.0.0/workflow/docs ya en main; PR1 integrada automáticamente por el push.
 Deltas de otro dueño: guía backend y causa RequestError con copia Response omitida.
 159focales juntos pasan en copia propia1.20/29,14.3s; FULL anterior no cubre estos deltas.
-Pendientes clave HEX_API_KEY, tag oficial y release; push a main no publica.
+HEX_API_KEY configurada; usuario autoriza tag/release v2 y verificar Hex. Push no publica.
 ReqLLM stock, R1.2/C7 aceptados, guards intactos; una revisión máxima, sin reruns rutinarios.
 
 ## Cierre operativo y aportaciones Dragonex
@@ -96,5 +96,5 @@ sus cambios/E2E están autorizados, su commit no está autorizado.
 Roadmap único: docs/development/roadmap.md. [FINAL-CANDIDATE](FINAL-CANDIDATE.md),
 [CRITICAL-REVIEW](CRITICAL-REVIEW.md), [E2E](E2E-ACCEPTANCE.md),
 [OPIK](OPIK-ACCEPTANCE.md) conservan identidad y límites de las candidatas previas.
-Offline EXAGENT_OFFLINE=1 MIX_ENV=test, dotenv deshabilitado. Siguiente: crear
-clave, guardar secreto GitHub y publicar release oficial; preview opcional. Commits directos a main.
+Offline EXAGENT_OFFLINE=1 MIX_ENV=test, dotenv deshabilitado. Siguiente: lanzar
+release oficial estable y observar workflow/TAR/HexDocs; guardar su recibo. Commits a main.
