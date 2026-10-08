@@ -10,7 +10,7 @@ review each boundary it uses before resuming existing conversations or jobs.
 {:exagent, "~> 2.0"}
 ```
 
-Use Elixir 1.18/OTP 28 or Elixir 1.20/OTP 29. Update the application lock for ReqLLM 1.26
+Use Elixir 1.18/OTP 28 or Elixir 1.20/OTP 29. Update the application lock for ReqLLM 1.27
 and the declared decoder/HTTP dependency floors. When the application supplies
 credentials itself, set this before startup:
 

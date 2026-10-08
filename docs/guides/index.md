@@ -1,7 +1,7 @@
 # Documentation map
 
 Start with a task guide, then follow its API links for exact options and return
-values. These pages describe ExAgent 2.0; use [Migration](migration.md) when
+values. These pages describe ExAgent 2.x; use [Migration](migration.md) when
 upgrading an application from 1.x.
 
 ## Learn and build
@@ -10,6 +10,7 @@ upgrading an application from 1.x.
 |---|---|
 | Install and run your first agent | [Getting started](getting-started.md) |
 | Call application code and return an Ecto struct | [Tools and output](tools-and-output.md) |
+| Give the model task instructions it loads on demand | [Skills](skills.md) |
 | Select a model, provider route and budget | [Models and limits](models-and-limits.md) |
 | Keep conversation history and stream UI updates | [Runtime and events](runtime-and-events.md) |
 | Persist state, approve a tool and resume work | [Durability and approvals](durability-and-approvals.md) |

@@ -3,14 +3,14 @@
 Run an agent without credentials first. This gives you a working application and
 the result contract before introducing a provider, streaming or persistence.
 
-## Install ExAgent 2.0
+## Install ExAgent 2.1
 
-This guide targets **ExAgent 2.0.0**. Published 1.x releases have older contracts.
+This guide targets **ExAgent 2.1.0**. Published 1.x releases have older contracts.
 Add the published package:
 
 ```elixir
 def deps do
-  [{:exagent, "~> 2.0"}]
+  [{:exagent, "~> 2.1"}]
 end
 ```
 

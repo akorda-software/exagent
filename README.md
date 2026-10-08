@@ -7,7 +7,7 @@
 
 <!-- MDOC -->
 
-> **ExAgent 2.0 is available on [Hex](https://hex.pm/packages/exagent/2.0.1).**
+> **ExAgent 2.1 is available on [Hex](https://hex.pm/packages/exagent/2.1.0).**
 > When upgrading from 1.x, read the [migration guide](docs/guides/migration.md)
 > for the runtime, model, event and snapshot changes. See
 > [supported features and limits](docs/guides/support.md) for deployment requirements.
@@ -34,6 +34,9 @@ Layer 0  ExAgent.run/3            the one-shot model ⇄ tools loop
 - **One-shot agentic loop** — a model ⇄ tools recursion built as idiomatic Elixir.
 - **Type-derived tool schemas** — define tools as plain functions; JSON Schema is
   generated from `name :: Type` annotations and `@doc` strings (no hand-written schemas).
+- **Skills loaded on demand** — the model sees a catalog of `SKILL.md`
+  instructions (the Agent Skills format shared with other agent harnesses) and
+  loads one when a task needs it; skills can unlock their own tools.
 - **Structured output** — any Ecto `embedded_schema` becomes the output spec; JSON
   Schema is derived from the schema **and** its changeset validations, validated
   with retry-on-failure.
@@ -90,7 +93,7 @@ Add the published package to your application:
 
 ```elixir
 def deps do
-  [{:exagent, "~> 2.0"}]
+  [{:exagent, "~> 2.1"}]
 end
 ```
 
@@ -115,7 +118,7 @@ using the built-in `ExAgent.Models.Test` model, **no API key needed**:
 
 ```elixir
 Mix.install([
-  {:exagent, "~> 2.0"}
+  {:exagent, "~> 2.1"}
 ])
 
 agent = ExAgent.new(model: "test", instructions: "Be concise.")
@@ -268,7 +271,7 @@ host request budget in sync, `stream_text` and `run_stream`; deltas are provisio
 No automatic tool fallback or JSON repair is performed.
 
 Stock stream objects become semantic JSON text in history, not original bytes.
-Stock Chat 1.26 may discard a refusal field beside otherwise valid JSON: that JSON
+Stock ReqLLM Chat may discard a refusal field beside otherwise valid JSON: that JSON
 can produce a locally valid output. Exposed refusals, absent/invalid output and
 incomplete terminals fail; total wire refusal detection is not promised. See the
 [migration guide](docs/guides/migration.md) for exact qualification and limits.

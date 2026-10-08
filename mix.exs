@@ -4,7 +4,7 @@ defmodule ExAgent.MixProject do
   use Mix.Project
 
   @source_url "https://github.com/akorda-software/exagent"
-  @version "2.0.1"
+  @version "2.1.0"
 
   def project do
     [
@@ -53,7 +53,7 @@ defmodule ExAgent.MixProject do
 
   defp deps do
     [
-      {:req_llm, "~> 1.26.0"},
+      {:req_llm, "~> 1.27.0"},
       {:req, "~> 0.7.4"},
       {:finch, "~> 0.24"},
       # Decoder floors protect library consumers too; dependency lockfiles do
@@ -61,7 +61,7 @@ defmodule ExAgent.MixProject do
       {:mint, "~> 1.11"},
       {:hpax, "~> 1.1"},
       {:jason, "~> 1.4"},
-      {:jsv, "~> 0.25.0"},
+      {:jsv, "~> 0.26.0"},
       {:ecto, "~> 3.12"},
       {:telemetry, "~> 1.0"},
       # Instrumentation is opt-in; the application owns its SDK and exporter.
@@ -99,6 +99,7 @@ defmodule ExAgent.MixProject do
         {"docs/home.md", filename: "welcome", title: "Welcome"},
         "docs/guides/getting-started.md",
         "docs/guides/tools-and-output.md",
+        "docs/guides/skills.md",
         "docs/guides/models-and-limits.md",
         "docs/guides/runtime-and-events.md",
         "docs/guides/durability-and-approvals.md",
@@ -127,6 +128,7 @@ defmodule ExAgent.MixProject do
         "Start here": ["docs/home.md", "docs/guides/getting-started.md", "docs/guides/index.md"],
         "Build with ExAgent": [
           "docs/guides/tools-and-output.md",
+          "docs/guides/skills.md",
           "docs/guides/models-and-limits.md",
           "docs/guides/runtime-and-events.md",
           "docs/guides/durability-and-approvals.md",
@@ -201,6 +203,7 @@ defmodule ExAgent.MixProject do
         ],
         Messages: [ExAgent.Message],
         "Tools & Output": [ExAgent.Tool, ExAgent.Tools, ExAgent.Schema, ExAgent.OutputSchema],
+        Skills: [ExAgent.Skills, ExAgent.Skill, ExAgent.Skills.Gate, ExAgent.Skills.Restore],
         Models: [
           ExAgent.Model,
           ExAgent.ModelSettings,

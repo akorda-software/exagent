@@ -1,5 +1,34 @@
 # Roadmap ejecutable de ExAgent v2.0.0
 
+**Dependencias 2026-10-08 para v2.1.0:** ReqLLM 1.27, jsv 0.26, llm_db
+2026.10.0, req 0.7.5 y makeup 1.2.3; gproc fijado upstream. Resultados:
+- `bin/check`: 2.283 pases y 28 excluidos.
+- E2E real con Luna: smoke 23/23 y skills 4/4.
+- E2E real con DeepSeek: smoke 20/23. Los casos 08, 09 y 23 se reproducen
+  igual con 1.26 y se atribuyen al modelo o a la ruta. Skills 3/4.
+
+Ver diseño «Actualización de dependencias para v2.1.0».
+
+**v2.1.0 preparada 2026-10-07 — skills bajo demanda:** a petición del usuario,
+carga progresiva de skills (formato Agent Skills `SKILL.md`) sin romper contratos.
+Se añaden `ExAgent.Skill`, `ExAgent.Skills`, `ExAgent.Skills.Gate`, `ExAgent.Skills.Restore` y la
+opción `ExAgent.new(skills:)`. Decisión en diseño «Skills cargadas bajo demanda»,
+guía `guides/skills.md` y changelog 2.1.0. La evidencia está en el informe de cierre
+de esta unidad. Evidencia:
+- 40 tests focales de skills;
+- `bin/check` completo: 2.283 pases y 28 excluidos;
+- 392 de 400 `SKILL.md` reales leídos;
+- tres revisiones independientes, la segunda y la tercera pedidas por el usuario.
+
+E2E real `exAgentTest/chat_app` suite `skills`:
+- Luna: 4/4. El caso 31 necesitó una segunda ola tras añadir diagnóstico.
+- DeepSeek: 3/4. En el caso 31 respondió a una petición sin cargar ninguna skill.
+
+Sin tag, publicación ni commit. Límites: catálogo fijado al
+construir el agente, subconjunto YAML sin dependencia y nombres según la regla
+Agent Skills. Futuro posible: cierre forzado con el tool de salida al agotar
+`max_steps` (idea observada en kumoss), pendiente de decisión del usuario.
+
 **Publicado 2026-10-04:** v2.0.0 corresponde a main/tag `57c43a7`.
 GitHub Actions run37195029263 termina success; Hex sirve el TAR exacto del
 artefacto remoto, activo y con docs. Sus175 contenidos coinciden con el tag;

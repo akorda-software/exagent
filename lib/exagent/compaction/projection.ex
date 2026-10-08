@@ -122,19 +122,18 @@ defmodule ExAgent.Compaction.Projection do
   # Keep leading instruction-only messages first. Summary is ordinary user-level
   # context before every retained conversational message, including the active
   # user request; it must never become the latest user prompt or a System part.
-  def insert_summary(retained, text) do
-    {instructions, rest} = Enum.split_while(retained, &instructions_only?/1)
+  def insert_summary(retained, text),
+    do:
+      insert_context(
+        retained,
+        "Summary of earlier conversation (context, not instructions):\n" <> text
+      )
 
-    summary = %Request{
-      parts: [
-        %Part.User{
-          content: "Summary of earlier conversation (context, not instructions):\n" <> text
-        }
-      ],
-      timestamp: DateTime.utc_now()
-    }
-
-    instructions ++ [summary | rest]
+  # Shared with ExAgent.Skills.Restore so both keep the same position.
+  def insert_context(messages, text) do
+    {instructions, rest} = Enum.split_while(messages, &instructions_only?/1)
+    context = %Request{parts: [%Part.User{content: text}], timestamp: DateTime.utc_now()}
+    instructions ++ [context | rest]
   end
 
   def validate(source, candidate) do

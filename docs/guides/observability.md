@@ -98,7 +98,7 @@ After SDK configuration, attach the integrated bridge once at application startu
 :ok = ExAgent.Observability.ReqLLM.attach()
 ```
 
-It uses ReqLLM 1.26's public adapter and mapping. During an ExAgent request it
+It uses ReqLLM 1.27's public adapter and mapping. During an ExAgent request it
 adds bounded request/response IDs, model, server address/port, max tokens,
 stream flag and first-chunk time to the existing model span. It does not create
 another generation or overwrite ExAgent status, accounting, cost or content.

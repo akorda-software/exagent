@@ -5,9 +5,11 @@ description: >
   `exagent` Hex package: the `use ExAgent.Tools` macro, `deftool`/`tool_plain`
   with `name :: Type` annotations for auto-derived JSON Schema, tools that need
   the `RunContext` (dependency injection / `ctx`), or building a single tool by
-  hand with `ExAgent.Tool.new/1`. Triggers: exagent tools, deftool, tool_plain,
-  crear herramienta/tool de agente, RunContext, tool schema, ExAgent.Tools,
-  tools/0, inyectar dependencias en tool.
+  hand with `ExAgent.Tool.new/1`, or giving the agent on-demand skills
+  (`SKILL.md`) with `ExAgent.new(skills:)`. Triggers: exagent tools, deftool,
+  tool_plain, crear herramienta/tool de agente, RunContext, tool schema,
+  ExAgent.Tools, tools/0, inyectar dependencias en tool, skills del agente,
+  load_skill, ExAgent.Skills.
 ---
 
 # exagent-tools — define tools as plain Elixir functions
@@ -114,6 +116,25 @@ Any Model Context Protocol server's tools become plain `ExAgent.Tool`s:
 {:ok, tools} = ExAgent.MCP.Client.tools(fs)
 agent = ExAgent.new(model: chat_model, tools: tools)
 ```
+
+## Skills loaded on demand (2.1+)
+
+For many task-specific procedures, give the agent skills instead of putting
+everything in `:instructions`. The model sees only names and descriptions and
+calls `load_skill` when a task matches:
+
+```elixir
+dir = Application.app_dir(:my_app, "priv/skills")
+skills = ExAgent.Skills.from_dir!(dir, tools: %{"deploy" => DeployTools.tools()})
+agent = ExAgent.new(model: model, skills: skills)
+```
+
+Each skill is a directory with a `SKILL.md` (frontmatter `name` and
+`description`, then Markdown instructions). The same format is used by Claude
+Code, OpenCode and Codex. Tools listed under `tools:` stay hidden until their
+skill is loaded. Directory skills also get `read_skill_file`, confined to that
+directory. Skills never grant permissions or run scripts. Read the
+[Skills guide](../../docs/guides/skills.md).
 
 ## Gotchas
 

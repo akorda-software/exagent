@@ -6,6 +6,63 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.1.0]
+
+Released 2026-10-08 from tag `v2.1.0`. Additive: agents built without `:skills`
+are unchanged. Applications should update their lock for the new ReqLLM patch
+line (see Dependencies).
+
+### Added
+
+- Skills loaded on demand, in the Agent Skills `SKILL.md` format shared with
+  other agent harnesses. `ExAgent.Skills.from_dir/2` reads skill directories
+  and `ExAgent.Skill.new/1` defines one in code. `ExAgent.new(skills: skills)`
+  adds:
+  - a `load_skill` tool whose description is the catalog of names and
+    descriptions. Its result holds the instructions, the skill's file list and
+    the tools it unlocks, and stays in the history across steps, Server turns,
+    snapshots and continuations;
+  - `read_skill_file`, for non-hidden UTF-8 files inside a skill directory. It
+    rejects absolute paths and paths that escape through `..` or symlinks;
+  - each skill's gated `:tools` and, when there are any, `ExAgent.Skills.Gate`
+    before the agent's capabilities. It offers those tools only after their
+    skill is loaded; later capabilities can still remove them;
+  - `ExAgent.Skills.Restore` after the agent's capabilities. It puts a loaded
+    skill back as user-level context when compaction removes it from the
+    request projection.
+
+  Further behaviour:
+  - Loaded instructions and read files are bounded (256 KiB by default).
+  - A failed load is a retry for the model, not a run failure.
+  - Loads are paired with the call in the preceding response, so backends that
+    reuse tool-call ids across turns are handled.
+  - `load_skill` and `read_skill_file` are reserved tool names when `:skills` is
+    used, and clashing tool names raise `ArgumentError` in `ExAgent.new/1`.
+  - `SKILL.md` is read again on each load. `ExAgent.Skills.loaded/1` lists the
+    skills a conversation loaded.
+
+  Frontmatter is read without a new dependency:
+  - unsupported YAML in `name`/`description` is an error;
+  - other fields are best effort, and an unsupported value is kept as raw text;
+  - skill files never grant permissions or run scripts.
+
+  New guide: [Skills](guides/skills.md).
+
+### Dependencies
+
+- `req_llm ~> 1.27.0` (was `~> 1.26.0`), with its required `llm_db 2026.10.0`.
+  1.27 returns a Finch pool queue timeout as an error tuple instead of raising,
+  and adds upstream fixes (bounded schema validator cache, reasoning payload
+  redaction, OpenAI streaming model identity). No ExAgent API or profile changes.
+- `jsv ~> 0.26.0` (was `~> 0.25.0`): adds context data to normalized errors.
+- Lock refresh: `req 0.7.5`, `makeup 1.2.3` (docs only). `gproc` stays at 1.2.0
+  because upstream `grpcbox` pins it.
+
+### Changed
+
+- `ExAgent.Compaction.Projection` (internal) shares the summary insertion
+  point with skill restoration. The compaction output is unchanged.
+
 ## [2.0.1]
 
 Released 2026-10-04 from tag `v2.0.1`. Versioned as a patch at the owner's

@@ -89,9 +89,17 @@ defmodule ExAgent do
   already have performed its effect when its returned payload exceeds a limit:
   its outcome/identity are preserved with an explicit `payload_omitted` marker
   and a terminal RunError. Such history cannot be executed again automatically.
+
+  `:skills` takes a list of `ExAgent.Skill`s that the model loads on demand. It
+  adds a `load_skill` tool (plus `read_skill_file` and the skills' gated tools),
+  an `ExAgent.Skills.Gate` before `:capabilities` when a skill has tools, and
+  `ExAgent.Skills.Restore` after them; see `ExAgent.Skills`. Invalid skills or
+  clashing tool names raise `ArgumentError`.
   """
   @spec new(keyword()) :: t()
   def new(opts) when is_list(opts) do
+    opts = ExAgent.Skills.expand(opts)
+
     model =
       case Keyword.fetch!(opts, :model) do
         %_{} = m -> m

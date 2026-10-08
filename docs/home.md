@@ -10,9 +10,9 @@
 [Integrate with a coding agent](guides/agents.md)
 {: .exagent-actions}
 
-> #### Using ExAgent 2.0 {: .info}
+> #### Using ExAgent 2.1 {: .info}
 >
-> These pages describe **ExAgent 2.0.0**; published 1.x packages have older
+> These pages describe **ExAgent 2.1.0**; published 1.x packages have older
 > contracts. Check [supported features and limits](guides/support.md), use the dependency in
 > [Getting started](guides/getting-started.md), or read
 > [Migration](guides/migration.md) when upgrading an existing application.

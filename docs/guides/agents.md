@@ -25,6 +25,7 @@ paths below are relative to `docs/guides/`; generated ExDoc pages are flattened.
 | Lazy streaming | `ExAgent.run_stream/3` | [Runtime](runtime-and-events.md) |
 | Define tools | `ExAgent.Tools`, `Tool.new/1` | [Tools and output](tools-and-output.md) |
 | Typed output | `output: MyEmbeddedSchema`, `output_mode:` | [Tools and output](tools-and-output.md) |
+| Skills loaded on demand | `ExAgent.new(skills:)`, `Skills.from_dir!/2`, `Skill.new/1` | [Skills](skills.md) |
 | Provider/model | `Model.resolve/2`, `Models.ReqLLM.new/1` | [Models](models-and-limits.md) |
 | Qualified OpenRouter routing | `tool_profile: :openrouter_chat_tools_v1`, bounded `provider_options:` | [Models](models-and-limits.md) |
 | Conversation owner | `AgentSupervisor.start_agent/1`, `Server.chat/3` | [Runtime](runtime-and-events.md) |

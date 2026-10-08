@@ -45,7 +45,7 @@ unit = opts[:reserve_usd] || minimum_unit
 true =
   max_count in 1..80 and max_usd > 0 and max_usd <= 5 and unit >= minimum_unit and unit <= max_usd
 
-true = to_string(Application.spec(:req_llm, :vsn)) == "1.26.0"
+true = to_string(Application.spec(:req_llm, :vsn)) == "1.27.0"
 key = if live, do: System.fetch_env!("OPENROUTER_API_KEY"), else: "synthetic-not-a-credential"
 true = byte_size(key) > 0
 :ok = File.mkdir(artifact)

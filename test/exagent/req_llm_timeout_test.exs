@@ -485,9 +485,11 @@ defmodule ExAgent.ReqLLMTimeoutTest do
     first = Task.async(fn -> ReqLLM.generate_text(@model, "first", opts) end)
     assert_receive {:holding_pool, server}, 1000
 
-    assert_raise RuntimeError, ~r/excess queuing/, fn ->
-      ReqLLM.generate_text(@model, "second", opts)
-    end
+    # ReqLLM 1.27 returns the Finch queue timeout as an error (1.26 raised it).
+    assert {:error, %ReqLLM.Error.API.Request{reason: reason}} =
+             ReqLLM.generate_text(@model, "second", opts)
+
+    assert reason =~ "excess queuing"
 
     assert Agent.get(count, & &1) == 1
     send(server, :release)

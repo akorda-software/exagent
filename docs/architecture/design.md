@@ -13,6 +13,105 @@
 > Conserva sus reproducciones y guards como estado runtime, no como aceptación
 > del nuevo contrato. C7 y los contratos de autoridad/recuperación permanecen.
 
+## Actualización de dependencias para v2.1.0 (2026-10-08)
+
+**Petición:** el usuario pide actualizar todas las dependencias y publicar 2.1.0.
+
+**Decisión:** `req_llm ~> 1.27.0` (con `llm_db 2026.10.0`) y `jsv ~> 0.26.0`.
+También se refresca el lock: `req 0.7.5` y `makeup 1.2.3`. `gproc` queda en 1.2.0
+porque `grpcbox` lo fija. Se mantiene la política de requisitos limitados a
+parches de la decisión ReqLLM 1.26.
+
+**Impacto:** sin cambios de API, perfiles, codecs ni snapshots. ReqLLM 1.27
+devuelve la espera excesiva en la cola del pool Finch como
+`{:error, %ReqLLM.Error.API.Request{}}` en lugar de lanzar `RuntimeError`. La
+caracterización stock se actualiza conservando el negativo de no abrir una
+segunda conexión. Los consumidores sin lock resuelven 1.27 al actualizar.
+
+**Verificación:** `bin/check` completo, 2.283 pases y 28 excluidos. E2E real por
+OpenRouter sobre 1.27:
+
+| Modelo | Smoke | Skills |
+|---|---|---|
+| GPT-6-Luna | 23/23 | 4/4 |
+| DeepSeek V4.1 Flash | 20/23 | 3/4 |
+
+Fallos de DeepSeek:
+- Smoke 08 (`line_total` nulo en salida nativa), 09 (cabecera del ticket por
+  visión) y 23 (marcador literal en Composition) fallan exactamente igual con
+  1.26 en una copia temporal. Se atribuyen al modelo o a la ruta, no a la
+  actualización. Los tests de loopback confirman que el `response_format`
+  enviado es idéntico.
+- Skills 31: el modelo responde sin cargar ninguna skill.
+
+## Skills cargadas bajo demanda (2026-10-07; v2.1.0)
+
+**Problema demostrado:** un agente con muchos procedimientos especializados
+tenía que enviarlos todos en `:instructions` en cada petición, o la aplicación
+tenía que montar a mano el catálogo, el tool de carga y el filtrado de tools.
+Los harnesses en los que se inspiró ExAgent (OpenCode, Pi, Claude Code, Codex)
+cargan skills de forma progresiva con el formato Agent Skills (`SKILL.md`), y ese
+patrón no existía en la librería. La tabla de la sección 3 tomó de Pi las capas,
+eventos y sesiones, pero no su carga de recursos.
+
+**Decisión/beneficio general:** `ExAgent.Skill`, `ExAgent.Skills` y la opción
+`ExAgent.new(skills: [...])`. Se expande en los campos existentes: un tool
+`load_skill` cuyo catálogo (nombre + descripción) va en su descripción,
+`read_skill_file` confinado a la carpeta de cada skill (sin ocultos) y los tools
+propios de cada skill. También dos capabilities:
+- `ExAgent.Skills.Gate`, solo si alguna skill tiene tools, va antes de las
+  capabilities del agente y oculta esos tools hasta que su skill se carga. Las
+  capabilities que restringen tools después conservan la última palabra;
+- `ExAgent.Skills.Restore` va al final y repone como contexto de usuario una
+  skill cargada que la compactación haya quitado de `request_messages`, en la
+  misma posición que el resumen de compactación (helper compartido).
+
+Las cargas fallidas son retries para el modelo, no fallos del run, y el tamaño
+de las instrucciones y ficheros está acotado.
+
+Las skills cargadas se derivan del historial canónico, emparejando cada retorno
+con la llamada de la respuesta inmediatamente anterior (hay backends que
+reutilizan ids entre turnos). Así no hay estado nuevo que persistir.
+
+**Alternativas:** catálogo en `:instructions`, que queda fijado en el historial
+desde el primer turno y no se actualiza en conversaciones existentes, frente a
+la definición del tool, que se reenvía y cachea con los demás tools. Un campo
+nuevo en `%ExAgent{}` cambiaría la forma de las definiciones sin aportar nada a
+la expansión. Añadir una dependencia YAML a todos los consumidores para leer
+dos campos: se lee el subconjunto usado por metadatos de skills, sin adivinar,
+y lo no soportado en campos opcionales queda como texto sin interpretar. Tools
+fuera del inventario del agente: rompería la restauración de continuaciones,
+que resuelve los tools seleccionados en `agent.tools`.
+
+**Impacto/migración:** aditivo. Sin `:skills` (o con lista vacía) la definición
+del agente es idéntica. Llamar a un tool oculto conserva la semántica existente
+de tool no ofrecido (no se ejecuta). Cambiar el conjunto de skills cambia la
+definición de `load_skill`, como cualquier cambio de tool, y una continuación
+persistida con la definición anterior lo rechaza (`continuation_tools_changed`).
+Los nombres siguen la regla Agent Skills; el `name` del frontmatter manda
+aunque no coincida con la carpeta, porque skills publicadas para otros harnesses
+no siempre lo cumplen. El contenido de las skills es del host: no concede
+permisos ni ejecuta scripts.
+
+**Verificación:** `test/exagent/skills_test.exs` (parser, validación, lectura de
+directorios, carga en el loop, recarga en caliente, tools ocultos y desbloqueados
+también tras turnos de Server y rehidratación desde Store, ids reutilizados,
+capability restrictiva posterior, confinamiento de rutas, ocultos y symlinks de
+fichero y directorio, posición de la reposición tras la `Compaction.Summary`
+real). Hubo tres revisiones independientes, la segunda y la tercera a petición
+expresa del usuario. Entre otros, encontraron:
+- un fallo de átomos en `read_skill_file` que los tests ocultaban (corregido y
+  comprobado en una VM limpia);
+- la capability única que devolvía tools quitados por otras (ahora `Gate`
+  primero y `Restore` al final);
+- ids reutilizados entre turnos;
+- cargas fallidas que terminaban el run;
+- falta de cota de tamaño.
+
+Las correcciones posteriores a la última revisión no se volvieron a revisar. Lectura de 400
+`SKILL.md` reales de otros harnesses en este host: 392 aceptados, 8 rechazados
+por nombres fuera de la regla (`Zotero`, `google_meet`).
+
 ## Vista previa opt-in de argumentos de tools en streaming (2026-10-04)
 
 **Problema demostrado:** un consumidor (Dragonex) publica su prosa como argumento

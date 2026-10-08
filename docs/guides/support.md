@@ -1,8 +1,8 @@
 # Supported features and limits
 
-ExAgent 2.0 is published on [Hex](https://hex.pm/packages/exagent/2.0.0).
+ExAgent 2.1 is published on [Hex](https://hex.pm/packages/exagent/2.1.0).
 Its runtime targets are Elixir 1.18 / OTP 28 and Elixir 1.20 / OTP 29.
-The general model backend uses official ReqLLM 1.26; applications may implement
+The general model backend uses official ReqLLM 1.27; applications may implement
 `ExAgent.Model` for a different adapter.
 
 ## Select the capability you need
@@ -14,6 +14,7 @@ The general model backend uses official ReqLLM 1.26; applications may implement
 | OpenRouter tool routing | `tool_profile: :openrouter_chat_tools_v1` | Provider routing and reasoning mode are bound to the conversation. |
 | Native JSON Schema output | `output_profile: :chat_json_schema_v1`, `output_mode: :native` | Non-strict remote schema; local Ecto validation remains authoritative. The routed OpenRouter tools profile does not enable this output profile. |
 | Deterministic local runs | `model: "test"` or `%Models.Test{script: ...}` | Exercises the agent loop without interpreting prompts or calling a provider. |
+| Skills | `ExAgent.new(skills: ExAgent.Skills.from_dir!(dir))` | Agent Skills `SKILL.md` subset; trusted host content; scripts are never executed. |
 | Stateful conversations | `AgentSupervisor` and `Server` | Queue admission is volatile; the application handles backpressure. |
 | Shared-state coordination | `Session`, `Composition`, `Flow` | Trusted host definitions, explicit ownership and bounded branches. |
 | Conversation checkpoints | `Store.ETS` or `Store.Postgres` | ETS is ephemeral. PostgreSQL requires the application's Repo and database lifecycle. |
