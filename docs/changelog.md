@@ -6,6 +6,66 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.2.0]
+
+Released 2026-10-12 from tag `v2.2.0`. Additive: agents and models that do not
+use the new options behave as in 2.1.0.
+
+### Added
+
+- `ExAgent.run/3` accepts a non-empty list of content parts as the prompt:
+  `text`, `image_url`, `image` and the new `file` part for PDFs. The list is
+  validated and stored with string keys before any request; an invalid part
+  fails with `{:invalid_prompt_part, index}` and an empty list with
+  `:invalid_prompt`. `Models.ReqLLM` sends PDFs when the model declares `:pdf`
+  input and the provider encodes documents (OpenRouter, Anthropic, Google),
+  and rejects them before IO otherwise. String prompts are unchanged.
+- `ExAgent.new(on_max_steps: :final)`. The last allowed step keeps function
+  tools declared but asks for the final answer: `ModelRequestParameters` gains
+  `final_step`, which `Models.ReqLLM` sends as `tool_choice: none` or the
+  output tool, plus a request-only user instruction that is not added to
+  history. A function call in that step is not executed (it gets a
+  `not_executed` return, also after crash recovery) and the run fails with
+  `:max_steps_exceeded`, as before. The default `:error` keeps the 2.1 loop.
+- `Models.ReqLLM` option `prompt_cache`. On OpenRouter, `true` or
+  `[ttl: "5m" | "1h"]` adds `cache_control` breakpoints to the last system
+  message and the newest message. On OpenAI, `[key: key]` sends
+  `prompt_cache_key`. Other providers reject it before IO.
+- `ExAgent.Models.Fallback`, an `ExAgent.Model` that retries transient failures
+  (HTTP 408/429/5xx/529 without output; connection failures and total
+  timeouts only with `retry_transport: true`) with exponential backoff, then
+  falls back to the next model. Each attempt keeps `ModelSettings.timeout`;
+  the run deadline bounds all attempts together. Streams retry only before
+  their first event. A request counts once towards `request_limit`; every
+  retry emits `[:exagent, :model, :retry]` telemetry. A persisted history
+  resumes when any of its models accepts it.
+- `ModelRequestParameters.deadline`: the run deadline (monotonic
+  milliseconds) or `nil`, set for each request so a model that makes several
+  attempts can bound them. Not persisted.
+- `RequestError.transport`: set by `Models.ReqLLM` (for example
+  `:econnrefused` or `:closed`) when the connection failed without an HTTP
+  response; `nil` otherwise. `reason` is unchanged.
+- `Models.ReqLLM` option `foreign_history: :portable` (default `:reject`). It
+  sends history this model cannot replay natively (responses from another
+  model, route or reasoning mode) as plain text and tool calls, without
+  reasoning, signatures or provider metadata, so a fallback model can continue
+  the conversation. Responses from the configured model and route are sent
+  exactly as before.
+
+### Dependencies
+
+- `req_llm ~> 1.28.0` (was `~> 1.27.0`), with its required `llm_db 2026.10.2`
+  floor (locked at 2026.10.3). 1.28 adds StepFun providers, OpenAI image
+  `detail` on Responses input, Codex reasoning across tool turns, priced
+  streamed OpenAI service tiers and streamed cache-write TTL groups, and a
+  stricter `billing_usage_complete` in its normalized usage. ExAgent reads only
+  the public counters and semantic flags. One observable difference: a sparse
+  OpenAI-style usage map (for example only `prompt_tokens`) now keeps the
+  reported counter instead of normalizing every counter to 0; the accounting
+  quality stays `normalized`. No ExAgent API, profile, codec or snapshot changes.
+- Lock refresh: `decimal 3.2.0`. `gproc` stays at 1.2.0 because upstream
+  `grpcbox` (test-only, via `opentelemetry_exporter`) pins it.
+
 ## [2.1.0]
 
 Released 2026-10-08 from tag `v2.1.0`. Additive: agents built without `:skills`

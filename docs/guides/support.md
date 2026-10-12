@@ -1,8 +1,8 @@
 # Supported features and limits
 
-ExAgent 2.1 is published on [Hex](https://hex.pm/packages/exagent/2.1.0).
+ExAgent 2.2 is published on [Hex](https://hex.pm/packages/exagent/2.2.0).
 Its runtime targets are Elixir 1.18 / OTP 28 and Elixir 1.20 / OTP 29.
-The general model backend uses official ReqLLM 1.27; applications may implement
+The general model backend uses official ReqLLM 1.28; applications may implement
 `ExAgent.Model` for a different adapter.
 
 ## Select the capability you need
@@ -13,6 +13,10 @@ The general model backend uses official ReqLLM 1.27; applications may implement
 | Chat tools and streaming | `tool_profile: :chat_tools_v1` and truthful Chat capability metadata | Requires a compatible non-reasoning Chat endpoint and the mandatory argument envelope. |
 | OpenRouter tool routing | `tool_profile: :openrouter_chat_tools_v1` | Provider routing and reasoning mode are bound to the conversation. |
 | Native JSON Schema output | `output_profile: :chat_json_schema_v1`, `output_mode: :native` | Non-strict remote schema; local Ecto validation remains authoritative. The routed OpenRouter tools profile does not enable this output profile. |
+| Images and documents | `ExAgent.run(agent, [%{type: "text", ...}, %{type: "image", ...}])` | Each modality must be declared by the model; PDFs need a document-capable transport such as OpenRouter. |
+| Prompt caching | `Models.ReqLLM.new(prompt_cache: ...)` | OpenRouter `cache_control` breakpoints or an OpenAI cache key; other providers reject it. |
+| Retries and fallback models | `Models.Fallback.new(models: [...])` | Retries only failures without output; switching models needs `foreign_history: :portable`. |
+| Final answer at the step limit | `ExAgent.new(on_max_steps: :final)` | The last step cannot call function tools; a call there is not executed. |
 | Deterministic local runs | `model: "test"` or `%Models.Test{script: ...}` | Exercises the agent loop without interpreting prompts or calling a provider. |
 | Skills | `ExAgent.new(skills: ExAgent.Skills.from_dir!(dir))` | Agent Skills `SKILL.md` subset; trusted host content; scripts are never executed. |
 | Stateful conversations | `AgentSupervisor` and `Server` | Queue admission is volatile; the application handles backpressure. |

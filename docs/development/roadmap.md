@@ -1,5 +1,54 @@
 # Roadmap ejecutable de ExAgent v2.0.0
 
+**v2.2.0 preparada 2026-10-12 — reintentos, respaldo, caché, multimodal y
+cierre en `max_steps`:** a petición del usuario, tras comparar frameworks de
+agentes, cuatro features aditivas (sin evals). Se añaden
+`ExAgent.Models.Fallback`, `foreign_history: :portable` y `prompt_cache` en
+`Models.ReqLLM` (`req_llm_prompt_cache.ex` aparte), prompts como lista de partes
+(`file` para PDF) y `on_max_steps: :final`. Campos nuevos con valor por defecto:
+`ModelRequestParameters.final_step`/`deadline` y `RequestError.transport`.
+Dependencias: ReqLLM 1.28, llm_db 2026.10.3, decimal 3.2.0. Esto cierra la idea
+de cierre forzado al agotar `max_steps` que quedaba pendiente en 2.1.0.
+Decisión en diseño «Reintentos, respaldo, caché, multimodal y cierre en
+`max_steps`». Evidencia offline:
+- una revisión independiente: siete bugs confirmados corregidos (reanudación
+  con respaldo, guarda del paso final tras recuperación, partes struct, calidad
+  contable, reintento de transporte, semántica del timeout y aviso del paso
+  final como mensaje de usuario), cada uno con test; el precio de un
+  `estimate_cost` explícito con `Fallback` queda documentado como limitación;
+- subconjunto adaptador/continuaciones: 611 pases (antes de la revisión);
+  focales tras los arreglos: 55 + 27 pases;
+- `bin/check`: suite con semilla 37556, 2.305/2.306 y 28 excluidos. El único
+  fallo fijaba la lista de campos de `%ExAgent{}` sin `on_max_steps`; se añadió
+  el campo y ese archivo pasa 5/5. Después pasan formato, docs, enlaces, TAR e
+  aislamiento del paquete. El test sensible a carga de `ReqLLMBridgeTest` pasó.
+
+Consumidor `exAgentTest/chat_app`: ReqLLM 1.28 y guarda live a 1.28.0, nueva
+suite `features` (casos 32–35: caída del proveedor con respaldo e historial
+portable, caché de una política larga, cierre en `max_steps`, ticket PNG y
+factura PDF en un prompt) con su ledger de 40 admisiones. `mix precommit`
+offline: 22 pases y 35 casos live excluidos. E2E reales (artefactos en
+`/tmp/e2e-v220`, misma huella de fuentes en todas las olas):
+- Luna: features 4/4, smoke 23/23, skills 4/4, complex 4/4; complex offline
+  4/4. El primer intento del caso 35 falló por un patrón del propio test (la
+  petición guardada incluye también la parte de sistema); corregido el oráculo,
+  pasa en una ola aparte.
+- DeepSeek: features 4/4; smoke 22/23 (falla 23, como en 2.1.0); skills 2/4
+  (28 por una petición en que el modelo devuelve razonamiento con el modo
+  `none` y la guarda existente lo rechaza; 31 como en 2.1.0); complex 3/4 (24
+  falla en la primera ola y pasa al repetirlo; 27 falla igual que 24: la etapa
+  que copia `{"amount":7}` no produce JSON válido para el mapper).
+- Las cuatro features nuevas pasan con ambos modelos. El caso 33 confirma
+  caché real: 1265/1315 tokens cacheados (Luna) y 1280/1280 (DeepSeek) en los
+  turnos 2 y 3. La decodificación de razonamiento de OpenAI Chat no cambia
+  entre ReqLLM 1.27 y 1.28 (diff de fuentes), así que los fallos de DeepSeek se
+  atribuyen al modelo, no a esta versión.
+
+Versión 2.2.0 (mix.exs, changelog, guías de instalación). Tras el cambio pasan
+espacios, formato, `release_workflow_test`, `release-check v2.2.0 --prepare`,
+harness, docs, enlaces, TAR e aislamiento. El usuario pidió commit, push y
+publicación en Hex mediante la release de GitHub.
+
 **Dependencias 2026-10-08 para v2.1.0:** ReqLLM 1.27, jsv 0.26, llm_db
 2026.10.0, req 0.7.5 y makeup 1.2.3; gproc fijado upstream. Resultados:
 - `bin/check`: 2.283 pases y 28 excluidos.

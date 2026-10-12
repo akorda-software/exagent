@@ -301,9 +301,10 @@ defmodule ExAgent.QualifiedAccountingTest do
       assert result.usage.accounting["version"] == 1
       assert result.usage_status == :complete
 
+      # ReqLLM 1.28 keeps a sparse counter; 1.27 dropped the whole sparse map.
       expected =
         case wire do
-          %{"prompt_tokens" => input, "completion_tokens" => output} -> {input, output}
+          %{} -> {Map.get(wire, "prompt_tokens", 0), Map.get(wire, "completion_tokens", 0)}
           _ -> {0, 0}
         end
 

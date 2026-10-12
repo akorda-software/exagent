@@ -83,6 +83,87 @@ uncertain request cannot resume through another route. Earlier unbound
 OpenRouter history is rejected. See [Migration](migration.md) for continuation
 version 4 and the unaffected OpenAI history versions.
 
+## Send images and documents
+
+`ExAgent.run/3` also accepts a list of content parts instead of a string:
+
+```elixir
+ExAgent.run(agent, [
+  %{type: "text", text: "Summarize the report and describe the chart."},
+  %{type: "image", data: Base.encode64(png), media_type: "image/png"},
+  %{type: "file", data: Base.encode64(pdf), media_type: "application/pdf",
+    filename: "report.pdf"}
+])
+```
+
+Parts are `text`, `image_url` (`http`, `https` or `data` URL), `image` and
+`file` (base64 data). The list is checked and stored with string keys before
+any request; an invalid part fails with `{:invalid_prompt_part, index}` and an
+empty list with `:invalid_prompt`. The model then accepts or rejects each
+modality before IO: images need `:image` in the model's input modalities, and
+PDFs need `:pdf` and a provider that sends documents (OpenRouter, Anthropic or
+Google; stock OpenAI Chat accepts only images). Base64 content counts towards
+`max_history_bytes`, so raise it for large files.
+
+## Cache stable prompt prefixes
+
+`prompt_cache` lowers the cost of long instructions and growing tool histories
+without changing what is sent:
+
+```elixir
+model = ExAgent.Models.ReqLLM.new(
+  model: openrouter_spec,
+  api_key: System.fetch_env!("OPENROUTER_API_KEY"),
+  tool_profile: :openrouter_chat_tools_v1,
+  prompt_cache: [ttl: "5m"]
+)
+```
+
+On OpenRouter it marks the last system message and the newest message with a
+`cache_control` breakpoint, which Anthropic and Gemini routes use; `ttl` is
+`"5m"` or `"1h"`. OpenAI caches long prefixes automatically, and
+`prompt_cache: [key: "tenant:42"]` sends a stable `prompt_cache_key` to improve
+hits. Other providers reject the option before IO. Cache reads and writes show
+up in `result.usage.details` when the provider reports them.
+
+## Retry and fall back to another model
+
+`ExAgent.Models.Fallback` retries transient provider failures and then tries
+the next model:
+
+```elixir
+primary = ExAgent.Models.ReqLLM.new(primary_options ++ [foreign_history: :portable])
+backup = ExAgent.Models.ReqLLM.new(backup_options ++ [foreign_history: :portable])
+
+model = ExAgent.Models.Fallback.new(models: [primary, backup], max_retries: 2)
+agent = ExAgent.new(model: model, tools: tools)
+```
+
+Only failures that returned no output are retried: HTTP 408, 429, 500, 502,
+503, 504 and 529 by default (`:retry_statuses`). A gateway may still bill an
+upstream attempt behind a 502 or 504. Connection failures and total timeouts
+may already have been processed and billed, so they need
+`retry_transport: true`. Backoff is exponential with jitter. Each attempt
+keeps `ModelSettings.timeout` as its receive timeout, and the run `deadline`
+bounds all attempts together. A stream is retried only if it fails before its
+first event.
+
+A retried request is still one admitted request: `request_limit` and
+`result.request_count` count model requests, not HTTP attempts. Each retry
+emits `[:exagent, :model, :retry]` telemetry. An explicit `estimate_cost`
+callback receives the `Fallback` model rather than the one that answered;
+price by the response's `model_name` or rely on usage the models report.
+
+Switching models mid-conversation sends one model's responses to another.
+`Models.ReqLLM` rejects that by default. With `foreign_history: :portable` it
+sends history it cannot replay natively (another model's responses, or its
+own from another route or reasoning mode) as plain text and tool calls,
+without their reasoning, signatures or provider metadata, instead of
+rejecting it. Tool calls keep ExAgent's argument codec, so tool history stays
+exact. A conversation that only uses one model and route is sent exactly as
+before. A persisted conversation resumes when any model of the chain accepts
+its history.
+
 ## Bound requests and tool calls
 
 ```elixir
@@ -106,6 +187,23 @@ requires a finite request limit. Provider-reported or normalized tokens and
 estimated cost have quality/status fields. Unknown usage or cost is not zero,
 and an estimated threshold is not a guaranteed invoice ceiling.
 
+## Finish at the step limit
+
+By default a run that reaches `max_steps` fails with `:max_steps_exceeded`.
+With `on_max_steps: :final`, the last allowed step asks for an answer instead:
+
+```elixir
+agent = ExAgent.new(model: model, tools: tools, max_steps: 8, on_max_steps: :final)
+```
+
+In step `max_steps` the function tools stay declared but cannot be called (the
+model gets `tool_choice: none`, or the output tool for structured output), and
+that request alone ends with a user instruction saying the limit was reached.
+The instruction is not added to the conversation history. If the model still
+calls a function tool, the call is not executed (it gets a `not_executed`
+return) and the run fails with `:max_steps_exceeded`. The run never makes more
+than `max_steps` model requests.
+
 ## Separate the timeout boundaries
 
 | Boundary | Meaning |
@@ -128,5 +226,6 @@ neither authorizes tools or proves that a turn completed. Arbitrary oversized
 error control still fails the original retention limit.
 
 API: `ExAgent.Models.ReqLLM`,
+`ExAgent.Models.Fallback`,
 `ExAgent.Model`,
 `ExAgent.ModelSettings`.

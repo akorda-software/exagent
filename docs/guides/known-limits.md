@@ -8,6 +8,7 @@ configuration, results and failure handling.
 |---|---|
 | Provider capabilities | A catalogue model ID does not certify Chat tools, streaming or native JSON output. Declare the actual compatible profile and verify your endpoint. |
 | Tool arguments | Function calls require the mandatory `arguments` envelope. Invalid/truncated calls reject before effects; there is no JSON repair. |
+| Retries and fallback | A retried request counts as one admitted request. Transport failures and timeouts are only retried on request, because the provider may have billed them. A portable history drops another model's reasoning and provider metadata. |
 | Native output | The provider receives a non-strict schema. Local schema/Ecto validation decides success. Stock responses may omit a refusal that accompanies valid JSON. |
 | Usage and cost | Tokens retain normalized/reported quality and cost is estimated. Unknown is not zero. A retrospective threshold cannot bound an invoice for work already in flight. |
 | Memory | Host retention limits act after stock decoding. Upstream queues/materialization and caller-retained history have their own allocations. |

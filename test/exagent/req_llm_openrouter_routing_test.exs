@@ -116,6 +116,56 @@ defmodule ExAgent.ReqLLMOpenRouterRoutingTest do
     assert Message.from_json(Message.to_json(result.messages)) == {:ok, result.messages}
   end
 
+  test "prompt_cache marks the system prefix and the newest message on every request" do
+    agent =
+      ExAgent.new(
+        model: model(prompt_cache: [ttl: "1h"]),
+        tools: [tool()],
+        instructions: "Stable instructions."
+      )
+
+    assert {:ok, %{output: "done"} = result} = ExAgent.run(agent, "go")
+    control = %{"type" => "ephemeral", "ttl" => "1h"}
+
+    for n <- 0..1 do
+      assert_receive {:http, ^n, body}
+
+      marked =
+        for {message, index} <- Enum.with_index(body["messages"]),
+            is_list(message["content"]),
+            Enum.any?(message["content"], &(&1["cache_control"] == control)),
+            do: index
+
+      last_system =
+        body["messages"]
+        |> Enum.with_index()
+        |> Enum.filter(fn {message, _} -> message["role"] == "system" end)
+        |> List.last()
+        |> elem(1)
+
+      assert marked == [last_system, length(body["messages"]) - 1]
+    end
+
+    assert {:ok, binding} = Model.continuation_binding(model(prompt_cache: true))
+    assert {:ok, ^binding} = Model.continuation_binding(model())
+    assert Message.from_json(Message.to_json(result.messages)) == {:ok, result.messages}
+  end
+
+  test "prompt_cache rejects options the provider cannot honour before IO" do
+    for {cache, reason} <- [
+          {[key: "tenant"], {:unsupported_options, :prompt_cache}},
+          {[ttl: "2h"], {:invalid_option, :prompt_cache}},
+          {:yes, {:invalid_option, :prompt_cache}}
+        ] do
+      assert {:error, %ExAgent.RunError{reason: {:model_request_failed, error}}} =
+               ExAgent.run(ExAgent.new(model: model(prompt_cache: cache)), "go")
+
+      assert error.reason == reason
+    end
+
+    refute_receive {:http, _, _}, 0
+  end
+
   test "reasoning none routes without a duplicate budget or temperature" do
     m = model(reasoning_mode: :none)
 

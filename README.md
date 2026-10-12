@@ -7,7 +7,7 @@
 
 <!-- MDOC -->
 
-> **ExAgent 2.1 is available on [Hex](https://hex.pm/packages/exagent/2.1.0).**
+> **ExAgent 2.2 is available on [Hex](https://hex.pm/packages/exagent/2.2.0).**
 > When upgrading from 1.x, read the [migration guide](docs/guides/migration.md)
 > for the runtime, model, event and snapshot changes. See
 > [supported features and limits](docs/guides/support.md) for deployment requirements.
@@ -93,7 +93,7 @@ Add the published package to your application:
 
 ```elixir
 def deps do
-  [{:exagent, "~> 2.1"}]
+  [{:exagent, "~> 2.2"}]
 end
 ```
 
@@ -118,7 +118,7 @@ using the built-in `ExAgent.Models.Test` model, **no API key needed**:
 
 ```elixir
 Mix.install([
-  {:exagent, "~> 2.1"}
+  {:exagent, "~> 2.2"}
 ])
 
 agent = ExAgent.new(model: "test", instructions: "Be concise.")
@@ -582,8 +582,10 @@ Strings alone resolve identity; they do not load credentials or enable tools/Cha
 Model structs remain unchanged through `resolve/1`. Unknown options reject.
 OpenCode Go/Zen require explicit endpoints; stock `zai:` means ZAI, **not** the old
 Anthropic gateway alias. See the exact migration recipes. Bring your own model by
-implementing `ExAgent.Model`, without private ReqLLM APIs. Automatic retries and
-redirects are disabled; stream limits are documented on `ExAgent.Models.ReqLLM`.
+implementing `ExAgent.Model`, without private ReqLLM APIs. The adapter never
+retries or follows redirects on its own; wrap models in `ExAgent.Models.Fallback`
+for explicit retries and fallback. Stream limits are documented on
+`ExAgent.Models.ReqLLM`.
 Incomplete/invalid terminal responses fail before effects. Usage is normalized,
 provider presence unknown, and costs estimated; strict metric limits reject this
 contract, while host request/tool limits remain exact admission counters.

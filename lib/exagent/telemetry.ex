@@ -12,6 +12,8 @@ defmodule ExAgent.Telemetry do
     * `[:exagent, :run, :stop]` — measurements: `%{duration}`, metadata: `%{agent, usage, steps}`
     * `[:exagent, :run, :exception]` — measurements: `%{duration}`, metadata: `%{agent, reason}`
     * `[:exagent, :tool, :stop]` — measurements: `%{duration}`, metadata: `%{tool_name, success}`
+    * `[:exagent, :model, :retry]` — emitted by `ExAgent.Models.Fallback` before a retry or
+      fallback; measurements: `%{attempt, delay}`, metadata: `%{model, status, fallback}`
   """
   @spec execute([atom()], map(), map()) :: :ok
   def execute(event, measurements, metadata \\ %{}) when is_list(event) do

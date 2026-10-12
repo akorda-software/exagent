@@ -5,9 +5,12 @@ defmodule ExAgent.RequestError do
   Every provider wraps failures in this struct so callers can pattern-match on a
   single shape instead of opaque tuples. `ExAgent.run/3` surfaces it (wrapped in
   `{:error, {:model_request_failed, %RequestError{}}}`) rather than raising.
+
+  `transport` is set (for example to `:econnrefused`, `:closed` or `:timeout`)
+  when the connection failed without an HTTP response; it is `nil` otherwise.
   """
   @enforce_keys [:provider, :reason]
-  defstruct [:provider, :status, :reason, :body, :partial_response, :model]
+  defstruct [:provider, :status, :reason, :body, :partial_response, :model, :transport]
 
   @type t :: %__MODULE__{
           provider: atom(),
@@ -15,7 +18,8 @@ defmodule ExAgent.RequestError do
           reason: atom() | tuple(),
           body: term() | nil,
           partial_response: ExAgent.Message.Response.t() | nil,
-          model: struct() | nil
+          model: struct() | nil,
+          transport: atom() | nil
         }
 end
 

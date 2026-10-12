@@ -569,6 +569,80 @@ defmodule ExAgent.ReqLLMEnvelopeTest do
     refute_receive {:request, _, _, _}, 0
   end
 
+  test "on_max_steps final keeps tools declared and only allows an answer in the last step" do
+    effect = call(wire(%{"value" => 1}))
+
+    assert {:ok, %{output: "prefix", run_step: 2} = result} =
+             ExAgent.run(
+               ExAgent.new(
+                 model: model([response([effect]), final()]),
+                 tools: [tool()],
+                 max_steps: 2,
+                 on_max_steps: :final
+               ),
+               "go"
+             )
+
+    assert_receive {:request, 0, _, first}
+    assert first["tool_choice"] == "auto"
+    assert_receive {:request, 1, _, last}
+    assert last["tool_choice"] == "none"
+    assert [%{"function" => %{"name" => "effect"}}] = last["tools"]
+    assert %{"role" => "user", "content" => notice} = List.last(last["messages"])
+    assert inspect(notice) =~ "step limit"
+    refute inspect(result.messages) =~ "step limit"
+
+    assert {:ok, %{output: %EmptyOutput{}}} =
+             ExAgent.run(
+               ExAgent.new(
+                 model: model([response([effect]), response([call(wire(%{}), "final_result")])]),
+                 tools: [tool()],
+                 output_type: EmptyOutput,
+                 max_steps: 2,
+                 on_max_steps: :final
+               ),
+               "go"
+             )
+
+    assert_receive {:request, 1, _, forced}
+
+    assert forced["tool_choice"] == %{
+             "type" => "function",
+             "function" => %{"name" => "final_result"}
+           }
+  end
+
+  test "OpenAI prompt_cache sends only a stable key and other providers reject it" do
+    assert {:ok, _, _} =
+             Model.request(
+               model([final()], prompt_cache: [key: "tenant:a"]),
+               [prompt()],
+               nil,
+               params()
+             )
+
+    assert_receive {:request, 0, _, payload}
+    assert payload["prompt_cache_key"] == "tenant:a"
+    refute inspect(payload) =~ "cache_control"
+
+    assert {:ok, _, _} =
+             Model.request(model([final()], prompt_cache: true), [prompt()], nil, params())
+
+    assert_receive {:request, 0, _, automatic}
+    refute Map.has_key?(automatic, "prompt_cache_key")
+
+    other = model([], model: %{spec() | provider: :groq}, tool_profile: nil, prompt_cache: true)
+
+    assert {:error, %ExAgent.RequestError{reason: {:unsupported, :prompt_cache}}} =
+             Model.request(other, [prompt()], nil, %ModelRequestParameters{})
+
+    refute_receive {:request, _, _, _}, 0
+
+    # false disables it like nil, on any provider.
+    disabled = %{other | prompt_cache: false, http_options: []}
+    assert ExAgent.Models.ReqLLMPromptCache.resolve!(disabled.prompt_cache, :groq) == nil
+  end
+
   test "terminal failures, no hidden retry, reserved options and unqualified APIs stay closed" do
     for finish <- ["length", "content_filter", "incomplete", "unknown", nil] do
       assert {:error, _} =

@@ -13,6 +13,98 @@
 > Conserva sus reproducciones y guards como estado runtime, no como aceptación
 > del nuevo contrato. C7 y los contratos de autoridad/recuperación permanecen.
 
+## Reintentos, respaldo, caché, multimodal y cierre en `max_steps` (2026-10-12)
+
+**Petición:** el usuario pidió comparar ExAgent con los frameworks de agentes más
+usados (Pydantic AI, OpenAI Agents SDK, LangGraph, Google ADK, Mastra, Claude
+Agent SDK, LangChain Elixir, Sagents, Jido, Ash AI...) y eligió cuatro features,
+sin cambios incompatibles. Las evals se descartaron.
+
+**Problemas demostrados:**
+- Un 429/5xx/529 del proveedor terminaba el run; los reintentos automáticos
+  estaban desactivados a propósito para que las admisiones fueran exactas.
+  `Models.ReqLLM` rechaza respuestas de otro proveedor/modelo/endpoint
+  (`:continuation_target_mismatch`), así que tampoco había respaldo posible.
+- No había forma de pedir prompt caching. Los perfiles con tools sólo admiten
+  OpenAI directo y OpenRouter y Anthropic directo rechaza historial con
+  respuestas, por lo que el caso útil es OpenRouter (Anthropic/Gemini detrás).
+- `run/3` estaba tipado como texto aunque `Part.User` y el adaptador ya
+  admitían imágenes; no había documentos.
+- Agotar `max_steps` fallaba sin respuesta aunque el modelo tuviera datos
+  suficientes.
+
+**Decisión:**
+- `ExAgent.Models.Fallback` implementa `ExAgent.Model`: el bucle no cambia y
+  cada petición sigue siendo una admisión. Reintenta sólo fallos sin salida
+  (estados configurables; transporte/timeout opt-in porque pudieron cobrarse,
+  identificados por el nuevo `RequestError.transport`). Cada intento conserva
+  `settings.timeout` (timeout de recepción) y el deadline del run, expuesto en
+  el nuevo `ModelRequestParameters.deadline`, acota todos los intentos. En
+  streaming, sólo antes del primer evento. Perfil = intersección (calidad
+  contable `:normalized` si algún modelo lo es); binding = lista de bindings;
+  una reanudación vale si algún modelo acepta el historial.
+- `Models.ReqLLM` gana `foreign_history: :reject | :portable`. Las comprobaciones
+  de historial pasan a `foreign_reason/4`; una respuesta propia se envía igual
+  que antes y, con `:portable`, lo que no puede reenviar de forma nativa (otro
+  modelo, ruta o modo de reasoning) se proyecta a texto y llamadas con el
+  códec `exagent.arguments/1` (sin reasoning, firmas ni metadatos).
+- `Models.ReqLLM` gana `prompt_cache`: breakpoints `cache_control` en OpenRouter
+  (último sistema y último mensaje) o `prompt_cache_key` en OpenAI; el resto
+  rechaza antes de IO. No entra en el binding: no cambia la semántica.
+- `run/3` acepta `[content_part]`, normalizada a claves string en la admisión
+  (las continuaciones comparan el input con `===` tras JSON). Nueva parte
+  `file` para PDF, condicionada a la modalidad `:pdf` y a un transporte que la
+  envíe (OpenRouter, Anthropic, Google; OpenAI Chat de ReqLLM sólo admite
+  imágenes). Partes struct o con claves no atom/string se rechazan.
+- `on_max_steps: :error | :final` y `ModelRequestParameters.final_step`. En el
+  último paso las tools siguen declaradas (algunos proveedores rechazan
+  historial con llamadas sin `tools`) y se fuerza `tool_choice`. La instrucción
+  es un mensaje de usuario sólo en la proyección de esa petición (no desplaza
+  el breakpoint de caché del sistema); un reintento persistido restaura la
+  proyección capturada. Una llamada a función en ese paso no se ejecuta y
+  recibe un retorno `not_executed`; la guarda se deriva del paso, así que
+  también vale tras recuperar una respuesta después de un crash.
+
+**Alternativas descartadas:** reintentar dentro del bucle (cada intento una
+admisión y una intención en el journal: mucho más invasivo); reintentos en Req
+(ocultos a la contabilidad y al deadline); quitar las tools en el paso final
+(rompe proveedores que exigen `tools` con historial de llamadas); respaldo sólo
+con el mismo modelo (no cubre caídas de proveedor).
+
+**Impacto observable:** sólo con las opciones nuevas. Campos nuevos con valor por
+defecto en `ExAgent`, `ModelRequestParameters` (`final_step`, `deadline`),
+`RequestError` (`transport`) y `Models.ReqLLM`; un evento de telemetría nuevo.
+Limitación: un `estimate_cost` explícito recibe el `Fallback`, no el modelo que
+respondió. Los modelos de terceros pueden ignorar `final_step`: el bucle
+no ejecuta llamadas en ese paso. Sin migración.
+
+**Verificación:** tests focales nuevos (`multimodal_prompt_test`,
+`on_max_steps_test`, `fallback_model_test` y casos en los tests de ReqLLM), una
+revisión independiente cuyos hallazgos se corrigieron, y la suite real
+`features` (casos 32–35) de `exAgentTest/chat_app`; resultados en la hoja de ruta.
+
+## Actualización de dependencias a ReqLLM 1.28 (2026-10-12)
+
+**Petición:** el usuario pide revisar y actualizar todas las dependencias.
+
+**Decisión:** `req_llm ~> 1.28.0` (exige `llm_db ~> 2026.10.2`; lock en
+2026.10.3) y `decimal 3.2.0` en el lock. `gproc` sigue en 1.2.0 porque `grpcbox`
+(sólo test, vía `opentelemetry_exporter`) lo fija. Se mantiene la política de
+requisitos limitados a parches. El resto del grafo ya estaba al día.
+
+**Impacto:** sin cambios de API, perfiles, codecs ni snapshots. ReqLLM 1.28
+endurece `billing_usage_complete` y `usage_reported` en su usage normalizado,
+añade grupos de escritura de caché por TTL en streaming y precio por
+`service_tier` de OpenAI, y usa `Mint.HTTP2` directamente en la sesión duplex.
+`ExAgent.Message.Usage.normalized/2` sólo lee contadores públicos y los flags
+`input_includes_cached`/`add_reasoning_to_cost`, así que la contabilidad no
+cambia. Diferencia observable: un usage OpenAI parcial (sólo `prompt_tokens`)
+conserva ahora ese contador en lugar de quedar en 0; la calidad sigue siendo
+`normalized`. La caracterización stock de `qualified_accounting_test.exs` se
+actualiza. Los consumidores sin lock resuelven 1.28 al actualizar.
+
+**Verificación:** ver hoja de ruta.
+
 ## Actualización de dependencias para v2.1.0 (2026-10-08)
 
 **Petición:** el usuario pide actualizar todas las dependencias y publicar 2.1.0.

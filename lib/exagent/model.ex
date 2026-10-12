@@ -19,8 +19,21 @@ defmodule ExAgent.ModelRequestParameters do
             output_object: nil,
             idempotency_key: nil,
             instructions: [],
-            tool_call_deltas: false
+            tool_call_deltas: false,
+            final_step: false,
+            deadline: nil
 
+  @typedoc """
+  `final_step` marks the last step of an agent with `on_max_steps: :final`.
+  Implementations should keep `function_tools` declared but prevent calls to
+  them (for example with a `none` or output-tool choice). The loop never
+  executes a function call returned in that step.
+
+  `deadline` is the run's absolute deadline in monotonic milliseconds
+  (`System.monotonic_time(:millisecond)`), or `nil` without one. It is set for
+  each request so a model that makes several attempts (for example
+  `ExAgent.Models.Fallback`) can bound them together; it is never persisted.
+  """
   @type t :: %__MODULE__{
           function_tools: [Tool.t()],
           output_tools: [Tool.t()],
@@ -29,7 +42,9 @@ defmodule ExAgent.ModelRequestParameters do
           output_object: output_object() | nil,
           idempotency_key: String.t() | nil,
           instructions: [Message.Part.System.t()],
-          tool_call_deltas: boolean()
+          tool_call_deltas: boolean(),
+          final_step: boolean(),
+          deadline: integer() | nil
         }
 end
 

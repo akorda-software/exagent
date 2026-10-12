@@ -430,15 +430,82 @@ defmodule ExAgent.Message do
     end
 
     defmodule User do
-      @moduledoc "A user prompt part (text or multimodal content list)."
+      @moduledoc """
+      A user prompt part: a string or a non-empty list of content parts.
+
+      Content parts are JSON-portable maps (atom or string keys):
+
+        * `%{"type" => "text", "text" => text}`
+        * `%{"type" => "image_url", "url" => url}` — `http`, `https` or `data` URL
+        * `%{"type" => "image", "data" => base64, "media_type" => "image/png"}`
+        * `%{"type" => "file", "data" => base64, "media_type" => "application/pdf"}`,
+          with an optional `"filename"`
+
+      The model decides at request time whether it accepts each modality.
+      """
       @derive [Jason.Encoder]
       @enforce_keys [:content]
       defstruct [:content, :timestamp]
 
+      @type content_part :: %{required(String.t()) => String.t()}
       @type t :: %__MODULE__{
-              content: String.t() | [map()],
+              content: String.t() | [content_part()],
               timestamp: DateTime.t() | nil
             }
+
+      @doc false
+      # Canonical string-keyed parts, so history compares equal after JSON round trips.
+      def normalize_content(content) when is_binary(content), do: {:ok, content}
+
+      def normalize_content([_ | _] = parts) do
+        parts
+        |> Enum.with_index()
+        |> Enum.reduce_while({:ok, []}, fn {part, index}, {:ok, acc} ->
+          case normalize_part(part) do
+            {:ok, part} -> {:cont, {:ok, [part | acc]}}
+            :error -> {:halt, {:error, {:invalid_prompt_part, index}}}
+          end
+        end)
+        |> case do
+          {:ok, parts} -> {:ok, Enum.reverse(parts)}
+          error -> error
+        end
+      end
+
+      def normalize_content(_), do: {:error, :invalid_prompt}
+
+      defp normalize_part(part) when is_map(part) and not is_struct(part) do
+        keys? = Enum.all?(Map.keys(part), &(is_atom(&1) or is_binary(&1)))
+        normalized = if keys?, do: Map.new(part, fn {key, value} -> {to_string(key), value} end)
+
+        with true <- keys? and map_size(normalized) == map_size(part),
+             normalized =
+               Map.update(normalized, "type", nil, &if(is_atom(&1), do: to_string(&1), else: &1)),
+             true <- Enum.all?(normalized, fn {_, value} -> is_binary(value) end),
+             true <- valid_part?(normalized) do
+          {:ok, normalized}
+        else
+          _ -> :error
+        end
+      end
+
+      defp normalize_part(_), do: :error
+
+      defp valid_part?(%{"type" => "text", "text" => _} = part), do: map_size(part) == 2
+
+      defp valid_part?(%{"type" => "image_url", "url" => url} = part),
+        do: map_size(part) == 2 and URI.parse(url).scheme in ["http", "https", "data"]
+
+      defp valid_part?(%{"type" => "image", "data" => data, "media_type" => media} = part),
+        do: map_size(part) == 3 and String.starts_with?(media, "image/") and base64?(data)
+
+      defp valid_part?(%{"type" => "file", "data" => data, "media_type" => media} = part) do
+        map_size(Map.delete(part, "filename")) == 3 and media != "" and base64?(data)
+      end
+
+      defp valid_part?(_), do: false
+
+      defp base64?(data), do: data != "" and match?({:ok, _}, Base.decode64(data))
     end
 
     defmodule ToolReturn do

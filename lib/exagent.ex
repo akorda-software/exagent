@@ -21,6 +21,7 @@ defmodule ExAgent do
             output_retries: 1,
             tool_timeout: 30_000,
             max_steps: 50,
+            on_max_steps: :error,
             max_payload_bytes: 1_048_576,
             max_history_bytes: 8_388_608,
             usage_limits: nil,
@@ -29,6 +30,7 @@ defmodule ExAgent do
             observability: nil
 
   @type output_type :: :text | module()
+  @type prompt :: String.t() | [ExAgent.Message.Part.User.content_part()]
   @type t :: %__MODULE__{
           model: Model.model(),
           instructions: [Part.System.t()],
@@ -39,6 +41,7 @@ defmodule ExAgent do
           output_retries: non_neg_integer(),
           tool_timeout: pos_integer(),
           max_steps: pos_integer(),
+          on_max_steps: :error | :final,
           max_payload_bytes: pos_integer(),
           max_history_bytes: pos_integer(),
           usage_limits: ExAgent.UsageLimits.t() | nil,
@@ -68,6 +71,8 @@ defmodule ExAgent do
         }
 
   @output_tool_name "final_result"
+  @final_step_instruction "The step limit has been reached and tools can no longer be called. " <>
+                            "Give your final answer now with the information you already have."
 
   # -------------------------------------------------------------------------
   # Construction
@@ -95,6 +100,12 @@ defmodule ExAgent do
   an `ExAgent.Skills.Gate` before `:capabilities` when a skill has tools, and
   `ExAgent.Skills.Restore` after them; see `ExAgent.Skills`. Invalid skills or
   clashing tool names raise `ArgumentError`.
+
+  `:on_max_steps` chooses what the last allowed step does. `:error` (default)
+  keeps the previous behaviour. `:final` asks the model for its final answer in
+  step `max_steps`: function tools stay declared but cannot be called, and a
+  request-only instruction says the step limit was reached. Function calls in
+  that step are not executed and the run fails with `:max_steps_exceeded`.
   """
   @spec new(keyword()) :: t()
   def new(opts) when is_list(opts) do
@@ -116,6 +127,7 @@ defmodule ExAgent do
       output_retries: Keyword.get(opts, :output_retries, 1),
       tool_timeout: Keyword.get(opts, :tool_timeout, 30_000),
       max_steps: Keyword.get(opts, :max_steps, 50),
+      on_max_steps: on_max_steps!(Keyword.get(opts, :on_max_steps, :error)),
       max_payload_bytes: Keyword.get(opts, :max_payload_bytes, 1_048_576),
       max_history_bytes: Keyword.get(opts, :max_history_bytes, 8_388_608),
       usage_limits: Keyword.get(opts, :usage_limits),
@@ -124,6 +136,11 @@ defmodule ExAgent do
       observability: Keyword.get(opts, :observability)
     }
   end
+
+  defp on_max_steps!(value) when value in [:error, :final], do: value
+
+  defp on_max_steps!(value),
+    do: raise(ArgumentError, "on_max_steps must be :error or :final, got: #{inspect(value)}")
 
   defp prepare_definition_tools(tools) when is_list(tools) do
     Enum.map(tools, fn
@@ -187,6 +204,11 @@ defmodule ExAgent do
   @doc """
   Run the agent against `prompt`, returning `{:ok, result}` or `{:error, _}`.
 
+  `prompt` is a string or a non-empty list of content parts (text, images and
+  documents; see `ExAgent.Message.Part.User`). An invalid part fails with
+  `{:invalid_prompt_part, index}` and an empty list or other value with
+  `:invalid_prompt`, before any model request.
+
   Operational errors contain an `ExAgent.RunError`: its `reason` is the cause
   and `partial` preserves history, usage and the last confirmed model. Retrying
   the prompt is a new execution and can repeat effects.
@@ -216,13 +238,15 @@ defmodule ExAgent do
     * `:trace_context`     — ephemeral context captured with the OTel adapter;
       use for application-owned process boundaries, never persisted snapshots.
   """
-  @spec run(t(), String.t(), keyword()) :: {:ok, result()} | {:error, term()}
+  @spec run(t(), prompt(), keyword()) :: {:ok, result()} | {:error, term()}
   def run(agent, prompt, opts \\ []) do
     opts = ExAgent.Continuation.Writer.bind_deadline(opts)
+    {prompt, prompt_check} = prompt_content(prompt)
     state = init_state(agent, prompt, opts)
 
     admission =
-      with :ok <- retention_input(state),
+      with :ok <- prompt_check,
+           :ok <- retention_input(state),
            {:ok, _} <- ExAgent.Continuation.Writer.config(opts[:continuation]),
            do: :ok
 
@@ -243,6 +267,17 @@ defmodule ExAgent do
         )
     end
   end
+
+  # Content lists are checked before admission; other prompt values keep their
+  # previous pass-through behaviour.
+  defp prompt_content(prompt) when is_list(prompt) do
+    case Part.User.normalize_content(prompt) do
+      {:ok, content} -> {content, :ok}
+      error -> {prompt, error}
+    end
+  end
+
+  defp prompt_content(prompt), do: {prompt, :ok}
 
   @doc "Resume a persisted approval from an explicitly supplied trusted agent and configuration."
   def resume(agent, reference, opts \\ []) do
@@ -1149,7 +1184,7 @@ defmodule ExAgent do
   end
 
   @doc "Run synchronously and return the output value directly, raising on error."
-  @spec run!(t(), String.t(), keyword()) :: term()
+  @spec run!(t(), prompt(), keyword()) :: term()
   def run!(agent, prompt, opts \\ []) do
     case run(agent, prompt, opts) do
       {:ok, %{status: :paused}} -> raise ExAgent.UnexpectedModelBehavior, :run_paused
@@ -1174,7 +1209,7 @@ defmodule ExAgent do
   cancels the owned worker; effects already performed are not rolled back.
   A suspended Enumerable continuation must be resumed or explicitly halted.
   """
-  @spec run_stream(t(), String.t(), keyword()) :: Enumerable.t()
+  @spec run_stream(t(), prompt(), keyword()) :: Enumerable.t()
   def run_stream(agent, prompt, opts \\ []) do
     ExAgent.RunStream.new(agent, prompt, opts)
   end
@@ -1509,10 +1544,11 @@ defmodule ExAgent do
     protect(state, fn ->
       case check_usage_limits(state) do
         :ok ->
+          state = %{state | run_step: state.run_step + 1}
+
           state = %{
             state
-            | run_step: state.run_step + 1,
-              params: %{state.params | idempotency_key: nil}
+            | params: %{state.params | idempotency_key: nil, final_step: final_step?(state)}
           }
 
           emit(state, :run_step_started, %{step: state.run_step})
@@ -1522,7 +1558,7 @@ defmodule ExAgent do
             transformed = ExAgent.Capabilities.before_model_request(state.capabilities, state)
 
             case retained_transform(transformed, state) do
-              {:ok, transformed} -> request_step(transformed)
+              {:ok, transformed} -> request_step(final_step_projection(transformed))
               {:error, reason} -> fail(state, reason)
             end
           end)
@@ -1533,8 +1569,28 @@ defmodule ExAgent do
     end)
   end
 
+  # The instruction belongs to this request's projection only, so canonical
+  # history and later conversations never see it. A persisted retry restores
+  # the captured projection instead of rebuilding it.
+  defp final_step_projection(state) do
+    if final_step?(state) do
+      notice = %Request{
+        parts: [%Part.User{content: @final_step_instruction}],
+        timestamp: DateTime.utc_now()
+      }
+
+      %{state | request_messages: (state.request_messages || state.messages) ++ [notice]}
+    else
+      state
+    end
+  end
+
+  defp final_step?(state),
+    do: state.agent.on_max_steps == :final and state.run_step >= state.max_steps
+
   defp request_step(state) do
     state = refresh_scope(state)
+    state = %{state | params: %{state.params | final_step: final_step?(state)}}
 
     protect(state, fn ->
       with {:ok, state} <- prepare_request_tools(state),
@@ -1713,7 +1769,11 @@ defmodule ExAgent do
               timeout =
                 ExecutionScope.remaining_timeout(state.execution_scope, state.settings.timeout)
 
-              state = %{state | settings: %{state.settings | timeout: timeout}}
+              state = %{
+                state
+                | settings: %{state.settings | timeout: timeout},
+                  params: %{state.params | deadline: state.execution_scope.deadline}
+              }
 
               if state.stream_text,
                 do: drive_stream(state.model, messages, state.settings, state.params, state),
@@ -2214,75 +2274,87 @@ defmodule ExAgent do
       {[output_call | extra_output_calls], siblings} ->
         handle_output_call(output_call, extra_output_calls ++ siblings, state)
 
+      # Derived from the step, not the request flag, so a response recovered
+      # after a crash is guarded too.
       {[], fn_calls} ->
-        case check_tool_calls_limit(state, length(fn_calls)) do
-          :ok ->
-            {parts, controls, state} = execute_function_tools(fn_calls, state)
-
-            {parts, checkpoint_error} =
-              ExAgent.Continuation.Writer.settle(state.continuation, state, parts)
-
-            inputs =
-              Enum.zip(parts, controls)
-              |> Enum.map(fn {part, {retry, error}} ->
-                {part.tool_name, part.status, retry, error}
-              end)
-
-            limits = ExAgent.Continuation.ToolEvidence.batch(state)["limits"]
-
-            {retries, error} =
-              ExAgent.Continuation.ToolEvidence.reduce(inputs, state.tool_retries, limits)
-
-            resolution =
-              ExAgent.Continuation.Writer.tool_resolution(
-                state.continuation,
-                state,
-                parts,
-                controls,
-                checkpoint_error
-              )
-
-            resolution_error =
-              case resolution do
-                :ok -> nil
-                {:error, reason} -> reason
-              end
-
-            error = error || checkpoint_error || resolution_error
-
-            state =
-              Enum.reduce(parts, state, fn part, st ->
-                %{st | usage: merge_usage(st.usage, part.usage)}
-              end)
-
-            state = %{
-              state
-              | tool_calls: state.tool_calls + length(fn_calls),
-                tool_retries: retries
-            }
-
-            cond do
-              error ->
-                fail(append_returns(state, Enum.reject(parts, &(&1.status == :pending))), error)
-
-              Enum.any?(parts, &(&1.status == :pending)) ->
-                pause_run(state, parts)
-
-              true ->
-                case consume_tool_batch(state) do
-                  :ok ->
-                    state = append_returns(%{state | continuation_frame: nil}, parts)
-                    drive(state)
-
-                  {:error, reason} ->
-                    fail(state, reason)
-                end
-            end
-
-          {:error, reason} ->
-            parts = Enum.map(fn_calls, &tool_return(&1, :not_executed, reason_msg(reason)))
-            fail(append_returns(state, parts), reason)
+        if final_step?(state) do
+          reason = {:max_steps_exceeded, state.max_steps}
+          parts = Enum.map(fn_calls, &tool_return(&1, :not_executed, reason_msg(reason)))
+          fail(append_returns(state, parts), reason)
+        else
+          execute_tool_calls(fn_calls, state)
         end
+    end
+  end
+
+  defp execute_tool_calls(fn_calls, state) do
+    case check_tool_calls_limit(state, length(fn_calls)) do
+      :ok ->
+        {parts, controls, state} = execute_function_tools(fn_calls, state)
+
+        {parts, checkpoint_error} =
+          ExAgent.Continuation.Writer.settle(state.continuation, state, parts)
+
+        inputs =
+          Enum.zip(parts, controls)
+          |> Enum.map(fn {part, {retry, error}} ->
+            {part.tool_name, part.status, retry, error}
+          end)
+
+        limits = ExAgent.Continuation.ToolEvidence.batch(state)["limits"]
+
+        {retries, error} =
+          ExAgent.Continuation.ToolEvidence.reduce(inputs, state.tool_retries, limits)
+
+        resolution =
+          ExAgent.Continuation.Writer.tool_resolution(
+            state.continuation,
+            state,
+            parts,
+            controls,
+            checkpoint_error
+          )
+
+        resolution_error =
+          case resolution do
+            :ok -> nil
+            {:error, reason} -> reason
+          end
+
+        error = error || checkpoint_error || resolution_error
+
+        state =
+          Enum.reduce(parts, state, fn part, st ->
+            %{st | usage: merge_usage(st.usage, part.usage)}
+          end)
+
+        state = %{
+          state
+          | tool_calls: state.tool_calls + length(fn_calls),
+            tool_retries: retries
+        }
+
+        cond do
+          error ->
+            fail(append_returns(state, Enum.reject(parts, &(&1.status == :pending))), error)
+
+          Enum.any?(parts, &(&1.status == :pending)) ->
+            pause_run(state, parts)
+
+          true ->
+            case consume_tool_batch(state) do
+              :ok ->
+                state = append_returns(%{state | continuation_frame: nil}, parts)
+                drive(state)
+
+              {:error, reason} ->
+                fail(state, reason)
+            end
+        end
+
+      {:error, reason} ->
+        parts = Enum.map(fn_calls, &tool_return(&1, :not_executed, reason_msg(reason)))
+        fail(append_returns(state, parts), reason)
     end
   end
 

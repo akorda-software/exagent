@@ -304,6 +304,36 @@ defmodule ExAgent.ReqLLMModelTest do
     refute_receive {:http, _, _, _}, 0
   end
 
+  test "PDF input needs a declared pdf modality and a transport that accepts documents" do
+    pdf = %{
+      "type" => "file",
+      "data" => Base.encode64("%PDF-1.4"),
+      "media_type" => "application/pdf",
+      "filename" => "report.pdf"
+    }
+
+    history = [request([%{"type" => "text", "text" => "summarize"}, pdf])]
+    routed = %{spec(:openrouter) | modalities: %{input: [:text, :pdf], output: [:text]}}
+    model = model([text("pdf seen")], model: routed)
+    assert {:ok, _, _} = Model.request(model, history, nil, params())
+    assert_receive {:http, 0, _, body}
+
+    assert [%{"content" => [%{"type" => "text"}, %{"type" => "file", "file" => file}]}] =
+             body["messages"]
+
+    assert file["filename"] == "report.pdf"
+
+    for spec <- [
+          %{spec(:openai) | modalities: %{input: [:text, :pdf], output: [:text]}},
+          spec(:openrouter)
+        ] do
+      assert {:error, %RequestError{reason: {:unsupported, :document_input}}} =
+               Model.request(%{model | model: spec}, history, nil, params())
+    end
+
+    refute_receive {:http, _, _, _}, 0
+  end
+
   test "signed snapshot data is retained but stock Anthropic continuation rejects before IO" do
     model = model([], model: spec(:anthropic))
 

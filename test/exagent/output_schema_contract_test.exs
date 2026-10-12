@@ -25,6 +25,7 @@ defmodule ExAgent.OutputSchemaContractTest do
                :model,
                :name,
                :observability,
+               :on_max_steps,
                :output_mode,
                :output_retries,
                :output_type,

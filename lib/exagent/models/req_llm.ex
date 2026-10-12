@@ -25,6 +25,15 @@ defmodule ExAgent.Models.ReqLLM do
   limited to the explicit Chat tool profiles below and rejects HTTP `:adapter`
   injection (stock streaming uses its own public transport path).
 
+  `:prompt_cache` (default `nil`; `false` also disables it) enables provider
+  prompt caching without
+  changing history, tools or continuation binding. On OpenRouter, `true` or
+  `[ttl: "5m" | "1h"]` adds `cache_control` breakpoints to the last system
+  message and the newest message (used by Anthropic and Gemini routes). OpenAI
+  caches automatically; `[key: key]` sends a stable `prompt_cache_key` to
+  improve cache hits. Other providers reject the option before IO. Cache reads
+  and writes appear in the usage details when the provider reports them.
+
   Public ReqLLM Response metrics retain this adapter's conservative normalized
   accounting contract. ReqLLM 1.26 adds usage-presence metadata, but its complete
   provider/surface semantics are not qualified as observed host accounting. Metrics are
@@ -124,6 +133,7 @@ defmodule ExAgent.Models.ReqLLM do
   alias Backend.Message, as: BackendMessage
   alias Backend.Message.ContentPart, as: Content
   alias ExAgent.Models.ReqLLMEnvelope, as: Envelope
+  alias ExAgent.Models.ReqLLMPromptCache, as: PromptCache
 
   @envelope_instruction "All function calls must use one outer JSON object with an \"arguments\" object containing the declared parameters. For a function with no parameters, use {\"arguments\": {}}. Do not send declared parameters at the top level."
 
@@ -137,6 +147,8 @@ defmodule ExAgent.Models.ReqLLM do
     :tool_profile,
     :output_profile,
     :reasoning_mode,
+    :prompt_cache,
+    foreign_history: :reject,
     provider_options: [],
     http_options: []
   ]
@@ -150,6 +162,8 @@ defmodule ExAgent.Models.ReqLLM do
           tool_profile: :chat_tools_v1 | :openrouter_chat_tools_v1 | nil,
           output_profile: :chat_json_schema_v1 | nil,
           reasoning_mode: :none | nil,
+          prompt_cache: boolean() | keyword() | nil,
+          foreign_history: :reject | :portable,
           provider_options: keyword(),
           http_options: keyword()
         }
@@ -292,6 +306,7 @@ defmodule ExAgent.Models.ReqLLM do
       validate_tool_profile!(model, resolved)
       validate_output_profile!(model)
       validate_continuation_support!(model, resolved, messages)
+      cache = PromptCache.resolve!(model.prompt_cache, resolved.provider)
       settings = settings || %ModelSettings{}
       settings = stream_settings!(model, settings, mode)
       settings = reasoning_settings!(model, settings)
@@ -301,8 +316,13 @@ defmodule ExAgent.Models.ReqLLM do
           do: Envelope.prepare!(params.function_tools ++ params.output_tools),
           else: %{}
 
-      opts = options!(model, settings, params, endpoint, definitions)
-      context = context!(messages, resolved, endpoint, model, definitions)
+      opts =
+        model |> options!(settings, params, endpoint, definitions) |> PromptCache.put_key(cache)
+
+      context =
+        messages
+        |> context!(resolved, endpoint, model, definitions)
+        |> PromptCache.put_breakpoints(cache)
 
       if mode == :preflight do
         :ok
@@ -538,6 +558,9 @@ defmodule ExAgent.Models.ReqLLM do
 
     allow_keys!(model.http_options, [:adapter, :receive_timeout], :http_options)
 
+    unless model.foreign_history in [:reject, :portable],
+      do: fail!({:invalid_option, :foreign_history})
+
     allowed =
       if model.tool_profile == :openrouter_chat_tools_v1,
         do: [:openrouter_provider, :app_title, :app_referer],
@@ -624,7 +647,7 @@ defmodule ExAgent.Models.ReqLLM do
        [
          base_url: endpoint,
          tools: tools,
-         tool_choice: if(params.allow_text_output, do: :auto, else: :required),
+         tool_choice: tool_choice(params),
          max_retries: 0,
          telemetry: [payloads: :none],
          json_repair: false,
@@ -642,6 +665,17 @@ defmodule ExAgent.Models.ReqLLM do
     |> Enum.reject(fn {_, value} -> is_nil(value) end)
     |> reasoning_options!(model, settings)
   end
+
+  # The final step keeps tool definitions visible (providers can reject tool
+  # history without them) and only lets the model answer.
+  defp tool_choice(%{final_step: true, output_tools: [%{name: name}]}),
+    do: %{type: "tool", name: name}
+
+  defp tool_choice(%{final_step: true, function_tools: [_ | _], allow_text_output: true}),
+    do: :none
+
+  defp tool_choice(%{allow_text_output: true}), do: :auto
+  defp tool_choice(_), do: :required
 
   defp reasoning_options!(
          options,
@@ -753,41 +787,98 @@ defmodule ExAgent.Models.ReqLLM do
   defp message!(%Message.Response{} = response, resolved, endpoint, model, definitions) do
     continuation = Continuation.validate!(response.continuation)
 
-    if model.tool_profile == :openrouter_chat_tools_v1 do
-      unless match?(%{"version" => 4}, continuation) and
-               continuation["routing"] == routing_data(model),
-             do: fail!(:continuation_routing_mismatch)
+    case foreign_reason(continuation, resolved, endpoint, model) do
+      nil ->
+        native_message!(response, continuation, resolved, model, definitions)
 
-      expected = if model.reasoning_mode == :none, do: "none", else: "disabled"
-      unless continuation["reasoning_mode"] == expected, do: fail!(:continuation_mode_mismatch)
-    else
-      unless (model.reasoning_mode == :none and
-                match?(%{"version" => 3, "reasoning_mode" => "none"}, continuation)) or
-               (is_nil(model.reasoning_mode) and
-                  not match?(%{"version" => v} when v in [3, 4], continuation)),
-             do: fail!(:continuation_mode_mismatch)
+      _ when model.foreign_history == :portable ->
+        portable_message!(response, continuation, model, definitions)
+
+      reason ->
+        fail!(reason)
     end
+  end
 
-    if continuation &&
-         (continuation["provider"] != to_string(resolved.provider) or
-            continuation["model"] != resolved.id or continuation["endpoint"] != endpoint),
-       do: fail!(:continuation_target_mismatch)
+  defp message!(_, _, _, _, _), do: fail!(:invalid_history)
 
+  # nil when the response was produced by this exact target and mode.
+  defp foreign_reason(continuation, resolved, endpoint, model) do
+    openrouter? = model.tool_profile == :openrouter_chat_tools_v1
+
+    cond do
+      openrouter? and
+          not (match?(%{"version" => 4}, continuation) and
+                   continuation["routing"] == routing_data(model)) ->
+        :continuation_routing_mismatch
+
+      openrouter? and
+          continuation["reasoning_mode"] !=
+            if(model.reasoning_mode == :none, do: "none", else: "disabled") ->
+        :continuation_mode_mismatch
+
+      not openrouter? and
+          not ((model.reasoning_mode == :none and
+                  match?(%{"version" => 3, "reasoning_mode" => "none"}, continuation)) or
+                   (is_nil(model.reasoning_mode) and
+                      not match?(%{"version" => v} when v in [3, 4], continuation))) ->
+        :continuation_mode_mismatch
+
+      continuation &&
+          (continuation["provider"] != to_string(resolved.provider) or
+             continuation["model"] != resolved.id or continuation["endpoint"] != endpoint) ->
+        :continuation_target_mismatch
+
+      true ->
+        nil
+    end
+  end
+
+  # Another model's response, sent as plain text and tool calls. Its reasoning,
+  # signatures and provider metadata only make sense to the model that made it.
+  defp portable_message!(response, continuation, model, definitions) do
+    {parts, calls} = Enum.split_with(response.parts, &(not match?(%Part.ToolCall{}, &1)))
+    tool_codec!(calls, continuation, model)
+
+    content =
+      Enum.flat_map(parts, fn
+        %Part.Text{content: text} -> [Content.text(text)]
+        %Part.Thinking{} -> []
+        _ -> fail!({:unsupported, :response_part})
+      end)
+
+    tool_calls = Enum.map(calls, &backend_call!(&1, definitions, %{}))
+    content = if content == [] and tool_calls == [], do: [Content.text("")], else: content
+    [%BackendMessage{role: :assistant, content: content, tool_calls: tool_calls}]
+  end
+
+  defp tool_codec!([], _continuation, _model), do: :ok
+
+  defp tool_codec!(_calls, continuation, model) do
+    unless tools_supported?(model), do: fail!({:unsupported, :tool_argument_fidelity})
+
+    unless match?(
+             %{"version" => version, "arguments_codec" => "exagent.arguments/1"}
+             when version in [2, 3, 4],
+             continuation
+           ),
+           do: fail!({:unsupported, :tool_history_codec})
+  end
+
+  defp backend_call!(call, definitions, metadata) do
+    unless is_binary(call.tool_call_id) and call.tool_call_id != "",
+      do: fail!(:missing_tool_call_id)
+
+    Backend.ToolCall.new(call.tool_call_id, call.tool_name, Envelope.encode!(call, definitions))
+    |> Backend.ToolCall.put_metadata(metadata)
+  end
+
+  defp native_message!(response, continuation, resolved, model, definitions) do
     {parts, calls} = Enum.split_with(response.parts, &(not match?(%Part.ToolCall{}, &1)))
 
     if (tools_supported?(model) and continuation) && continuation["reasoning_details"] != [],
       do: fail!({:unsupported, :tool_profile_content})
 
-    if calls != [] do
-      unless tools_supported?(model), do: fail!({:unsupported, :tool_argument_fidelity})
-
-      unless match?(
-               %{"version" => version, "arguments_codec" => "exagent.arguments/1"}
-               when version in [2, 3, 4],
-               continuation
-             ),
-             do: fail!({:unsupported, :tool_history_codec})
-    end
+    tool_codec!(calls, continuation, model)
 
     content =
       Enum.map(parts, fn
@@ -809,18 +900,7 @@ defmodule ExAgent.Models.ReqLLM do
           fail!({:unsupported, :response_part})
       end)
 
-    tool_calls =
-      Enum.map(calls, fn call ->
-        unless is_binary(call.tool_call_id) and call.tool_call_id != "",
-          do: fail!(:missing_tool_call_id)
-
-        Backend.ToolCall.new(
-          call.tool_call_id,
-          call.tool_name,
-          Envelope.encode!(call, definitions)
-        )
-        |> Backend.ToolCall.put_metadata(metadata!(call.metadata))
-      end)
+    tool_calls = Enum.map(calls, &backend_call!(&1, definitions, metadata!(&1.metadata)))
 
     [
       %BackendMessage{
@@ -836,8 +916,6 @@ defmodule ExAgent.Models.ReqLLM do
       }
     ]
   end
-
-  defp message!(_, _, _, _, _), do: fail!(:invalid_history)
 
   defp text_content!(text) when is_binary(text), do: [Content.text(text)]
   defp text_content!(_), do: fail!({:unsupported, :system_content})
@@ -865,6 +943,20 @@ defmodule ExAgent.Models.ReqLLM do
             :error -> fail!(:invalid_image_data)
           end
 
+        %{"type" => "file", "data" => data, "media_type" => media} = file
+        when is_binary(data) and is_binary(media) ->
+          {filename, rest} = Map.pop(file, "filename", "document.pdf")
+
+          unless map_size(rest) == 3 and is_binary(filename),
+            do: fail!({:unsupported, :input_content})
+
+          document_allowed!(resolved, media)
+
+          case Base.decode64(data) do
+            {:ok, bytes} -> Content.file(bytes, filename, media)
+            :error -> fail!(:invalid_file_data)
+          end
+
         _ ->
           fail!({:unsupported, :input_content})
       end
@@ -872,6 +964,16 @@ defmodule ExAgent.Models.ReqLLM do
   end
 
   defp user_content!(_, _), do: fail!({:unsupported, :input_content})
+
+  # Providers whose stock ReqLLM encoding sends documents; OpenAI Chat and most
+  # OpenAI-compatible transports accept only image attachments.
+  @document_providers [:openrouter, :anthropic, :google]
+
+  defp document_allowed!(resolved, media) do
+    unless media == "application/pdf" and resolved.provider in @document_providers and
+             :pdf in ((resolved.modalities || %{})[:input] || []),
+           do: fail!({:unsupported, :document_input})
+  end
 
   defp image_allowed!(resolved) do
     unless :image in ((resolved.modalities || %{})[:input] || []),
@@ -1061,6 +1163,18 @@ defmodule ExAgent.Models.ReqLLM do
 
   defp safe_error(error, provider) do
     status = if is_map(error), do: Map.get(error, :status)
-    %RequestError{provider: provider, status: status, reason: :model_request_failed}
+
+    %RequestError{
+      provider: provider,
+      status: status,
+      reason: :model_request_failed,
+      transport: transport(error)
+    }
   end
+
+  # Connection failures without an HTTP response, bare or wrapped by ReqLLM.
+  defp transport(%Backend.Error.API.Request{cause: cause}), do: transport(cause)
+  defp transport(%Req.TransportError{reason: reason}) when is_atom(reason), do: reason
+  defp transport(%Req.TransportError{}), do: :error
+  defp transport(_), do: nil
 end
