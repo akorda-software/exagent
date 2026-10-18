@@ -132,6 +132,39 @@ defmodule ExAgent.ToolValidationTest do
     assert {:ok, %{extra: true}} = Tool.validate_args(tool(%{}), %{extra: true})
   end
 
+  test "date and time formats remain annotations without casting or stricter admission" do
+    for draft <- [
+          "https://json-schema.org/draft/2020-12/schema",
+          "http://json-schema.org/draft-07/schema#"
+        ],
+        {format, values} <- [
+          {"date", ["2026-10-18", "2026-02-30", "not-a-date"]},
+          {"time", ["12:34:56Z", "12:34:56+25:00", "not-a-time"]},
+          {"date-time", ["2026-10-18T12:34:56Z", "2026-10-18T12:34:56,123Z", "not-a-date-time"]}
+        ] do
+      schema = %{
+        "$schema" => draft,
+        "type" => "object",
+        "properties" => %{"value" => %{"type" => "string", "format" => format}},
+        "required" => ["value"]
+      }
+
+      assert {:ok, prepared} = Tool.prepare(tool(schema))
+      assert Tool.definition(prepared).parameters == schema
+
+      for value <- values do
+        args = %{value: value}
+        assert {:ok, original} = Tool.validate_args(prepared, args)
+        assert original === args
+      end
+
+      assert {:error, errors} = Tool.validate_args(prepared, %{value: 123})
+      assert Enum.any?(errors, &(&1.keyword == "type" and &1.path == "/value"))
+      assert {:error, errors} = Tool.validate_args(prepared, %{})
+      assert Enum.any?(errors, &(&1.keyword == "required"))
+    end
+  end
+
   test "invalid schemas fail preparation and cannot execute a callable" do
     for schema <- [
           nil,

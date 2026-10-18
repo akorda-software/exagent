@@ -4,7 +4,7 @@ defmodule ExAgent.MixProject do
   use Mix.Project
 
   @source_url "https://github.com/akorda-software/exagent"
-  @version "2.2.0"
+  @version "2.2.1"
 
   def project do
     [
@@ -61,7 +61,7 @@ defmodule ExAgent.MixProject do
       {:mint, "~> 1.11"},
       {:hpax, "~> 1.1"},
       {:jason, "~> 1.4"},
-      {:jsv, "~> 0.26.0"},
+      {:jsv, "~> 0.26.1"},
       {:ecto, "~> 3.12"},
       {:telemetry, "~> 1.0"},
       # Instrumentation is opt-in; the application owns its SDK and exporter.

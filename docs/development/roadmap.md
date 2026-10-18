@@ -1,5 +1,26 @@
 # Roadmap ejecutable de ExAgent v2.0.0
 
+**Publicación 2.2.1 autorizada 2026-10-18:** el usuario elige patch, no minor.
+Se eleva el mínimo JSV a `~> 0.26.1` para consumidores Hex y se alinean versión,
+changelog y guías. `lib/` y el lock de la suite aceptada permanecen idénticos;
+guards, focales y paquete se verifican sin repetir la suite completa por metadatos:
+17 guards, 95 focales, 19 casos documentados y docs/TAR/aislamiento pasan.
+Consumidor nuevo sin lock: 8/8 contratos, con JSV 0.26.1 y LLMDB 2026.10.5;
+diagnóstico estricto rojo por warnings upstream, sin ampliar aceptación del catálogo.
+Commit/push/tag/release GitHub → Hex autorizados; el resultado remoto y la lectura
+pública acreditan disponibilidad. No se modifican aplicaciones consumidoras.
+
+**Dependencias 2026-10-18 — compatibilidad de producción:** revisados los 45
+paquetes contra Hex. JSV pasa de 0.26.0 a 0.26.1 en el lock, con regresión de
+formatos para ambos dialectos (26/26 antes del update; 95 focales después). Se conserva LLMDB
+2026.10.3: el probe con 2026.10.5 reproduce pérdida de precios/límites/capabilities
+para dos specs existentes y el snapshot elimina 17 modelos. Gproc sigue bloqueado
+por grpcbox. Manifiesto, runtime y versión 2.2.0 intactos; sin publicación ni cambios
+en aplicaciones consumidoras. `bin/check` pasa: 2.307 pruebas, 28 exclusiones,
+docs/enlaces/TAR/aislamiento; Hex audit sin advisories. Consumidor mínimo: 8/8
+contratos tras corregir el pin obsoleto de la fixture, diagnóstico estricto exit 1
+por warnings upstream. Límites y logs en [dependencias](dependencies.md).
+
 **v2.2.0 preparada 2026-10-12 — reintentos, respaldo, caché, multimodal y
 cierre en `max_steps`:** a petición del usuario, tras comparar frameworks de
 agentes, cuatro features aditivas (sin evals). Se añaden

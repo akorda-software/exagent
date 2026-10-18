@@ -1,4 +1,96 @@
-# Dependencias de la candidata v2
+# Dependencias
+
+## Revisión vigente — 2026-10-18
+
+Se contrastan los **45 paquetes Hex** del lock raíz con la API oficial y
+`mix hex.outdated --all`, incluyendo transitivas, opcionales, tests y docs.
+Hay tres releases estables posteriores:
+
+| Paquete | Lock anterior | Última estable | Decisión |
+|---|---|---|---|
+| jsv | 0.26.0 | 0.26.1 | Actualizado en lock y manifiesto (`~> 0.26.1`) para publicar 2.2.1. |
+| llm_db | 2026.10.3 | 2026.10.5 | Se conserva 2026.10.3 por riesgo de regresión del catálogo. |
+| gproc | 1.2.0 | 1.3.0 | Bloqueado por `grpcbox 0.18.0`, que exige `~> 1.2.0`; sólo tests. |
+
+JSV 0.26.1 endurece RFC 3339 para `date`, `time` y `date-time`, y rechaza la
+coma decimal en fechas. ExAgent no habilita assertions de formatos en ninguno de
+sus dos dialectos. La nueva regresión verifica que strings válidos e inválidos
+siguen siendo admitidos como anotaciones, sin casts ni cambios en el schema
+público; `type` y `required` siguen rechazando entradas inválidas. No hace falta
+adaptar runtime. Tras la revisión inicial, el usuario autoriza publicar **2.2.1**
+y se eleva el mínimo del manifiesto para que la actualización llegue también a
+las aplicaciones Hex. Una app con JSV 0.26.0 debe actualizar su lock, sin migrar
+código. Fuente: [changelog JSV 0.26.1](https://github.com/lud/jsv/blob/v0.26.1/CHANGELOG.md).
+
+LLMDB 2026.10.5 añade proveedores/modelos y corrige precios, pero su snapshot
+elimina **17 modelos existentes**. Un probe offline con las dos versiones reales
+reproduce que `openrouter:unbiased/pareto` y
+`openrouter:inclusionai/ling-3.0-flash-fin` dejan de tener precios, límites y
+capabilities del catálogo al pasar por `ExAgent.Model.resolve/2`. ReqLLM sigue
+resolviendo esos IDs con su fallback de modelo no verificado; no es un error de
+resolución, pero sí una pérdida observable de metadata. Se aplaza la actualización
+en vez de inventar precios/capabilities, parchear upstream o requerir una migración.
+Fuentes: [release](https://hex.pm/packages/llm_db/2026.10.5) y
+[cambios oficiales](https://github.com/agentjido/llmdb/compare/2026.10.3...2026.10.5).
+
+**Límite de esta decisión:** una biblioteca Hex no distribuye su lock. No se añade
+un pin transitivo ni se estrecha el rango de LLMDB;
+ReqLLM ya admite 2026.10.5. Una aplicación que actualice su propio lock debe
+comprobar su selección de modelos o usar una spec explícita con la metadata que
+necesita. Mantener nuestro lock no bloquea esa resolución en aplicaciones externas.
+Se conservan Elixir `~> 1.18`, ReqLLM 1.28.0 y todos los contratos públicos.
+La revisión inicial no publica ni sube versión. El usuario autoriza después el
+commit/push, tag y publicación de **2.2.1** por GitHub → Hex; las aplicaciones
+consumidoras no se modifican desde este encargo.
+
+### Verificación de esta revisión
+
+- Antes del update: la regresión de formatos y el archivo de validación pasan
+  **26/26** con JSV 0.26.0; el probe del catálogo conserva la metadata descrita.
+- Con el lock final: **95 pruebas focales** pasan con warnings-as-errors.
+- `bin/check` pasa sus nueve fases en Elixir 1.20.0/OTP 29: compile estricto,
+  harness, **2.307 pases / 0 fallos / 28 exclusiones** (seed 37556; 2.003,1 s),
+  formato, ExDoc, enlaces, TAR e aislamiento. Los enlaces de 108 páginas HTML,
+  106 Markdown y 106 EPUB no tienen errores. Log:
+  `.exagent-local/checks/20261018T135805Z-3308802/`.
+- Consumidor mínimo instalado desde el TAR, con el lock final como entrada:
+  **8/8 contratos**, sin SDK/exporter/SQL/docs transitivos, y procedencia del
+  paquete confirmada para 140 módulos. El primer intento falla porque la fixture
+  aún exige `~> 0.25.0`; se alinea con el rango ya publicado `~> 0.26.0` y se
+  repite sólo este gate en un consumidor nuevo. Todos sus comandos pasan, pero
+  el diagnóstico agregado sigue **exit 1 por warnings stock TOML/WebSockex**;
+  no se ocultan ni se presenta como un diagnóstico estricto verde.
+- `mix hex.audit`: exit 0, sin paquetes retirados ni advisories en esta consulta.
+  `hex.outdated --all`: exit 1 esperado, **43 actuales**, LLMDB aplazado y gproc
+  bloqueado. No se fuerza ninguna de las dos actualizaciones restantes.
+- No hay nueva matriz 1.18, SDK/exporter, SQL o proveedores reales. Las 28
+  exclusiones no son pases. La suite no se repite tras la corrección de la fixture
+  ni el cierre de prosa: no cambia ninguna fuente runtime ni el lock verificado.
+- Evidencia local ignorada: `.exagent-local/dependency-review-2026-10-18/`
+  (consulta de 45 paquetes, diff de fuentes/snapshots, hashes oficiales y probes
+  antes/después, `consumer-final/` y sus diagnósticos). La regeneración documental
+  final conserva los bytes de `lib/` y `mix.exs` del TAR probado; los resultados
+  históricos siguientes no se presentan como nuevos.
+
+### Preparación de publicación 2.2.1
+
+El delta posterior a esos pases cambia sólo versión, mínimo JSV y prosa de
+instalación/release. `lib/` y el lock probado permanecen idénticos. Se verifican
+los guards de publicación, las fronteras afectadas y el TAR 2.2.1; no se repite
+la suite completa ni las pruebas pagadas por este delta de metadatos. Los logs
+de preparación y distribución viven en `.exagent-local/release-2.2.1/`.
+
+Preparación verificada: 17 guards de release, 95 focales con warnings-as-errors,
+19 casos documentados, compile dev estricto, formato, ExDoc/enlaces, build TAR e
+aislamiento pasan. Un consumidor nuevo **sin lock de entrada** resuelve JSV
+0.26.1 y LLMDB 2026.10.5 y pasa **8/8 contratos**; su diagnóstico agregado sigue
+exit 1 por los warnings upstream conocidos. Esa aceptación acotada no recupera
+los modelos retirados ni elimina el riesgo de catálogo documentado arriba.
+Se cotejan los hashes del lock/test con la suite completa anterior y los bytes
+de `lib/` entre los TAR: no cambian. El cierre de prosa sólo regenera docs/TAR;
+no se reutiliza un checksum anterior como identidad del artefacto final.
+
+## Revisión histórica — 2026-10-03
 
 Revisión del **2026-10-03**, solicitada antes de publicar. Se contrastan los
 **43 paquetes Hex** del lock raíz con la API pública de Hex y `mix hex.outdated

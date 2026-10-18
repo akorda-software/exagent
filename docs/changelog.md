@@ -6,6 +6,24 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.2.1]
+
+Released 2026-10-18 from tag `v2.2.1`. Maintenance release; no public API,
+runtime, event, history or snapshot changes from 2.2.0.
+
+### Dependencies
+
+- `jsv ~> 0.26.1` (was `~> 0.26.0`), also locked at 0.26.1. The minimum is
+  declared in the published manifest because consumer applications do not use
+  the library's lock. Its stricter RFC 3339 formats do
+  not change ExAgent's annotation-only date/time handling; a regression covers
+  both supported schema dialects. Applications locked to JSV 0.26.0 must update
+  that lock entry; no application code migration is required.
+- Keep `llm_db 2026.10.3` in the checkout lock: 2026.10.5 removes catalog entries
+  and demonstrably loses pricing and limit metadata for existing model specs.
+  Existing consumer dependency ranges remain unchanged; see the
+  [dependency review](development/dependencies.md) before updating consumer locks.
+
 ## [2.2.0]
 
 Released 2026-10-12 from tag `v2.2.0`. Additive: agents and models that do not

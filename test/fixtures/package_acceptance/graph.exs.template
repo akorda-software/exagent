@@ -24,7 +24,7 @@ true = :opentelemetry_exporter in apps == (mode == "exporter")
 true = Version.match?(Application.spec(:finch, :vsn) |> to_string(), ">= 0.24.0")
 true = Version.match?(Application.spec(:mint, :vsn) |> to_string(), ">= 1.11.0")
 true = Version.match?(Application.spec(:hpax, :vsn) |> to_string(), ">= 1.1.0")
-true = Version.match?(Application.spec(:jsv, :vsn) |> to_string(), "~> 0.25.0")
+true = Version.match?(Application.spec(:jsv, :vsn) |> to_string(), "~> 0.26.1")
 
 graph =
   Enum.map(deps, fn dep ->

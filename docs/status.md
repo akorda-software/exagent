@@ -1,5 +1,13 @@
 # Support and release status
 
+**Maintenance release 2026-10-18:** this checkout targets ExAgent 2.2.1 with
+`jsv ~> 0.26.1`; runtime sources and public contracts are unchanged from 2.2.0.
+The dependency review passes 2,307 offline tests (28 excluded), documentation,
+packaging and eight installed-consumer contracts. Strict consumer dependency
+diagnostics still report upstream warnings. Publication and public artifact
+readback are separate steps; see the [dependency record](development/dependencies.md).
+The dated records below retain their original scope.
+
 **Published 2026-10-04:** ExAgent 2.0.0 is available on
 [Hex](https://hex.pm/packages/exagent/2.0.0) and
 [HexDocs](https://hexdocs.pm/exagent/2.0.0/). The stable tag is `57c43a7`;

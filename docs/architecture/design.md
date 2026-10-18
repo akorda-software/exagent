@@ -13,6 +13,29 @@
 > Conserva sus reproducciones y guards como estado runtime, no como aceptación
 > del nuevo contrato. C7 y los contratos de autoridad/recuperación permanecen.
 
+## Actualización conservadora de dependencias (2026-10-18)
+
+El usuario exige compatibilidad con producción, incluyendo resultados, validación
+y metadata, no sólo firmas. La revisión de los 45 paquetes actualiza inicialmente
+el lock de JSV 0.26.0 a 0.26.1, conservando Elixir 1.18. Tras autorizar el usuario
+la publicación patch 2.2.1, el manifiesto exige `~> 0.26.1`: el lock de una
+biblioteca no se distribuye y por sí solo no actualiza a sus consumidores.
+Sus assertions RFC 3339 más estrictas no están habilitadas por ExAgent. Una
+regresión en ambos dialectos cubre strings válidos e inválidos sin casts ni cambios
+del schema, manteniendo `type`/`required`. No se modifica el runtime.
+
+Se prueba y se aplaza LLMDB 2026.10.5: elimina 17 modelos del snapshot y dos specs
+existentes pierden precios/límites/capabilities tras `Model.resolve/2`. El fallback
+stock no preserva esa metadata. Congelar una copia del catálogo o sintetizar esos
+datos añadiría un segundo registro y riesgos contables; no se hace. Gproc 1.3
+sigue bloqueado por el requisito stock de grpcbox, sólo test, sin overrides.
+
+No hay migración de código ni cambios de API, eventos, historial, snapshots o guards;
+una aplicación con JSV 0.26.0 bloqueado debe actualizar esa entrada del lock.
+El lock no se distribuye a consumidores Hex: no se promete que conservar LLMDB
+local impida a una aplicación resolver la release nueva con los rangos existentes.
+Evidencia y límites en [dependencias](../development/dependencies.md).
+
 ## Reintentos, respaldo, caché, multimodal y cierre en `max_steps` (2026-10-12)
 
 **Petición:** el usuario pidió comparar ExAgent con los frameworks de agentes más
