@@ -1,6 +1,6 @@
 # Support and release status
 
-**Maintenance release 2026-10-23 — verified 2.2.2:** ReqLLM 1.29 excludes
+**Maintenance release 2026-10-23 — published 2.2.2:** ReqLLM 1.29 excludes
 the upstream WebSocket TLS vulnerability; LLMDB 2026.10.6 refreshes the catalogue
 with explicit migration guidance for removed entries. ExAgent's HTTP transport
 is outside the advisory's affected path. This release also fixes node-local ETS
@@ -11,6 +11,13 @@ and 1.20. Strict dependency diagnostics retain stock TOML/WebSockex warnings.
 Verification and publication receipts are recorded in
 [dependencies](development/dependencies.md).
 The dated results below retain their original scope.
+
+[Hex 2.2.2](https://hex.pm/packages/exagent/2.2.2) and its
+[versioned documentation](https://hexdocs.pm/exagent/2.2.2/) are available.
+Release tag `0cb3f53` and
+[workflow 40005287814](https://github.com/akorda-software/exagent/actions/runs/40005287814)
+bind the publication; the public TAR matches the retained remote artifact and
+all 186 file contents match the verified local package.
 
 **Maintenance release 2026-10-18:** this checkout targets ExAgent 2.2.1 with
 `jsv ~> 0.26.1`; runtime sources and public contracts are unchanged from 2.2.0.

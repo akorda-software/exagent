@@ -1,6 +1,6 @@
 # Roadmap ejecutable de ExAgent v2.0.0
 
-**Release 2.2.2 autorizada 2026-10-23 — preparada y verificada:** el usuario pide
+**Release 2.2.2 autorizada 2026-10-23 — publicada:** el usuario pide
 revisar dependencias, adaptar lo necesario y publicar el siguiente patch. Hex
 confirma 2.2.1 como base. Se actualizan ReqLLM 1.29 (mínimo público), LLMDB
 2026.10.6 y TLS 1.36; Zoi y gproc conservan constraints upstream. El advisory
@@ -21,6 +21,15 @@ Hex audit limpio; 43 dependencias actuales y dos bloqueadas por sus padres.
 Evidencia en `.exagent-local/release-2.2.2/` y
 `.exagent-local/checks/20261023T180415Z-1495710/`. El cierre de prosa no cambia
 las fuentes verificadas ni repite las suites. No hay nueva cualificación live.
+
+Tag/main de release `0cb3f53`, [GitHub v2.2.2](https://github.com/akorda-software/exagent/releases/tag/v2.2.2).
+El [workflow 40005287814](https://github.com/akorda-software/exagent/actions/runs/40005287814)
+termina success; [Hex](https://hex.pm/packages/exagent/2.2.2) sirve la release
+activa con ReqLLM `~> 1.29.0` y [HexDocs](https://hexdocs.pm/exagent/2.2.2/)
+responde. El TAR público coincide byte a byte con el artefacto remoto; sus 186
+contenidos coinciden con el TAR final local. Recibo en dependencias y evidencia
+local `publication.json`. Este cierre documental posterior no mueve el tag ni
+modifica el paquete publicado.
 
 **Corrección autorizada 2026-10-23 — tres hallazgos resueltos sobre 2.2.1
 (`6410024`):** tras la revisión solicitada, el usuario pide corregir los tres

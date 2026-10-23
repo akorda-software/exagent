@@ -76,6 +76,26 @@ de prosa regenera únicamente docs/TAR; no repite la suite ni los consumidores.
 Evidencia local de preparación y distribución: `.exagent-local/release-2.2.2/`.
 Las ejecuciones históricas siguientes conservan su alcance.
 
+### Publicación 2.2.2
+
+La [release GitHub v2.2.2](https://github.com/akorda-software/exagent/releases/tag/v2.2.2)
+apunta a `0cb3f5371058951506313833edff84562dce764b`, integrado en main antes del
+tag. El [workflow 40005287814](https://github.com/akorda-software/exagent/actions/runs/40005287814)
+termina **success** y publica paquete y docs sin repetir las suites largas.
+[Hex](https://hex.pm/packages/exagent/2.2.2) confirma release activa y mínimo
+ReqLLM `~> 1.29.0`; [HexDocs](https://hexdocs.pm/exagent/2.2.2/) responde con
+ExAgent v2.2.2.
+
+El TAR público coincide byte a byte con el artefacto retenido de GitHub:
+SHA256 `88b8f0fd240e2caab5562fc928853d997cc257da0a67fab8b2d69f1c17cd6572`.
+Sus **186 archivos** coinciden byte a byte con el TAR final local. La comparación
+literal de metadata local/remota difiere sólo en el orden de la lista `files`;
+se comprueba igualdad de ese inventario ordenado y del resto exacto de metadata.
+Por ello el checksum local `29f9c04ab03bba5ae95fb22c086f0f8f00d8e9d6effa1d2d83a5b2f6b9c3d170`
+no se atribuye al paquete público. El recibo JSON, API pública, TAR, docs y
+artefacto remoto están en `.exagent-local/release-2.2.2/`. Este registro posterior
+es sólo documentación del checkout; no reemplaza el paquete ni mueve el tag.
+
 ## Revisión histórica — 2026-10-18
 
 Se contrastan los **45 paquetes Hex** del lock raíz con la API oficial y
