@@ -1,6 +1,82 @@
 # Dependencias
 
-## Revisión vigente — 2026-10-18
+## Revisión vigente — 2026-10-23, patch 2.2.2
+
+El usuario autoriza actualizar dependencias, adaptar la integración y publicar
+el siguiente patch. Hex confirma 2.2.1 como última versión de ExAgent. Se revisan
+los 45 paquetes del lock contra la API oficial y `hex.outdated --all`.
+
+| Paquete | Antes | Última estable | Decisión |
+|---|---|---|---|
+| req_llm | 1.28.0 | 1.29.0 | Actualizar lock y mínimo público a `~> 1.29.0`. |
+| llm_db | 2026.10.3 | 2026.10.6 | Actualizar con ReqLLM; migración de catálogo explícita. |
+| tls_certificate_check | 1.35.0 | 1.36.0 | Actualizar la transitiva de tests del exporter. |
+| zoi | 0.18.11 | 0.19.0 | ReqLLM 1.29 y LLMDB 2026.10.6 requieren `~> 0.18.11`. |
+| gproc | 1.2.0 | 1.3.0 | Grpcbox 0.18.0 conserva `~> 1.2.0`; sólo tests. |
+
+**Motivo para sustituir la retención anterior de ReqLLM/LLMDB:** el advisory
+[GHSA-6vww-5m28-f26v](https://github.com/agentjido/req_llm/security/advisories/GHSA-6vww-5m28-f26v),
+publicado el 22 de octubre, afecta a la verificación TLS en WebSockets de
+ReqLLM 1.9–1.28; 1.29 es la primera release corregida. El transporte HTTP/Finch
+de ExAgent queda fuera del alcance descrito por upstream. Aun así, el mínimo
+publicado evita instalar una dependencia vulnerable y protege a consumidores que
+también utilicen sus APIs directamente. No hay release 1.28.1.
+
+ReqLLM 1.29 exige LLMDB `~> 2026.10.4`, incompatible con el lock anterior.
+10.4 ya retira los 17 modelos que motivaron el aplazamiento; 10.6 retira 57 IDs
+y añade 499 respecto de 10.3. Siguen ausentes `openrouter:unbiased/pareto` e
+`openrouter:inclusionai/ling-3.0-flash-fin`. No se inventa metadata ni se copia
+un catálogo privado para ocultarlo. Se usa la API pública existente de specs
+explícitas, con precios/límites/capabilities verificados por la aplicación, y
+se documenta la migración. El éxito de resolver un ID desconocido no acredita
+metadata ni admisión de tools. Los fingerprints de continuación siguen cerrados.
+
+Fuentes: [ReqLLM 1.29](https://hex.pm/packages/req_llm/1.29.0),
+[LLMDB 2026.10.6](https://hex.pm/packages/llm_db/2026.10.6),
+[TLS 1.36](https://github.com/g-andrade/tls_certificate_check/blob/1.36.0/CHANGELOG.md),
+[Zoi requerido por ReqLLM](https://hex.pm/api/packages/req_llm/releases/1.29.0)
+y [gproc requerido por grpcbox](https://hex.pm/api/packages/grpcbox/releases/0.18.0).
+El refresh TLS cambia el bundle de CAs, no la API. No se fuerzan overrides de
+Zoi/gproc ni se modifican dependencias stock. Se mantiene Elixir `~> 1.18`.
+
+ReqLLM 1.29 también introduce defaults de `provider_options` en configuración
+global y metadata del modelo. Se añade una guarda antes de IO/preflight/binding
+para impedir que alteren rutas fuera de la allowlist o del binding C7. El error
+no refleja sus valores; las opciones permitidas se configuran en la instancia.
+La proyección stock de JSON en streaming ahora conserva Text y extrae `object`
+por separado; se actualiza ese oráculo sin relajar los guards del adaptador.
+
+Verificación inicial: 101/104 focales pasan. Dos fallos son el oráculo stock
+obsoleto de JSON; el tercero es una fixture nueva sin raíz object. Corregidas
+ambas causas y añadidas las regresiones de defaults, pasan 22 focales afectadas.
+La única revisión independiente del delta de dependencias no encuentra hallazgos;
+no reabre la revisión anterior de ETS/Fallback/enums. `hex.audit` sale 0, sin
+advisories ni paquetes retirados. `hex.outdated --all` sale 1 por las dos
+actualizaciones incompatibles de Zoi/gproc; los otros 43 paquetes están al día.
+
+El TAR candidato se instala **sin lock de entrada** en cinco consumidores
+aislados: none/API/SDK/exporter con Elixir 1.20/OTP29 y none con Elixir 1.18/OTP28.
+Pasan **40/40 contratos**, ocho por configuración, sin fallos/exclusiones/skips.
+Todos los comandos funcionales salen 0. El diagnóstico agregado de los runners
+conserva exit 1 por warnings stock: TOML en 1.18 y TOML/WebSockex en 1.20;
+no hay warnings de ExAgent ni supresión de avisos. Los 102 archivos de biblioteca
+y manifiesto del TAR coinciden byte a byte con las fuentes verificadas.
+
+`bin/check` pasa sus nueve fases: **2.320 pruebas / 0 fallos / 28 exclusiones**
+en 2.016,6 s (seed 37556), compile estricto, harness, formato, documentación,
+enlaces, TAR y aislamiento. Se comprueban 108 páginas HTML, 106 Markdown y
+106 EPUB sin errores de enlaces. Las 28 exclusiones de proveedores/PostgreSQL
+no son pases ni nueva cualificación de servicios reales. Log completo:
+`.exagent-local/checks/20261023T180415Z-1495710/`.
+
+También pasan los 17 guards de release y los 17 de docs-only, y el control de
+metadatos `release-check v2.2.2 --prepare`. Las fuentes de runtime/tests, el
+manifiesto y el lock conservan su identidad durante la verificación. El cierre
+de prosa regenera únicamente docs/TAR; no repite la suite ni los consumidores.
+Evidencia local de preparación y distribución: `.exagent-local/release-2.2.2/`.
+Las ejecuciones históricas siguientes conservan su alcance.
+
+## Revisión histórica — 2026-10-18
 
 Se contrastan los **45 paquetes Hex** del lock raíz con la API oficial y
 `mix hex.outdated --all`, incluyendo transitivas, opcionales, tests y docs.

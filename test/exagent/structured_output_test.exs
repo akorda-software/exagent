@@ -8,6 +8,65 @@ defmodule ExAgent.StructuredOutputTest do
   @valid_args ~s({"city":"Madrid","temp_c":22.0,"condition":"sunny"})
   @invalid_args ~s({"city":"Madrid","temp_c":200})
 
+  defmodule MappedEnums do
+    use Ecto.Schema
+    import Ecto.Changeset
+    @primary_key false
+    embedded_schema do
+      field(:numeric, Ecto.Enum, values: [pending: 0, done: 1])
+      field(:named, Ecto.Enum, values: [pending: "P", done: "D"])
+    end
+
+    def changeset(s, a),
+      do: s |> cast(a, [:numeric, :named]) |> validate_required([:numeric, :named])
+  end
+
+  defmodule EnumFollowingModel do
+    @behaviour ExAgent.Model
+    defstruct []
+
+    @impl true
+    def model_name(_), do: "enum-following-model"
+    @impl true
+    def system(_), do: "test"
+    @impl true
+    def profile(_),
+      do: %ExAgent.ModelProfile{supports_tools: true, supports_json_schema_output: true}
+
+    @impl true
+    def request(model, _messages, _settings, params) do
+      schema =
+        case params.output_mode do
+          :tool -> hd(params.output_tools).parameters_json_schema
+          :native -> params.output_object.json_schema
+        end
+
+      data =
+        Map.new(schema.properties, fn {field, definition} -> {field, hd(definition.enum)} end)
+
+      part =
+        case params.output_mode do
+          :tool -> %Part.ToolCall{tool_name: "final_result", args: data}
+          :native -> %Part.Text{content: Jason.encode!(data)}
+        end
+
+      {:ok, ExAgent.Message.new_response([part]), model}
+    end
+  end
+
+  test "following mapped enum schemas succeeds in one request in tool and native modes" do
+    for mode <- [:tool, :native] do
+      agent =
+        ExAgent.new(model: %EnumFollowingModel{}, output: MappedEnums, output_mode: mode)
+
+      assert {:ok, %{output: %MappedEnums{numeric: :pending, named: :pending}} = result} =
+               ExAgent.run(agent, "Return a status")
+
+      assert result.request_count == 1
+      refute find_part(result.messages, Part.Retry)
+    end
+  end
+
   describe "structured output via the output tool" do
     test "valid output call → returns a validated struct" do
       model = %ExAgent.Models.Test{

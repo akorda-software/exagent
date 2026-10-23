@@ -101,6 +101,12 @@ derives the schema and validates the result with the changeset. Invalid output
 can trigger corrective requests within the same run budget. Deliver the value
 from the **successful final result**, not a provisional delta.
 
+`Ecto.Enum` advertises its declared storage values with their JSON type:
+`values: [pending: 0, done: 1]` asks for `0` or `1`, while
+`values: [pending: "P", done: "D"]` asks for `"P"` or `"D"`. Inclusion and
+exclusion constraints use that same vocabulary. The validated Ecto struct still
+contains the enum atom, such as `:done`.
+
 ## Choose native output deliberately
 
 Native JSON Schema uses `output_profile: :chat_json_schema_v1` on the model and

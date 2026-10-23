@@ -7,6 +7,8 @@ defmodule ExAgent.Store.ETS do
   the table outlives any single `ExAgent.Server` crash and snapshots survive a
   restart. Mutations are serialized by the owner, including legacy writes; record
   deadlines are checked after waiting in that owner's mailbox. Reads use ETS.
+  The owner is registered locally under the table name. Connected nodes keep
+  independent owners and data; this store does not replicate snapshots.
 
   ## Portability (the important bit)
 
@@ -41,7 +43,7 @@ defmodule ExAgent.Store.ETS do
   @doc false
   def start_link(opts \\ []) do
     table = Keyword.get(opts, :table, @default_table)
-    GenServer.start_link(__MODULE__, table, name: via(table))
+    GenServer.start_link(__MODULE__, table, name: table)
   end
 
   @doc false
@@ -58,8 +60,6 @@ defmodule ExAgent.Store.ETS do
 
     {:ok, table}
   end
-
-  defp via(table), do: {:via, :global, {:exagent_store_ets, table}}
 
   # ---------------------------------------------------------------------------
   # ExAgent.Store — agents
@@ -190,7 +190,7 @@ defmodule ExAgent.Store.ETS do
 
   defp record_owner(table) do
     name = :ets.info(table, :name)
-    owner = :global.whereis_name({:exagent_store_ets, name})
+    owner = Process.whereis(name)
 
     if is_pid(owner) and :ets.info(table, :owner) == owner and
          :ets.info(table, :type) == :ordered_set, do: owner, else: nil

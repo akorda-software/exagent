@@ -6,6 +6,52 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.2.2]
+
+Maintenance and security dependency update, 2026-10-23. Public function
+signatures and persisted snapshot formats are unchanged.
+
+### Dependencies
+
+- Require official `req_llm ~> 1.29.0`, fixing upstream
+  [GHSA-6vww-5m28-f26v](https://github.com/agentjido/req_llm/security/advisories/GHSA-6vww-5m28-f26v).
+  The advisory concerns ReqLLM WebSocket TLS verification; ExAgent's HTTP/Finch
+  path is outside the affected transport. The published minimum also excludes
+  vulnerable releases in consuming applications. ExAgent retains explicit
+  credentials, disabled backend retries and its existing admission guards.
+  New implicit `provider_options` defaults in ReqLLM application configuration
+  or model `extra` metadata reject before IO and continuation binding with
+  `{:unsupported_options, :provider_defaults}`. Move supported settings to the
+  adapter instance. Streamed native JSON retains stock text when available;
+  schema validation and reasoning/refusal guards remain in force.
+- Update the lock to LLMDB 2026.10.6; ReqLLM 1.29 requires at least 2026.10.4.
+  The new catalogue removes some existing entries and changes metadata. Review
+  application model IDs; use an explicit model spec with verified metadata when
+  catalogue independence is required. Unknown IDs can resolve without prices,
+  limits or tool capabilities. See [models](guides/models-and-limits.md).
+- Update test-only transitive `tls_certificate_check` to 1.36.0 (CA bundle refresh).
+  Keep Zoi 0.18.11 and gproc 1.2.0 within their upstream requirements; no overrides.
+
+### Fixed
+
+- Register each ETS store owner locally under its table name. Connected nodes
+  can start ExAgent independently and joining nodes retain their own snapshots.
+  ETS remains ephemeral and node-local; atomic writes still require the actual
+  registered table owner. Store configuration and snapshot formats are unchanged.
+- Fallback skips a candidate whose optional preflight reports
+  `:continuation_target_mismatch`, allowing serialized backup history to continue
+  with a compatible model in synchronous and streaming requests. Skips perform
+  no IO or retry and emit no retry telemetry. Malformed history and other
+  configuration errors remain terminal; model bindings are unchanged.
+- Reflect integer-backed `Ecto.Enum` values as JSON integers rather than
+  uncastable numeric strings. Custom string mappings retain their values, and
+  inclusion/exclusion constraints use the same mapped vocabulary. The resulting
+  Ecto structs and direct changeset casting are unchanged. Applications caching
+  these schemas must regenerate them. Existing continuations bound to an affected
+  output schema retain their mismatch rejection: finish them with the previous
+  definition or start a new execution after reconciling prior effects; do not
+  rewrite stored approvals or bypass the fingerprint check.
+
 ## [2.2.1]
 
 Released 2026-10-18 from tag `v2.2.1`. Maintenance release; no public API,

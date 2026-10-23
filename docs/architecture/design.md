@@ -13,6 +13,103 @@
 > Conserva sus reproducciones y guards como estado runtime, no como aceptación
 > del nuevo contrato. C7 y los contratos de autoridad/recuperación permanecen.
 
+## Dependencias de seguridad y catálogo para 2.2.2 (2026-10-23)
+
+**Problema demostrado:** ReqLLM 1.28 está afectado por
+[GHSA-6vww-5m28-f26v](https://github.com/agentjido/req_llm/security/advisories/GHSA-6vww-5m28-f26v)
+en su transporte WebSocket. ExAgent utiliza HTTP/Finch, fuera del alcance del
+advisory, pero distribuye la dependencia. La primera versión reparada, 1.29,
+requiere LLMDB >= 2026.10.4 y ya no admite conservar el catálogo 2026.10.3.
+
+**Decisión y beneficio:** elevar el mínimo publicado a `req_llm ~> 1.29.0` y
+actualizar el lock a LLMDB 2026.10.6. El consumidor recibe una versión reparada
+incluso sin nuestro lock. Se conserva el backend stock, los reintentos desactivados
+en el adaptador, la autenticación explícita y los gates de envelope/continuación.
+Actualizar también el bundle test-only TLS 1.36; no forzar Zoi/gproc incompatibles.
+
+ReqLLM 1.29 mezcla defaults `provider_options` de configuración y `model.extra`
+después de validar los valores de instancia. Esos defaults podrían alterar una
+ruta sin cambiar su binding persistido. Se rechazan antes de IO/preflight/binding
+con `{:unsupported_options, :provider_defaults}`; la migración usa las opciones
+explícitas ya admitidas. No se filtra silenciosamente un default ni se incorporan
+opciones nuevas fuera del contrato. Las claves atom/string y los valores vacíos
+se verifican sin reflejar configuración sensible. El oráculo stock de JSON en
+streaming se adapta a Text más `response.object`, conservando las guardas de
+validación/reasoning/refusal y el cierre del recurso.
+
+**Alternativas:** conservar ReqLLM 1.28 mantendría la dependencia vulnerable;
+no existe backport 1.28.1. Fijar LLMDB 10.4 no evita los retiros de catálogo.
+Vendorizar modelos viejos o inferir precios/capabilities crearía metadata sin
+garantías y contradice el backend oficial único. No se añade esa segunda fuente.
+
+**Impacto y migración:** se mantiene la API y el mínimo Elixir. El catálogo es
+externo y mutable: 10.6 retira 57 IDs y añade 499 frente a 10.3. Las apps revisan
+IDs y metadata, o usan el contrato existente de specs explícitas con hechos
+verificados del proveedor. No se reescriben aprobaciones, historiales ni
+fingerprints para permitir una reanudación incompatible. Es un patch de seguridad
+y correcciones; no se añaden nuevas capacidades públicas de proveedores.
+
+**Verificación:** focales del adaptador, HTTP/SSE stock, schemas, costes,
+fallback y resolución explícita, seguidas de la rutina offline, docs/TAR y
+consumidores instalados. Los resultados finales se registran en
+[dependencias](../development/dependencies.md). El pin del runner live pasa a
+1.29 para futuras olas; modificarlo no acredita una nueva prueba pagada.
+
+## Correcciones de la revisión de runtime y modelos (2026-10-23)
+
+**Problemas demostrados:** el registro global del owner ETS impide iniciar
+ExAgent en un segundo nodo conectado; Fallback acepta el historial válido de un
+modelo de respaldo en preflight pero intenta ejecutar el primario incompatible;
+un `Ecto.Enum` con `values: [pending: 0, done: 1]` anuncia strings que el
+changeset rechaza, agotando reintentos aunque el modelo cumpla el esquema.
+
+**Decisión y beneficio general:**
+
+- Registrar el owner ETS localmente con el nombre de la tabla y verificar ese
+  registro contra el owner real y el tipo de tabla antes de conceder operaciones
+  atómicas. Cada nodo conserva sus propios datos y puede arrancar o conectarse
+  después. Los tids ajenos siguen siendo snapshot-only. No añadir otro registro
+  ni distribuir un almacén que es explícitamente local y efímero.
+- Fallback consulta el preflight opcional al alcanzar cada candidato y omite
+  únicamente `:continuation_target_mismatch` sin status HTTP, transporte ni
+  respuesta parcial. Sync y stream comparten esa selección. No se habilita
+  `foreign_history: :portable`, no se transforma el historial y los errores de
+  configuración no se convierten en reintentos. Se conserva el orden de modelos,
+  los contadores y el binding de continuación.
+- Reflejar el vocabulario de almacenamiento de `Ecto.Enum` con su tipo real:
+  números enteros o strings, y traducir las restricciones de inclusión/exclusión
+  al mismo vocabulario. Los valores anunciados se convierten a los miembros
+  correctos mediante el changeset real, también con mappings de texto cruzados.
+
+**Alternativas descartadas:** añadir el nodo a una clave global mantendría
+coordinación distribuida innecesaria para ETS. Eliminar el almacén automático
+cambiaría el default de la aplicación. En Fallback, omitir cualquier error
+ocultaría configuración inválida; validar todos los backups antes de pedir al
+primario afectaría candidatos que no se usan, y recordar sólo el último modelo
+no resuelve la restauración. Para enums, convertir siempre los nombres a texto
+rompe mappings válidos como `[foo: "bar", bar: "baz"]`: Ecto da prioridad al
+valor almacenado, de modo que `"bar"` significa `:foo`. Mantener valores y tipos
+evita esa ambigüedad y conserva los mappings string existentes.
+
+**Impacto y migración:** correcciones registradas en Unreleased, sin bump ni
+publicación. No cambian firmas, snapshots ni el formato de continuación. El
+registro del proceso ETS es interno y se aplica al arrancar el owner; no se
+ofrece una migración en caliente de tablas efímeras. Fallback no requiere cambios
+de configuración. Los schemas de enums numéricos y las restricciones sobre enums
+con mapping personalizado cambian; los enums de atoms habituales mantienen su
+JSON. Regenerar schemas cacheados. Una continuación vinculada al schema anterior
+debe mantener su rechazo de incompatibilidad: finalizarla con su definición
+anterior o abrir una ejecución nueva tras reconciliar efectos. No modificar
+aprobaciones ni relajar fingerprints para recuperar automáticamente.
+
+**Verificación:** regresiones de arranque/conexión en dos VMs locales, owners y
+snapshots independientes; historial real ReqLLM serializado y siguiente petición
+HTTP/SSE, sin IO del candidato incompatible; negativos de historial incompleto,
+configuración inválida y ausencia de destino compatible; schemas, constraints y
+loop tool/native de enums. Las 78 focales conjuntas pasan. La integración y sus
+límites se registran en el roadmap. Se corrige el lote de la revisión previa,
+sin una segunda revisión independiente.
+
 ## Actualización conservadora de dependencias (2026-10-18)
 
 El usuario exige compatibilidad con producción, incluyendo resultados, validación

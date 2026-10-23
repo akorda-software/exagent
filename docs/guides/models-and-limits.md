@@ -21,6 +21,27 @@ Use instance credentials for explicit ownership. ReqLLM's startup environment
 loading is described in [Getting started](getting-started.md). Never place a key
 in a prompt or persist the complete live model.
 
+Catalogue updates can remove a model or change its prices, limits and capabilities.
+ExAgent 2.2.2 requires ReqLLM 1.29 and its newer LLMDB catalogue; the tested lock
+uses LLMDB 2026.10.6. Some former OpenRouter entries, including
+`unbiased/pareto` and `inclusionai/ling-3.0-flash-fin`, are no longer present.
+Resolving an absent ID can still succeed as an unverified model without catalogue
+metadata. Do not interpret that success as tool qualification or known pricing.
+
+Applications that need stable metadata can pass an explicit model map to
+`ExAgent.Model.resolve/2` or `ExAgent.Models.ReqLLM.new/1`, with the provider,
+exact `id`, verified `capabilities`, `limits`, `cost` and wire protocol they rely
+on. Maintain those facts against the actual provider; ExAgent does not restore
+retired catalogue entries or invent prices. Review a model change before resuming
+persisted work, and keep continuation mismatch checks intact.
+
+ReqLLM 1.29 can merge `provider_options` from its application configuration or
+the resolved model's `extra` metadata. ExAgent rejects non-empty defaults with
+`{:unsupported_options, :provider_defaults}` before IO and continuation binding:
+these options would otherwise bypass the instance allowlist and persisted route.
+Remove those defaults and pass supported options explicitly as
+`ExAgent.Models.ReqLLM.new(provider_options: ...)`. Empty defaults are accepted.
+
 ## Configure Chat tools and streaming
 
 The explicit profile binds the protocol, tools and reasoning capability:
@@ -161,8 +182,11 @@ own from another route or reasoning mode) as plain text and tool calls,
 without their reasoning, signatures or provider metadata, instead of
 rejecting it. Tool calls keep ExAgent's argument codec, so tool history stays
 exact. A conversation that only uses one model and route is sent exactly as
-before. A persisted conversation resumes when any model of the chain accepts
-its history.
+before. Fallback skips a candidate whose optional preflight reports a history
+target mismatch, without IO or retry telemetry. A persisted backup conversation
+can therefore continue with that compatible model. If all candidates mismatch,
+the request fails; malformed history and other configuration errors remain
+terminal.
 
 ## Bound requests and tool calls
 

@@ -332,13 +332,63 @@ defmodule ExAgent.FallbackModelTest do
              error
   end
 
-  test "a persisted history resumes when any model of the chain accepts it" do
+  # Exercise both stock buffered and SSE adapters against the same local HTTP
+  # fixture. The history comes from an actual adapter response and a JSON
+  # round-trip, not a manually incomplete continuation descriptor.
+  for stream? <- [false, true] do
+    test "persisted backup history continues with a compatible model (stream=#{stream?})" do
+      server =
+        start_supervised!({ExAgent.Test.MCPHTTPServer, owner: self(), handler: &history_reply/1})
+
+      opts = [base_url: ExAgent.Test.MCPHTTPServer.url(server), http_options: []]
+      primary = adapter("model-a", nil, opts)
+      backup = adapter("model-b", nil, opts)
+      params = %ModelRequestParameters{}
+      initial = [Message.new_request([%Message.Part.User{content: "go"}])]
+      assert {:ok, response, _} = Model.request(backup, initial, nil, params)
+      assert {:ok, history} = Message.from_json(Message.to_json(initial ++ [response]))
+
+      assert {:error, %RequestError{reason: :continuation_target_mismatch}} =
+               Model.validate_resume(primary, history, nil, params)
+
+      assert :ok = Model.validate_resume(backup, history, nil, params)
+      model = fallback([primary, backup])
+      assert :ok = Model.validate_resume(model, history, nil, params)
+      ref = :telemetry_test.attach_event_handlers(self(), [[:exagent, :model, :retry]])
+
+      assert {:ok, %{output: "continued", request_count: 1, model: final_model}} =
+               ExAgent.run(ExAgent.new(model: model), "continue",
+                 message_history: history,
+                 stream_text: unquote(stream?)
+               )
+
+      assert final_model.models == [primary, backup]
+      requests = ExAgent.Test.MCPHTTPServer.journal(server)
+      assert Enum.map(requests, & &1.json["model"]) == ["model-b", "model-b"]
+      assert List.last(requests).json["stream"] == true == unquote(stream?)
+      refute_receive {[:exagent, :model, :retry], ^ref, _, _}, 0
+
+      rejected = fallback([primary, primary])
+
+      assert {:error, %RequestError{reason: :continuation_target_mismatch}} =
+               Model.validate_resume(rejected, history, nil, params)
+
+      assert {:error, %RequestError{reason: :continuation_target_mismatch}} =
+               Model.request(rejected, history, nil, params)
+
+      assert [{:error, %RequestError{reason: :continuation_target_mismatch}}] =
+               rejected |> Model.request_stream(history, nil, params) |> Enum.to_list()
+
+      assert ExAgent.Test.MCPHTTPServer.journal(server) == requests
+    end
+  end
+
+  test "incomplete continuation history remains invalid without IO" do
     transport = transport(%{})
     primary = adapter("model-a", transport, [])
     backup = adapter("model-b", transport, [])
 
     history = [
-      Message.new_request([%Message.Part.User{content: "go"}]),
       %{
         Message.new_response([%Message.Part.Text{content: "hi"}])
         | model_name: "model-b",
@@ -351,15 +401,58 @@ defmodule ExAgent.FallbackModelTest do
     ]
 
     params = %ModelRequestParameters{}
-    assert {:error, _} = Model.validate_resume(primary, history, nil, params)
-    expected = Model.validate_resume(backup, history, nil, params)
-    assert Model.validate_resume(fallback([primary, backup]), history, nil, params) == expected
-    assert Model.validate_resume(fallback([primary, primary]), history, nil, params) != :ok
+    model = fallback([primary, backup])
+
+    assert {:error, %RequestError{reason: :invalid_message_or_options}} =
+             Model.validate_resume(model, history, nil, params)
+
+    assert {:error, %RequestError{reason: :invalid_message_or_options}} =
+             Model.request(model, history, nil, params)
+
+    refute_receive {:http, _, _}, 0
+  end
+
+  test "invalid candidate configuration is terminal instead of being skipped" do
+    transport = transport(%{})
+    invalid = adapter("model-a", transport, total_timeout: 0)
+    backup = adapter("model-b", transport, [])
+    model = fallback([invalid, backup])
+    params = %ModelRequestParameters{}
+
+    assert {:error, %RequestError{reason: {:invalid_option, :total_timeout}}} =
+             Model.request(model, [], nil, params)
+
+    assert [{:error, %RequestError{reason: {:invalid_option, :total_timeout}}}] =
+             model |> Model.request_stream([], nil, params) |> Enum.to_list()
+
+    refute_receive {:http, _, _}, 0
   end
 
   test "without a portable history the backup rejects the primary's response before IO" do
     assert {:error, %ExAgent.RunError{reason: {:model_request_failed, error}}} = run_switch([])
     assert error.reason == :continuation_target_mismatch
     refute_receive {:http, "model-b", _}, 50
+  end
+
+  defp history_reply(%{json: %{"model" => id} = request}) do
+    if request["stream"] do
+      frame = fn delta, finish ->
+        "data: " <>
+          Jason.encode!(%{
+            "id" => "reply",
+            "model" => id,
+            "choices" => [%{"index" => 0, "delta" => delta, "finish_reason" => finish}]
+          }) <> "\n\n"
+      end
+
+      bytes =
+        frame.(%{"role" => "assistant", "content" => "continued"}, nil) <>
+          frame.(%{}, "stop") <> "data: [DONE]\n\n"
+
+      {200, [{"content-type", "text/event-stream"}], bytes}
+    else
+      response = chat(id, %{"role" => "assistant", "content" => "continued"}, "stop")
+      {200, [{"content-type", "application/json"}], Jason.encode!(response)}
+    end
   end
 end

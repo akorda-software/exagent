@@ -26,8 +26,11 @@ defmodule ExAgent.OutputSchema do
   for this JSON Schema (including `anyOf` and strict-mode restrictions) must
   be checked against the actual backend.
 
-  Reflected inclusion/exclusion values retain their JSON types; Ecto.Enum atoms
-  use their string names, including boolean-named enum members. Array lengths use
+  Reflected inclusion/exclusion values retain their JSON types. Ecto.Enum schemas
+  advertise the declared storage values with their integer or string type, and
+  inclusion/exclusion constraints map enum members to that same vocabulary.
+  Plain atom enums still use their string names, including boolean-named members.
+  Array lengths use
   `minItems`/`maxItems`, while string lengths use `minLength`/`maxLength`, including
   exact (`:is`) bounds. Length bounds intersect across options and validation calls;
   contradictory bounds remain unsatisfiable, as in the changeset. JSON string
@@ -147,11 +150,13 @@ defmodule ExAgent.OutputSchema do
     end
   end
 
-  defp enum_value(value, {:parameterized, {Ecto.Enum, _}}) when is_atom(value),
-    do: Atom.to_string(value)
+  defp enum_value(value, {:parameterized, {Ecto.Enum, %{mappings: mappings}}})
+       when is_atom(value),
+       do: Keyword.get(mappings, value, Atom.to_string(value))
 
-  defp enum_value(value, {:parameterized, Ecto.Enum, _}) when is_atom(value),
-    do: Atom.to_string(value)
+  defp enum_value(value, {:parameterized, Ecto.Enum, %{mappings: mappings}})
+       when is_atom(value),
+       do: Keyword.get(mappings, value, Atom.to_string(value))
 
   defp enum_value(value, _type)
        when is_atom(value) and not is_boolean(value) and not is_nil(value),
@@ -293,8 +298,11 @@ defmodule ExAgent.OutputSchema do
   defp ecto_type_schema(:boolean), do: %{type: "boolean"}
   defp ecto_type_schema(_), do: %{}
 
-  defp enum_schema(mappings),
-    do: %{type: "string", enum: Enum.map(mappings, fn {_k, v} -> to_string(v) end)}
+  defp enum_schema(mappings) do
+    values = Keyword.values(mappings)
+    type = if is_integer(List.first(values)), do: "integer", else: "string"
+    %{type: type, enum: values}
+  end
 
   # ----- error formatting --------------------------------------------------
   defp format_errors(%Changeset{errors: errors}) do

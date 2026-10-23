@@ -93,7 +93,14 @@ defmodule ExAgent.ReqLLMNativeGateTest do
   end
 
   test "public one-view TCP streaming preserves native format, text and terminal" do
-    for text <- [~s({"name":"Ada","optional":null,"child":{}}), "{}", "[]", "null", ~s({"name":)] do
+    for text <- [
+          ~s({"name":"Ada","optional":null,"child":{}}),
+          ~s( { "name" : "Ada" } ),
+          "{}",
+          "[]",
+          "null",
+          ~s({"name":)
+        ] do
       check_stream(text)
     end
   end
@@ -183,16 +190,17 @@ defmodule ExAgent.ReqLLMNativeGateTest do
                on_chunk: fn chunk -> send(owner, {:chunk, chunk}) end
              )
 
-    # Stock's public stream Response exposes JSON objects as object content,
-    # unlike buffered text. This is semantic preservation, not raw fidelity.
+    # Stock 1.29 preserves the original text while separately exposing a
+    # decoded object. This must not repair malformed or non-object JSON.
+    assert [%ReqLLM.Message.ContentPart{type: :text, text: ^text}] = response.message.content
+    assert ReqLLM.Response.text(response) == text
+
     case Jason.decode(text) do
       {:ok, object} when is_map(object) ->
         assert response.object == object
-        assert [%{type: :object, object: ^object}] = response.message.content
 
       _ ->
         assert response.object == nil
-        assert ReqLLM.Response.text(response) == text
     end
 
     assert response.finish_reason == :stop

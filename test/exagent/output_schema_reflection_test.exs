@@ -120,6 +120,62 @@ defmodule ExAgent.OutputSchemaReflectionTest do
     end
   end
 
+  defmodule MappedEnums do
+    use Ecto.Schema
+    import Ecto.Changeset
+    @primary_key false
+    embedded_schema do
+      field(:numeric, Ecto.Enum, values: [pending: 0, done: 1])
+      field(:named, Ecto.Enum, values: [pending: "P", done: "D"])
+    end
+
+    def changeset(s, a),
+      do: s |> cast(a, [:numeric, :named]) |> validate_required([:numeric, :named])
+  end
+
+  defmodule MappedEnumConstraints do
+    use Ecto.Schema
+    import Ecto.Changeset
+    @primary_key false
+    embedded_schema do
+      field(:numeric_inclusion, Ecto.Enum, values: [pending: 0, done: 1])
+      field(:numeric_exclusion, Ecto.Enum, values: [pending: 0, done: 1])
+      field(:named_inclusion, Ecto.Enum, values: [pending: "P", done: "D"])
+      field(:named_exclusion, Ecto.Enum, values: [pending: "P", done: "D"])
+    end
+
+    def changeset(s, a) do
+      fields = [:numeric_inclusion, :numeric_exclusion, :named_inclusion, :named_exclusion]
+
+      s
+      |> cast(a, fields)
+      |> validate_required(fields)
+      |> validate_inclusion(:numeric_inclusion, [:done])
+      |> validate_inclusion(:named_inclusion, [:done])
+      |> validate_exclusion(:numeric_exclusion, [:pending])
+      |> validate_exclusion(:named_exclusion, [:pending])
+    end
+  end
+
+  defmodule CrossedStringEnum do
+    use Ecto.Schema
+    import Ecto.Changeset
+    @primary_key false
+    embedded_schema do
+      field(:status, Ecto.Enum, values: [foo: "bar", bar: "baz"])
+      field(:included, Ecto.Enum, values: [foo: "bar", bar: "baz"])
+      field(:excluded, Ecto.Enum, values: [foo: "bar", bar: "baz"])
+    end
+
+    def changeset(s, a) do
+      s
+      |> cast(a, [:status, :included, :excluded])
+      |> validate_required([:status, :included, :excluded])
+      |> validate_inclusion(:included, [:bar])
+      |> validate_exclusion(:excluded, [:foo])
+    end
+  end
+
   # Fixed schemas vary keyword order and the order of chained validations.
   # No test-time option state or generated validator oracle.
   for {name, validations} <- [
@@ -263,6 +319,93 @@ defmodule ExAgent.OutputSchemaReflectionTest do
 
     assert_agreement(BooleanEnumExclusion, %{"status" => "false", "flag" => true}, false)
     assert_agreement(BooleanEnumExclusion, %{"status" => "pending", "flag" => false}, false)
+  end
+
+  test "integer and custom string enum mappings advertise castable typed values" do
+    schema = OutputSchema.json_schema(MappedEnums)
+
+    assert schema.properties == %{
+             "numeric" => %{type: "integer", enum: [0, 1]},
+             "named" => %{type: "string", enum: ["P", "D"]}
+           }
+
+    for numeric <- [0, 1], named <- ["P", "D"] do
+      assert_agreement(MappedEnums, %{"numeric" => numeric, "named" => named}, true)
+    end
+
+    for numeric <- ["0", "1", "unknown"] do
+      assert_agreement(MappedEnums, %{"numeric" => numeric, "named" => "D"}, false)
+    end
+
+    assert {:ok, %MappedEnums{numeric: :done, named: :done}} =
+             OutputSchema.validate(MappedEnums, %{"numeric" => 1, "named" => "D"})
+
+    # Changeset casting still accepts member names directly, even though
+    # the model's advertised vocabulary uses the unambiguous storage values.
+    assert {:ok, %MappedEnums{numeric: :done, named: :done}} =
+             OutputSchema.validate(MappedEnums, %{"numeric" => "done", "named" => "done"})
+  end
+
+  test "mapped enum inclusion and exclusion use the same typed vocabulary" do
+    schema = OutputSchema.json_schema(MappedEnumConstraints)
+
+    assert schema.properties["numeric_inclusion"] == %{type: "integer", enum: [1]}
+    assert schema.properties["named_inclusion"] == %{type: "string", enum: ["D"]}
+
+    assert schema.properties["numeric_exclusion"] == %{
+             type: "integer",
+             enum: [0, 1],
+             not: %{enum: [0]}
+           }
+
+    assert schema.properties["named_exclusion"] == %{
+             type: "string",
+             enum: ["P", "D"],
+             not: %{enum: ["P"]}
+           }
+
+    data = %{
+      "numeric_inclusion" => 1,
+      "numeric_exclusion" => 1,
+      "named_inclusion" => "D",
+      "named_exclusion" => "D"
+    }
+
+    assert_agreement(MappedEnumConstraints, data, true)
+
+    for {field, invalid} <- [
+          {"numeric_inclusion", 0},
+          {"numeric_exclusion", 0},
+          {"named_inclusion", "P"},
+          {"named_exclusion", "P"}
+        ] do
+      assert_agreement(MappedEnumConstraints, Map.put(data, field, invalid), false)
+    end
+  end
+
+  test "crossed string mappings retain unambiguous outputs and constraints" do
+    schema = OutputSchema.json_schema(CrossedStringEnum)
+    assert schema.properties["status"] == %{type: "string", enum: ["bar", "baz"]}
+    assert schema.properties["included"] == %{type: "string", enum: ["baz"]}
+
+    assert schema.properties["excluded"] == %{
+             type: "string",
+             enum: ["bar", "baz"],
+             not: %{enum: ["bar"]}
+           }
+
+    for {value, expected} <- [{"bar", :foo}, {"baz", :bar}] do
+      data = %{"status" => value, "included" => "baz", "excluded" => "baz"}
+      assert_agreement(CrossedStringEnum, data, true)
+
+      assert {:ok, %{status: ^expected, included: :bar, excluded: :bar}} =
+               OutputSchema.validate(CrossedStringEnum, data)
+    end
+
+    for field <- ["included", "excluded"] do
+      data = Map.put(%{"status" => "baz", "included" => "baz", "excluded" => "baz"}, field, "bar")
+      assert_agreement(CrossedStringEnum, data, false)
+    end
   end
 
   test "all orderings of is min max preserve exact string and array acceptance" do

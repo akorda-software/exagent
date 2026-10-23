@@ -15,7 +15,10 @@ defmodule ExAgent.Models.ReqLLM do
   The explicit `:openrouter_chat_tools_v1` profile additionally permits bounded
   `:openrouter_provider` routing and `:app_title`/`:app_referer` attribution.
   Other options fail explicitly, never override auth, tools,
-  history, model or retries. Native JSON output requires the separate explicit
+  history, model or retries. Non-empty ReqLLM provider-option defaults from
+  application configuration or model `extra` metadata reject before IO and
+  continuation binding; supply supported options on this adapter instance.
+  Native JSON output requires the separate explicit
   `output_profile: :chat_json_schema_v1` alongside `tool_profile: :chat_tools_v1`.
   It sends a reference-free object schema via the public `response_format` option,
   with `strict: false`, preserving optional fields and inert defaults. Set the
@@ -115,8 +118,9 @@ defmodule ExAgent.Models.ReqLLM do
   public usage snapshot remain unavailable; this profile does not certify a live
   provider or all ReqLLM models.
 
-  Native stream objects exposed by stock become canonical JSON Text history;
-  original JSON whitespace/key ordering is not promised. Any publicly exposed
+  Native stream text is preserved when stock exposes text. Object content, if
+  exposed by stock, becomes JSON Text history without promising original
+  whitespace/key ordering. Any publicly exposed
   refusal rejects. Stock Chat 1.26 can discard a wire refusal field alongside
   valid JSON content, so that content can still produce a locally valid output;
   refusal detection is not a wire-fidelity guarantee. A refusal without valid
@@ -217,9 +221,22 @@ defmodule ExAgent.Models.ReqLLM do
     do: interaction(model, messages, settings, params, :preflight)
 
   @impl true
-  def continuation_binding(%{tool_profile: :openrouter_chat_tools_v1} = model) do
-    with {:ok, resolved} <- Backend.model(model.model),
-         true <- tools_supported?(model),
+  def continuation_binding(model) do
+    with {:ok, resolved} <- Backend.model(model.model) do
+      validate_provider_defaults!(resolved)
+      model_binding(model, resolved)
+    else
+      _ -> {:error, :invalid_model_binding}
+    end
+  rescue
+    _ -> {:error, :invalid_model_binding}
+  catch
+    {:req_llm_adapter, {:unsupported_options, :provider_defaults} = reason} -> {:error, reason}
+    _, _ -> {:error, :invalid_model_binding}
+  end
+
+  defp model_binding(%{tool_profile: :openrouter_chat_tools_v1} = model, resolved) do
+    with true <- tools_supported?(model),
          true <- is_nil(model.output_profile) do
       endpoint = model.base_url || resolved.base_url
       validate_config!(model, endpoint)
@@ -254,17 +271,12 @@ defmodule ExAgent.Models.ReqLLM do
     else
       _ -> {:error, :unsupported_tool_profile}
     end
-  rescue
-    _ -> {:error, :invalid_model_binding}
-  catch
-    _, _ -> {:error, :invalid_model_binding}
   end
 
-  def continuation_binding(%{reasoning_mode: nil}), do: {:ok, nil}
+  defp model_binding(%{reasoning_mode: nil}, _resolved), do: {:ok, nil}
 
-  def continuation_binding(%{reasoning_mode: :none} = model) do
-    with {:ok, resolved} <- Backend.model(model.model),
-         true <- none_supported?(model, resolved),
+  defp model_binding(%{reasoning_mode: :none} = model, resolved) do
+    with true <- none_supported?(model, resolved),
          true <- valid_endpoint?(model.base_url || resolved.base_url),
          true <- model.output_profile in [nil, :chat_json_schema_v1] do
       binding = %{
@@ -295,10 +307,11 @@ defmodule ExAgent.Models.ReqLLM do
     end
   end
 
-  def continuation_binding(_), do: {:error, :unsupported_reasoning_mode}
+  defp model_binding(_, _), do: {:error, :unsupported_reasoning_mode}
 
   defp interaction(model, messages, settings, params, mode) do
     with {:ok, resolved} <- Backend.model(model.model) do
+      validate_provider_defaults!(resolved)
       endpoint = model.base_url || resolved.base_url
       validate_config!(model, endpoint)
       validate_auth!(model, resolved)
@@ -539,6 +552,31 @@ defmodule ExAgent.Models.ReqLLM do
   end
 
   defp validate_continuation_support!(_, _, _), do: :ok
+
+  # ReqLLM 1.29 merges these defaults after this adapter has validated its
+  # explicit options. Inheriting them would bypass the allowlist and the C7
+  # routing binding. Read both key forms without reflecting their values.
+  defp validate_provider_defaults!(resolved) do
+    config = Application.get_env(:req_llm, resolved.provider, [])
+
+    for container <- [config, resolved.extra],
+        value <- provider_defaults(container) do
+      unless value in [nil, [], %{}], do: fail!({:unsupported_options, :provider_defaults})
+    end
+  end
+
+  defp provider_defaults(container) when is_map(container),
+    do: container |> Map.take([:provider_options, "provider_options"]) |> Map.values()
+
+  defp provider_defaults(container) when is_list(container),
+    do:
+      for(
+        {key, value} <- container,
+        key in [:provider_options, "provider_options"],
+        do: value
+      )
+
+  defp provider_defaults(_), do: []
 
   defp validate_config!(model, endpoint) do
     credential = if is_nil(model.auth_token), do: model.api_key, else: model.auth_token

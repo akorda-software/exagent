@@ -1,5 +1,17 @@
 # Support and release status
 
+**Maintenance release 2026-10-23 — verified 2.2.2:** ReqLLM 1.29 excludes
+the upstream WebSocket TLS vulnerability; LLMDB 2026.10.6 refreshes the catalogue
+with explicit migration guidance for removed entries. ExAgent's HTTP transport
+is outside the advisory's affected path. This release also fixes node-local ETS
+startup, fallback continuation and integer-backed enum schemas. The complete
+offline suite passes 2,320 tests (28 provider/PostgreSQL exclusions), all nine
+local gates pass, and five installed consumers pass 40 contracts on Elixir 1.18
+and 1.20. Strict dependency diagnostics retain stock TOML/WebSockex warnings.
+Verification and publication receipts are recorded in
+[dependencies](development/dependencies.md).
+The dated results below retain their original scope.
+
 **Maintenance release 2026-10-18:** this checkout targets ExAgent 2.2.1 with
 `jsv ~> 0.26.1`; runtime sources and public contracts are unchanged from 2.2.0.
 The dependency review passes 2,307 offline tests (28 excluded), documentation,

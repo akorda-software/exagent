@@ -92,6 +92,60 @@ defmodule ExAgent.ModelResolutionTest do
     end
   end
 
+  test "explicit metadata remains usable when a model is absent from the catalogue" do
+    # Synthetic identity, rates and limits model a retired catalogue entry.
+    # The host supplies these facts; the resolver must not recover or invent
+    # them from an older snapshot or enable tools that the host disabled.
+    spec = %{
+      provider: :openrouter,
+      id: "fixture/retired-model",
+      cost: %{input: 1.25, output: 2.5},
+      limits: %{context: 4096, output: 128},
+      capabilities: %{tools: %{enabled: true}, reasoning: %{enabled: false}},
+      extra: %{wire: %{protocol: "openai_chat"}}
+    }
+
+    opts = [
+      api_key: "synthetic",
+      base_url: peer(:openrouter, "/api/v1"),
+      tool_profile: :openrouter_chat_tools_v1
+    ]
+
+    assert {:ok, model} = Model.resolve(spec, opts)
+    assert Map.take(model.model.cost, [:input, :output]) == spec.cost
+    assert Map.take(model.model.limits, [:context, :output]) == spec.limits
+    assert Model.model_name(model) == spec.id
+    assert Model.profile(model).supports_tools
+
+    tool =
+      ExAgent.Tool.new(
+        name: "fixture_tool",
+        parameters_json_schema: %{"type" => "object", "properties" => %{}},
+        takes_ctx: false,
+        call: fn _ -> "fixture result" end
+      )
+
+    assert {:ok, %{output: "ok", request_count: 1}} =
+             ExAgent.run(ExAgent.new(model: model, tools: [tool]), "go")
+
+    assert_receive {:request, _, body}
+    assert body["model"] == spec.id
+    assert [%{"function" => %{"name" => "fixture_tool"}}] = body["tools"]
+
+    assert {:ok, disabled} =
+             Model.resolve(put_in(spec, [:capabilities, :tools, :enabled], false), opts)
+
+    refute Model.profile(disabled).supports_tools
+
+    assert {:error,
+            %ExAgent.RunError{
+              reason: {:unsupported, :tools},
+              partial: %{request_count: 0}
+            }} = ExAgent.run(ExAgent.new(model: disabled, tools: [tool]), "go")
+
+    refute_receive {:request, _, _}, 0
+  end
+
   test "stock HTTP bearer and x-api-key preserve instance precedence and exact gateway path" do
     for {provider, prefix, opts, expected_header} <- [
           {:openai, "/zen/go/v1", [api_key: "go-instance"], "authorization: Bearer go-instance"},

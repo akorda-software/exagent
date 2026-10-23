@@ -1,5 +1,64 @@
 # Roadmap ejecutable de ExAgent v2.0.0
 
+**Release 2.2.2 autorizada 2026-10-23 — preparada y verificada:** el usuario pide
+revisar dependencias, adaptar lo necesario y publicar el siguiente patch. Hex
+confirma 2.2.1 como base. Se actualizan ReqLLM 1.29 (mínimo público), LLMDB
+2026.10.6 y TLS 1.36; Zoi y gproc conservan constraints upstream. El advisory
+WebSocket de ReqLLM motiva superar la retención previa del catálogo; se explican
+los modelos retirados y la alternativa pública de specs explícitas. Se incluyen
+las tres correcciones ya verificadas abajo. La publicación seguirá el flujo
+main/tag/release GitHub → Hex, con lectura de bytes y docs; no hay llamadas
+pagadas ni modificación de aplicaciones consumidoras.
+
+Una revisión independiente del delta de dependencias no encuentra hallazgos.
+Se adapta la integración a defaults implícitos de ReqLLM (rechazo antes de IO y
+binding) y a su proyección Text de JSON en streaming. `bin/check` pasa las nueve
+fases: **2.320 pruebas / 0 fallos / 28 exclusiones**, 2.016,6s; docs/enlaces y
+TAR/aislamiento pasan. Cinco consumidores sin lock de entrada suman **40/40
+contratos** (cuatro grafos en 1.20/OTP29 y mínimo en 1.18/OTP28); el diagnóstico
+estricto conserva warnings externos de TOML/WebSockex, sin warnings de ExAgent.
+Hex audit limpio; 43 dependencias actuales y dos bloqueadas por sus padres.
+Evidencia en `.exagent-local/release-2.2.2/` y
+`.exagent-local/checks/20261023T180415Z-1495710/`. El cierre de prosa no cambia
+las fuentes verificadas ni repite las suites. No hay nueva cualificación live.
+
+**Corrección autorizada 2026-10-23 — tres hallazgos resueltos sobre 2.2.1
+(`6410024`):** tras la revisión solicitada, el usuario pide corregir los tres
+defectos reproducidos. Dos implementadores cubren Fallback y enums; el padre
+cubre ETS, integración y documentación. No hay segunda revisión independiente.
+
+- **P1, arranque en varios nodos:** el owner ETS deja de usar un nombre global
+  compartido que impedía arrancar el segundo nodo. Su registro local permite
+  arrancar nodos ya conectados y conectar nodos en ejecución sin perder owners
+  ni snapshots. Dos regresiones con VMs locales verifican ambos órdenes y la
+  independencia de los datos. ETS conserva su condición local y efímera.
+- **P2, continuación con Fallback:** un historial válido del respaldo ya no
+  aborta al intentar el primario incompatible. La selección omite únicamente
+  `:continuation_target_mismatch` detectado antes de IO y mantiene el resto de
+  errores. Historial real serializado continúa por HTTP/SSE stock. El test
+  anterior, que sólo comparaba errores, pasa a ser un negativo explícito de
+  descriptor incompleto; los nuevos casos comprueban ejecución y ausencia de IO
+  del modelo omitido.
+- **P2, Ecto.Enum con almacenamiento entero:** el schema anuncia números reales
+  en lugar de strings numéricas que Ecto rechaza. Inclusión/exclusión usa el mismo
+  vocabulario; los mappings string se conservan. Se descartó anunciar siempre
+  nombres porque los mappings cruzados válidos pueden resolver a otro miembro.
+  Regresiones verifican constraints y loop tool/native sin reintentos.
+
+Verificación de las correcciones: 78 focales pasan; una integración de 295
+pruebas pasa en 161,4s con warnings-as-errors, incluyendo esas regresiones,
+persistencia, aprobación/continuación, delegación/Flow y adaptadores. Formato,
+ExDoc estricto y whitespace pasan; los hashes finales coinciden con las fuentes
+verificadas. No se suman
+ambos lotes como casos únicos. La revisión previa conservaba 380 pases sobre
+la base sin corregir; su lote interrumpido sin resultado no se contabiliza.
+Las reproducciones originales y el negativo de symlinks ocultos descartado
+permanecen en `.exagent-local/review-20261023/`, junto al log de integración y
+hashes de fuentes/tests. Tooling aislado Elixir1.20/OTP29, offline, sin suite
+completa ni cualificación de proveedores/PostgreSQL reales. Changelog, diseño y
+guías recogen el impacto de schemas/fingerprints; sin migración automática de
+continuaciones afectadas. Sin bump, publicación, commit ni cambios en consumidores.
+
 **Publicación 2.2.1 autorizada 2026-10-18:** el usuario elige patch, no minor.
 Se eleva el mínimo JSV a `~> 0.26.1` para consumidores Hex y se alinean versión,
 changelog y guías. `lib/` y el lock de la suite aceptada permanecen idénticos;

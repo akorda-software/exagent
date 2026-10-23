@@ -8,7 +8,11 @@ defmodule ExAgent.Models.Fallback do
       model = ExAgent.Models.Fallback.new(models: [primary, backup])
       ExAgent.new(model: model, tools: tools)
 
-  Each model request tries `models` in order. A model is retried up to
+  Each model request tries `models` in order. A candidate whose optional
+  no-IO continuation preflight reports `:continuation_target_mismatch` is
+  skipped without a request or retry. Other preflight errors do not authorize
+  skipping a model; its normal request path retains its error handling. Models
+  without that callback keep their ordinary request behavior. A model is retried up to
   `:max_retries` times with exponential backoff (`:backoff_ms` doubling up to
   `:max_backoff_ms`, with jitter) and then the next model is tried at once. Only
   failures that returned no output are retried or fall back:
@@ -32,9 +36,10 @@ defmodule ExAgent.Models.Fallback do
 
   Different models only accept each other's responses in the history when
   configured for it, e.g. `ExAgent.Models.ReqLLM` with `foreign_history:
-  :portable`; otherwise switching models mid-conversation fails like any other
-  mismatched history. A persisted history resumes when any of the models
-  accepts it. The profile is the intersection of the models' profiles.
+  :portable`; otherwise incompatible candidates are skipped and the request
+  fails if none accepts the history. This lets a persisted history from a
+  backup continue with that compatible model. Malformed history and other
+  configuration errors remain terminal. The profile is the intersection of the models' profiles.
   `model_name/1` and `system/1` report the first model; each response keeps
   the name of the model that produced it. An explicit `estimate_cost`
   callback receives this fallback model, not the model that served the
@@ -80,7 +85,7 @@ defmodule ExAgent.Models.Fallback do
   @impl true
   def request(model, messages, settings, params) do
     with :ok <- validate(model) do
-      attempt(model, settings, params, fn child, settings ->
+      attempt(model, messages, settings, params, fn child, settings ->
         case Model.request(child, messages, settings, params) do
           {:ok, response, child} -> {:ok, child, response}
           {:error, reason} -> {:error, reason}
@@ -154,19 +159,47 @@ defmodule ExAgent.Models.Fallback do
 
   # --- attempts --------------------------------------------------------------
 
-  defp attempt(model, settings, params, fun) do
-    deadline = params.deadline
-
+  defp attempt(model, messages, settings, params, fun) do
     plan =
       for {_, index} <- Enum.with_index(model.models),
           retry <- 0..model.max_retries,
           do: {index, retry}
 
-    attempt(plan, model, settings, deadline, fun)
+    attempt(plan, model, messages, settings, params, fun, nil)
   end
 
-  defp attempt([{index, retry} | rest], model, settings, deadline, fun) do
+  defp attempt([], _model, _messages, _settings, _params, _fun, error), do: error
+
+  defp attempt([{index, retry} | rest], model, messages, settings, params, fun, skipped) do
     child = Enum.at(model.models, index)
+
+    preflight =
+      if retry == 0,
+        do: Model.validate_resume(child, messages, settings, params),
+        else: :ok
+
+    case preflight do
+      {:error,
+       %RequestError{
+         reason: :continuation_target_mismatch,
+         status: nil,
+         transport: nil,
+         partial_response: nil
+       }} = error ->
+        # Selection is not an attempt: do not spend retries or emit retry
+        # telemetry for a candidate that cannot accept this history. Validate
+        # only the candidate reached, never an unused backup's configuration.
+        rest = Enum.drop_while(rest, fn {next, _} -> next == index end)
+        attempt(rest, model, messages, settings, params, fun, skipped || error)
+
+      _ ->
+        execute_attempt(index, retry, rest, model, messages, settings, params, fun)
+    end
+  end
+
+  defp execute_attempt(index, retry, rest, model, messages, settings, params, fun) do
+    child = Enum.at(model.models, index)
+    deadline = params.deadline
 
     case fun.(child, bounded(settings, deadline)) do
       {:ok, child, result} ->
@@ -184,7 +217,7 @@ defmodule ExAgent.Models.Fallback do
           )
 
           if delay > 0, do: Process.sleep(delay)
-          attempt(rest, model, settings, deadline, fun)
+          attempt(rest, model, messages, settings, params, fun, nil)
         else
           _ -> error
         end
@@ -231,7 +264,7 @@ defmodule ExAgent.Models.Fallback do
   # --- streaming -------------------------------------------------------------
 
   defp open_stream(model, messages, settings, params) do
-    attempt(model, settings, params, fn child, settings ->
+    attempt(model, messages, settings, params, fn child, settings ->
       stream = Model.request_stream(child, messages, settings, params)
 
       case Enumerable.reduce(stream, {:cont, nil}, fn event, _ -> {:suspend, event} end) do

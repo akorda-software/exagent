@@ -4,7 +4,7 @@ defmodule ExAgent.MixProject do
   use Mix.Project
 
   @source_url "https://github.com/akorda-software/exagent"
-  @version "2.2.1"
+  @version "2.2.2"
 
   def project do
     [
@@ -53,7 +53,7 @@ defmodule ExAgent.MixProject do
 
   defp deps do
     [
-      {:req_llm, "~> 1.28.0"},
+      {:req_llm, "~> 1.29.0"},
       {:req, "~> 0.7.4"},
       {:finch, "~> 0.24"},
       # Decoder floors protect library consumers too; dependency lockfiles do

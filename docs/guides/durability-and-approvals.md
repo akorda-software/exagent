@@ -30,7 +30,9 @@ None of these makes an arbitrary external effect transactional or exactly once.
 result.output
 ```
 
-ETS is ephemeral: losing its table owner or the VM loses the data. For durable
+Each node has its own ETS owner and snapshots; connecting nodes does not
+replicate those snapshots. ETS is ephemeral: losing its table owner or the VM
+loses the data. For durable
 storage, your application brings `ecto_sql`, `postgrex` and a supervised Repo,
 runs `ExAgent.Store.Postgres.migrate(MyApp.Repo)`, then uses
 `store: {ExAgent.Store.Postgres, MyApp.Repo}`. See the

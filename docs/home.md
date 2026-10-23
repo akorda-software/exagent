@@ -12,7 +12,7 @@
 
 > #### Using ExAgent 2.2 {: .info}
 >
-> These pages describe **ExAgent 2.2.1**; published 1.x packages have older
+> These pages describe **ExAgent 2.2.2**; published 1.x packages have older
 > contracts. Check [supported features and limits](guides/support.md), use the dependency in
 > [Getting started](guides/getting-started.md), or read
 > [Migration](guides/migration.md) when upgrading an existing application.
