@@ -1,6 +1,6 @@
 # Roadmap ejecutable de ExAgent v2.0.0
 
-**Release 2.2.3 autorizada 2026-10-28 — preparación:** actualizar todas las
+**Release 2.2.3 autorizada 2026-10-28 — publicada:** actualizar todas las
 dependencias compatibles y publicar el siguiente patch. El resolver actualiza
 LLMDB 2026.10.7 y Splode 0.3.3; Zoi/gproc conservan sus restricciones upstream.
 No cambia el runtime de ExAgent. Se documenta el refresh del catálogo y la
@@ -8,7 +8,10 @@ actualización del lock de consumidores. Pasan 76 focales, `hex.audit`, 2.320
 pruebas completas (28 exclusiones) y 16 contratos de consumidores mínimos
 1.18/1.20. Se corrige un falso positivo documental sobre el slug de un modelo;
 docs, enlaces, TAR y aislamiento cierran en verde. No cambia la fuente
-verificada ni se repite la suite. Queda la publicación GitHub → Hex.
+verificada ni se repite la suite. Tag/main `e3b1ede`; el
+[workflow 40757072163](https://github.com/akorda-software/exagent/actions/runs/40757072163)
+termina success. Hex y HexDocs 2.2.3 están disponibles; el TAR público coincide
+con el artefacto remoto y sus 186 contenidos con el paquete final local.
 No hay llamadas pagadas ni cambios en aplicaciones consumidoras. Evidencia y
 limitaciones en [dependencias](dependencies.md).
 

@@ -61,6 +61,20 @@ Evidencia: `.exagent-local/release-2.2.3/` y
 `.exagent-local/checks/20261028T190855Z-895594/`. No se ejecutan proveedores
 pagados ni SQL externo. Los recibos históricos siguientes conservan su alcance.
 
+### Publicación 2.2.3
+
+La [release GitHub v2.2.3](https://github.com/akorda-software/exagent/releases/tag/v2.2.3)
+apunta a `e3b1ede9be50a5454ee361a5b30a930de04a0d74`, integrado en main antes
+del tag. El [workflow 40757072163](https://github.com/akorda-software/exagent/actions/runs/40757072163)
+termina **success**. [Hex](https://hex.pm/packages/exagent/2.2.3) confirma la
+release activa y [HexDocs](https://hexdocs.pm/exagent/2.2.3/) sirve ExAgent v2.2.3.
+El TAR público coincide byte a byte con el artefacto retenido de GitHub:
+SHA256 `2a8b72ee4a295a9f265faf6357bd3af1398870213a9248ddc278a30ad5d22a90`.
+Sus 186 contenidos coinciden byte a byte con el paquete final local. El recibo,
+la respuesta de Hex, los dos TAR y el artefacto remoto están bajo
+`.exagent-local/release-2.2.3/`. Este registro posterior no mueve el tag ni
+reemplaza el paquete publicado.
+
 ## Revisión histórica — 2026-10-23, patch 2.2.2
 
 El usuario autoriza actualizar dependencias, adaptar la integración y publicar

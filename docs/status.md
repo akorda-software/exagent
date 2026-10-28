@@ -1,6 +1,6 @@
 # Support and release status
 
-**Maintenance release 2026-10-28 — preparing 2.2.3:** the dependency refresh
+**Maintenance release 2026-10-28 — published 2.2.3:** the dependency refresh
 updates LLMDB to 2026.10.7 and Splode to 0.3.3, preserving ExAgent runtime sources,
 public requirements and persisted formats. Catalogue IDs and metadata change;
 see [models](guides/models-and-limits.md) before updating application locks.
@@ -8,7 +8,13 @@ The full offline suite passes 2,320 tests (28 provider/PostgreSQL exclusions),
 76 focused tests and 16 installed-consumer contracts pass on Elixir 1.18/1.20.
 Strict dependency diagnostics retain stock TOML/WebSockex warnings.
 Strict documentation, links, package build and isolation checks pass after
-correcting a documentation-example false positive. Publication remains pending.
+correcting a documentation-example false positive.
+[Hex 2.2.3](https://hex.pm/packages/exagent/2.2.3) and
+[versioned HexDocs](https://hexdocs.pm/exagent/2.2.3/) are available. Release
+commit `e3b1ede` and successful
+[workflow 40757072163](https://github.com/akorda-software/exagent/actions/runs/40757072163)
+bind the publication. The public TAR matches the retained remote artifact;
+all 186 file contents match the verified local package.
 The [dependency record](development/dependencies.md) tracks the final evidence.
 
 **Maintenance release 2026-10-23 — published 2.2.2:** ReqLLM 1.29 excludes
