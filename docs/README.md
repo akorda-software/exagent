@@ -3,7 +3,7 @@
 This is the source repository's maintainer index. The public manual starts at
 [Documentation for applications](guides/index.md); its navigation contains usage
 guides and API contracts. Internal plans and dated records below are not published
-in HexDocs. ExAgent 2.2.1 is available on [Hex](https://hex.pm/packages/exagent/2.2.1).
+in HexDocs. This checkout targets [ExAgent 2.2.3](https://hex.pm/packages/exagent/2.2.3).
 
 ## Learn and build
 

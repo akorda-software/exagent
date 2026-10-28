@@ -13,6 +13,37 @@
 > Conserva sus reproducciones y guards como estado runtime, no como aceptación
 > del nuevo contrato. C7 y los contratos de autoridad/recuperación permanecen.
 
+## Refresh de dependencias para 2.2.3 (2026-10-28)
+
+**Problema y beneficio:** el usuario solicita actualizar todas las dependencias
+y publicar un patch con las adaptaciones necesarias. La consulta de los 45
+paquetes reales de Hex (incluidos los alias `ts_chatterbox` y `hpack_erl`)
+encuentra dos actualizaciones compatibles: LLMDB 2026.10.7 y Splode 0.3.3.
+Se actualiza el lock mediante el resolver oficial, conservando ReqLLM 1.29.0,
+Elixir `~> 1.18` y todos los requisitos públicos existentes.
+
+**Impacto:** el snapshot stock añade 609 IDs, retira 501 y cambia metadata de
+4.674 IDs conservados respecto de 2026.10.6. El catálogo es una fuente mutable,
+no una garantía de transporte ni de disponibilidad del proveedor. Se mantienen
+las specs explícitas, la admisión de perfiles y el binding de continuación.
+Splode corrige la conversión de claves de variables al deserializar errores;
+ExAgent no utiliza ese decoder y conserva su propia proyección de errores.
+Las 76 pruebas focales no requieren adaptar fuentes runtime ni contratos.
+
+**Alternativas:** congelar el catálogo impediría el refresh solicitado y no
+fijaría el lock de aplicaciones consumidoras. Añadir dependencias directas sólo
+para fijar dos transitivas duplicaría la responsabilidad del backend sin una
+necesidad de integración. No se fuerzan Zoi 0.19 o gproc 1.3: sus padres stock
+siguen requiriendo `~> 0.18.11` y `~> 1.2.0`, respectivamente.
+
+**Migración y verificación:** las aplicaciones ejecutan
+`mix deps.update exagent llm_db splode` y revisan IDs/precios/límites/capabilities,
+o mantienen specs explícitas con datos verificados. No se reescriben snapshots
+ni aprobaciones para sortear un mismatch. La versión patch no altera el contrato
+de ExAgent. La rutina offline y consumidores mínimos instalados en 1.18/1.20
+verifican la integración; los resultados se registran en
+[dependencias](../development/dependencies.md), separados de servicios reales.
+
 ## Dependencias de seguridad y catálogo para 2.2.2 (2026-10-23)
 
 **Problema demostrado:** ReqLLM 1.28 está afectado por

@@ -1,6 +1,67 @@
 # Dependencias
 
-## Revisión vigente — 2026-10-23, patch 2.2.2
+## Revisión vigente — 2026-10-28, patch 2.2.3
+
+Actualización y publicación solicitadas por el usuario sobre 2.2.2. Se consultan
+los 45 paquetes del lock contra la API oficial de Hex y `hex.outdated --all`,
+usando el nombre real del paquete cuando difiere de la aplicación OTP.
+
+| Paquete | Antes | Última estable | Decisión |
+|---|---|---|---|
+| llm_db | 2026.10.6 | 2026.10.7 | Actualizado mediante `deps.update --all`. |
+| splode | 0.3.2 | 0.3.3 | Actualizado mediante el mismo resolver. |
+| zoi | 0.18.11 | 0.19.0 | Bloqueado por los requisitos stock de ReqLLM/LLMDB. |
+| gproc | 1.2.0 | 1.3.0 | Grpcbox sigue requiriendo `~> 1.2.0`; sólo tests. |
+
+Los otros 41 paquetes ya estaban al día. No se añaden overrides ni dependencias
+directas para fijar transitivas. Los rangos publicados se conservan; una app
+existente adopta las transitivas con `mix deps.update exagent llm_db splode`.
+ReqLLM sigue en 1.29.0 y el mínimo Elixir sigue siendo `~> 1.18`.
+
+La comparación de los snapshots empaquetados de LLMDB cuenta 9.992 modelos antes
+y 10.100 después: 609 incorporaciones, 501 retiros y 4.674 IDs con metadata
+modificada. Entre los retiros de OpenRouter están `deepseek/deepseek-r1` y
+`openai/gpt-3.5-turbo`. No se inventan precios ni se recuperan entradas privadas;
+la [guía de modelos](../guides/models-and-limits.md) explica las specs explícitas
+y la revisión previa a reanudar trabajo persistido. Las incorporaciones no
+cualifican nuevos transportes en ExAgent. Splode 0.3.3 corrige las claves de vars
+en `from_json`; ExAgent no llama a ese decoder. No hacen falta cambios runtime.
+
+Fuentes: [LLMDB 2026.10.7](https://hex.pm/packages/llm_db/2026.10.7),
+[diff oficial](https://github.com/agentjido/llmdb/compare/2026.10.6...2026.10.7),
+[Splode 0.3.3](https://hex.pm/packages/splode/0.3.3) y
+[diff oficial](https://github.com/ash-project/splode/compare/v0.3.2...v0.3.3).
+
+Verificación: 76 pruebas focales pasan con warnings-as-errors; `hex.audit` sale
+0 sin paquetes retirados ni advisories. `hex.outdated --all` conserva exit 1 por
+Zoi/gproc; los otros 43 paquetes están en la última estable consultada.
+
+Dos consumidores mínimos nuevos, **sin lock de entrada**, instalan el TAR con
+Elixir 1.18/OTP28 y 1.20/OTP29: **16/16 contratos**, sin fallos, skips ni
+exclusiones. Ambos resuelven LLMDB 2026.10.7 y Splode 0.3.3. Todos los comandos
+funcionales salen 0; el diagnóstico agregado conserva exit 1 por warnings stock
+TOML (15 en 1.18; 19 en 1.20) y WebSockex (19 en 1.20), sin warnings de ExAgent.
+El grafo opcional OTel no cambia y no se repite su matriz de consumidores.
+
+Pasan los 17 guards de release, los 17 guards docs-only y el control de metadatos
+`release-check v2.2.3 --prepare`. La suite completa pasa **2.320 pruebas / 0
+fallos / 28 exclusiones**, seed 37556, en 2.020,9 s. Pasan formato, compilación
+estricta, harness finito y generación ExDoc. El primer control documental sale
+1 porque interpreta el slug `deepseek-r1` del nuevo ejemplo como una referencia
+interna al roadmap. Se sustituye ese ejemplo por otro ID realmente retirado,
+`microsoft/wizardlm-2-8x22b`; no se relaja el guard. Se regeneran documentación
+y TAR, sin repetir la suite ni los consumidores: runtime, tests, manifiesto y
+lock conservan sus hashes verificados.
+El cierre pasa ExDoc estricto, enlaces de 108 páginas HTML, 106 Markdown y
+106 EPUB, build TAR y aislamiento. Los 102 archivos de biblioteca/manifiesto
+del paquete coinciden con los instalados en ambos consumidores. El TAR contiene
+186 archivos. Las ediciones finales de este recibo sólo requieren regenerar
+el paquete; no cambian ninguna página pública ni repiten pruebas de runtime.
+Evidencia: `.exagent-local/release-2.2.3/` y
+`.exagent-local/checks/20261028T190855Z-895594/`. No se ejecutan proveedores
+pagados ni SQL externo. Los recibos históricos siguientes conservan su alcance.
+
+## Revisión histórica — 2026-10-23, patch 2.2.2
 
 El usuario autoriza actualizar dependencias, adaptar la integración y publicar
 el siguiente patch. Hex confirma 2.2.1 como última versión de ExAgent. Se revisan

@@ -4,7 +4,7 @@ defmodule ExAgent.MixProject do
   use Mix.Project
 
   @source_url "https://github.com/akorda-software/exagent"
-  @version "2.2.2"
+  @version "2.2.3"
 
   def project do
     [

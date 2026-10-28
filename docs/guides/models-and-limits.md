@@ -22,11 +22,18 @@ loading is described in [Getting started](getting-started.md). Never place a key
 in a prompt or persist the complete live model.
 
 Catalogue updates can remove a model or change its prices, limits and capabilities.
-ExAgent 2.2.2 requires ReqLLM 1.29 and its newer LLMDB catalogue; the tested lock
-uses LLMDB 2026.10.6. Some former OpenRouter entries, including
+ExAgent 2.2.3 retains ReqLLM 1.29 and updates the checkout lock to
+LLMDB 2026.10.7. Some former OpenRouter entries, including
 `unbiased/pareto` and `inclusionai/ling-3.0-flash-fin`, are no longer present.
 Resolving an absent ID can still succeed as an unverified model without catalogue
 metadata. Do not interpret that success as tool qualification or known pricing.
+
+The 2026.10.7 snapshot adds 609 model IDs and removes 501 relative to 2026.10.6;
+prices, limits and capabilities also change for retained models.
+The retired OpenRouter IDs include `openai/gpt-3.5-turbo` and
+`microsoft/wizardlm-2-8x22b`. A library's lockfile does not constrain consuming
+applications. To adopt the reviewed transitive updates, update the application lock with
+`mix deps.update exagent llm_db splode` and review the resulting model metadata.
 
 Applications that need stable metadata can pass an explicit model map to
 `ExAgent.Model.resolve/2` or `ExAgent.Models.ReqLLM.new/1`, with the provider,

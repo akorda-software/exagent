@@ -6,6 +6,27 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.2.3]
+
+Dependency maintenance release, 2026-10-28. ExAgent's public APIs, runtime
+sources, persisted formats and dependency requirements remain unchanged.
+
+### Dependencies
+
+- Update the checkout lock from LLMDB 2026.10.6 to 2026.10.7. The stock snapshot
+  adds 609 model IDs, removes 501 and refreshes metadata for 4,674 retained IDs.
+  Review application model IDs, prices, limits and capabilities; explicit model
+  specs remain available for verified application-owned metadata. Catalogue
+  additions do not qualify new provider transports or enable tool profiles.
+- Update Splode 0.3.2 to 0.3.3, which restores existing atom keys when decoding
+  error variables from JSON and preserves unknown keys as strings.
+- All 45 locked packages were checked. Zoi 0.18.11 and gproc 1.2.0 remain at
+  their newest upstream-compatible versions; no overrides or vendored patches.
+  ReqLLM remains at 1.29.0 and Elixir at `~> 1.18`.
+- Consuming applications retain their own lockfiles. Use
+  `mix deps.update exagent llm_db splode` to adopt these transitive updates;
+  see [models and migration guidance](guides/models-and-limits.md).
+
 ## [2.2.2]
 
 Maintenance and security dependency update, 2026-10-23. Public function

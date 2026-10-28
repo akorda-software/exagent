@@ -1,6 +1,6 @@
 # Supported features and limits
 
-ExAgent 2.2.2 is published on [Hex](https://hex.pm/packages/exagent/2.2.2).
+This guide describes [ExAgent 2.2.3](https://hex.pm/packages/exagent/2.2.3).
 Its runtime targets are Elixir 1.18 / OTP 28 and Elixir 1.20 / OTP 29.
 The general model backend uses official ReqLLM 1.29; applications may implement
 `ExAgent.Model` for a different adapter.

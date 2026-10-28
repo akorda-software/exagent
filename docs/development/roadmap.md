@@ -1,5 +1,17 @@
 # Roadmap ejecutable de ExAgent v2.0.0
 
+**Release 2.2.3 autorizada 2026-10-28 — preparación:** actualizar todas las
+dependencias compatibles y publicar el siguiente patch. El resolver actualiza
+LLMDB 2026.10.7 y Splode 0.3.3; Zoi/gproc conservan sus restricciones upstream.
+No cambia el runtime de ExAgent. Se documenta el refresh del catálogo y la
+actualización del lock de consumidores. Pasan 76 focales, `hex.audit`, 2.320
+pruebas completas (28 exclusiones) y 16 contratos de consumidores mínimos
+1.18/1.20. Se corrige un falso positivo documental sobre el slug de un modelo;
+docs, enlaces, TAR y aislamiento cierran en verde. No cambia la fuente
+verificada ni se repite la suite. Queda la publicación GitHub → Hex.
+No hay llamadas pagadas ni cambios en aplicaciones consumidoras. Evidencia y
+limitaciones en [dependencias](dependencies.md).
+
 **Release 2.2.2 autorizada 2026-10-23 — publicada:** el usuario pide
 revisar dependencias, adaptar lo necesario y publicar el siguiente patch. Hex
 confirma 2.2.1 como base. Se actualizan ReqLLM 1.29 (mínimo público), LLMDB
