@@ -98,6 +98,30 @@ Evidencia de esta fase:
 `.exagent-local/release-2.2.4/`. La disponibilidad queda pendiente del workflow
 y de la lectura pública de Hex/HexDocs.
 
+### Publicación 2.2.4
+
+La [release GitHub v2.2.4](https://github.com/akorda-software/exagent/releases/tag/v2.2.4)
+apunta a `d02aaefd9bf59e389e56d732711bdee3707140c7`, integrado en main antes
+del tag. El [workflow 43944394382](https://github.com/akorda-software/exagent/actions/runs/43944394382)
+termina **success**. [Hex](https://hex.pm/packages/exagent/2.2.4) confirma la
+release activa y los mínimos ReqLLM `~> 1.30.0`, JSV `~> 0.27.0` y Ecto
+`~> 3.14 and >= 3.14.3`. [HexDocs](https://hexdocs.pm/exagent/2.2.4/)
+sirve la versión y su guía de instalación `~> 2.2.4`.
+
+El TAR público coincide byte a byte con el artefacto retenido por GitHub:
+SHA256 `dffcdd8bdf23e80801eda91049aac4d27f8bad4650042483220726d340470e7f`.
+Los 186 contenidos coinciden byte a byte con el paquete local validado. La
+comparación binaria inicial entre hosts falla por el orden de entradas y los
+modos de 145 archivos (0600 locales frente a 0644 del checkout Git); el inventario,
+bytes y demás metadatos son iguales. Se conservan los hashes originales, el diff
+y su comprobación semántica, sin sustituir el paquete. Siete páginas/recursos
+HexDocs coinciden con la documentación retenida, normalizando sólo las inserciones
+exactas de analytics y footer de HexDocs. La guía de instalación se verifica aparte.
+
+Recibo, API de Hex, TAR público, artefacto remoto y comparaciones en
+`.exagent-local/release-2.2.4/`. Este registro posterior no mueve el tag ni cambia
+el paquete publicado; no repite las suites aceptadas ni cualifica proveedores.
+
 ## Revisión histórica — 2026-10-28, patch 2.2.3
 
 Actualización y publicación solicitadas por el usuario sobre 2.2.2. Se consultan

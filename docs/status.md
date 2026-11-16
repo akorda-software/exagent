@@ -1,6 +1,6 @@
 # Support and release status
 
-**Maintenance release 2026-11-16 — 2.2.4 preparation:** the checkout requires ReqLLM 1.30,
+**Maintenance release 2026-11-16 — published 2.2.4:** the checkout requires ReqLLM 1.30,
 JSV 0.27 and Ecto >= 3.14.3, including the upstream schema-regex and query-cache
 security fixes. Seven locked packages are updated; gproc and IDNA remain within
 their stock parent requirements. ExAgent runtime sources and persisted formats
@@ -14,8 +14,15 @@ The user has authorized patch 2.2.4 publication. The later version/prose delta
 passes 34 release/docs guards, 19 documentation examples, strict dev/test compilation,
 metadata, format, ExDoc/links and package/isolation. Runtime sources, tests and lock
 retain their verified identities; the complete suite is not repeated for metadata.
-Availability requires the GitHub workflow and public Hex/HexDocs
-readback. See the [dependency record](development/dependencies.md).
+[Hex 2.2.4](https://hex.pm/packages/exagent/2.2.4) and
+[versioned HexDocs](https://hexdocs.pm/exagent/2.2.4/) are available.
+Release commit/tag `d02aaef` and successful
+[workflow 43944394382](https://github.com/akorda-software/exagent/actions/runs/43944394382)
+bind the publication. The public TAR matches its retained remote artifact;
+all 186 file contents match the local validated package. Seven documentation
+resources and the installation guide pass public readback. The
+[dependency record](development/dependencies.md) retains the cross-host archive
+ordering/mode differences and final evidence.
 
 **Maintenance release 2026-10-28 — published 2.2.3:** the dependency refresh
 updates LLMDB to 2026.10.7 and Splode to 0.3.3, preserving ExAgent runtime sources,

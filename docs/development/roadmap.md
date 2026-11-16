@@ -1,6 +1,6 @@
 # Roadmap ejecutable de ExAgent v2.0.0
 
-**Release 2.2.4 autorizada 2026-11-16 — actualización validada, publicación en preparación:**
+**Release 2.2.4 autorizada 2026-11-16 — publicada y verificada:**
 el usuario solicita publicar un patch después de verificar el refresh. Se actualizan ReqLLM
 1.30, JSV 0.27, Ecto 3.14.3, LLMDB 2026.11.2, Zoi 0.19, NimbleOptions 1.2
 y SSLVerifyFun 1.1.9. Los mínimos publicados de ReqLLM/JSV/Ecto se alinean con
@@ -19,8 +19,14 @@ relajar bindings. Se alinean versión y notas para 2.2.4: 34 guards, 19 ejemplos
 compilación dev/test, metadatos/formato, docs/enlaces y TAR/aislamiento pasan.
 El manifiesto sólo cambia versión y conserva las 101 fuentes de biblioteca,
 tests y lock aceptados; no se repite la suite completa por metadatos/prosa.
-Se prepara commit/push/tag/release. No cambia ninguna aplicación
-consumidora; la disponibilidad se confirmará con lectura de Hex y HexDocs.
+El commit/tag de release es `d02aaef`, integrado en main antes del tag.
+El [workflow 43944394382](https://github.com/akorda-software/exagent/actions/runs/43944394382)
+termina success: Hex y HexDocs 2.2.4 están disponibles, el TAR público coincide
+con el artefacto remoto y sus 186 contenidos con el paquete local. Los metadatos
+entre hosts difieren en orden/modos de archivo; el recibo conserva el diagnóstico.
+La lectura de siete recursos documentales y la guía de instalación confirma
+el contenido publicado. No cambia ninguna aplicación consumidora ni se mueve el tag
+al registrar el cierre.
 Evidencia y límites en [dependencias](dependencies.md).
 
 **Release 2.2.3 autorizada 2026-10-28 — publicada:** actualizar todas las
