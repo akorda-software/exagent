@@ -6,6 +6,38 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.2.4]
+
+Security and dependency maintenance release, 2026-11-16. ExAgent runtime
+sources, public function signatures and persisted formats are unchanged.
+
+### Dependencies
+
+- Require official `req_llm ~> 1.30.0` and `jsv ~> 0.27.0`. ReqLLM now
+  requires LLMDB's November catalogue, Zoi 0.19 and patched JSV. Its request
+  runtime refactor retains ExAgent's public backend APIs; tools, streaming,
+  native output, deadlines, retries and continuation guards remain in force.
+- JSV includes the fix for
+  [GHSA-cvmg-hgv6-jqcp](https://github.com/lud/jsv/security/advisories/GHSA-cvmg-hgv6-jqcp).
+  Exhausting a schema regex's backtracking budget now rejects arguments with
+  `indeterminate_pattern`, even under `not` or a permissive `anyOf`, before
+  invoking a tool. Rewrite pathological regexes to avoid rejecting valid data.
+  ExAgent's existing Unicode codepoint lengths, numeric uniqueness, annotation-only
+  formats and no-cast behavior are preserved.
+- Require `ecto ~> 3.14 and >= 3.14.3`, excluding
+  [GHSA-cxjx-vmm2-qr8r](https://github.com/elixir-ecto/ecto/security/advisories/GHSA-cxjx-vmm2-qr8r).
+  The advisory concerns query caching for interpolated JSON paths and splice
+  lists; ExAgent's store uses parameterized SQL and does not build those queries.
+  Declaring the floor also protects consumers that do not use this checkout's lock.
+- Update locked LLMDB 2026.10.7 → 2026.11.2, Zoi 0.18.11 → 0.19.0,
+  NimbleOptions 1.1.1 → 1.2.0 and test-only `ssl_verify_fun` 1.1.7 → 1.1.9.
+  The catalogue adds 434 model IDs, removes 258 and changes metadata for 1,802
+  retained IDs. Review model IDs, pricing, limits and continuation compatibility
+  as described in [models](guides/models-and-limits.md).
+- All 45 locked packages were checked against Hex. Gproc 1.2.0 and IDNA 7.1.0
+  remain constrained by stock grpcbox and JSV; no dependency overrides are added.
+  Elixir remains `~> 1.18`.
+
 ## [2.2.3]
 
 Dependency maintenance release, 2026-10-28. ExAgent's public APIs, runtime

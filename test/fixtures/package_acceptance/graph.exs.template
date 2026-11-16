@@ -17,6 +17,8 @@ forbidden = [
 
 true = Enum.all?(forbidden, &(&1 not in apps))
 true = :req_llm in apps
+true = Version.match?(Application.spec(:req_llm, :vsn) |> to_string(), "~> 1.30.0")
+true = Version.match?(Application.spec(:ecto, :vsn) |> to_string(), "~> 3.14 and >= 3.14.3")
 true = Version.match?(Application.spec(:req, :vsn) |> to_string(), ">= 0.7.4")
 true = :opentelemetry_api in apps == (mode != "none")
 true = :opentelemetry in apps == mode in ["sdk", "exporter"]
@@ -24,7 +26,7 @@ true = :opentelemetry_exporter in apps == (mode == "exporter")
 true = Version.match?(Application.spec(:finch, :vsn) |> to_string(), ">= 0.24.0")
 true = Version.match?(Application.spec(:mint, :vsn) |> to_string(), ">= 1.11.0")
 true = Version.match?(Application.spec(:hpax, :vsn) |> to_string(), ">= 1.1.0")
-true = Version.match?(Application.spec(:jsv, :vsn) |> to_string(), "~> 0.26.1")
+true = Version.match?(Application.spec(:jsv, :vsn) |> to_string(), "~> 0.27.0")
 
 graph =
   Enum.map(deps, fn dep ->

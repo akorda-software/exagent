@@ -4,7 +4,7 @@ defmodule ExAgent.MixProject do
   use Mix.Project
 
   @source_url "https://github.com/akorda-software/exagent"
-  @version "2.2.3"
+  @version "2.2.4"
 
   def project do
     [
@@ -53,7 +53,7 @@ defmodule ExAgent.MixProject do
 
   defp deps do
     [
-      {:req_llm, "~> 1.29.0"},
+      {:req_llm, "~> 1.30.0"},
       {:req, "~> 0.7.4"},
       {:finch, "~> 0.24"},
       # Decoder floors protect library consumers too; dependency lockfiles do
@@ -61,8 +61,8 @@ defmodule ExAgent.MixProject do
       {:mint, "~> 1.11"},
       {:hpax, "~> 1.1"},
       {:jason, "~> 1.4"},
-      {:jsv, "~> 0.26.1"},
-      {:ecto, "~> 3.12"},
+      {:jsv, "~> 0.27.0"},
+      {:ecto, "~> 3.14 and >= 3.14.3"},
       {:telemetry, "~> 1.0"},
       # Instrumentation is opt-in; the application owns its SDK and exporter.
       {:opentelemetry_api, "~> 1.5", optional: true},

@@ -165,6 +165,46 @@ defmodule ExAgent.ToolValidationTest do
     end
   end
 
+  test "regex budget exhaustion rejects tool arguments even under permissive combinators" do
+    pattern = "^(?:(a+)+b|a+!)$"
+    expensive = String.duplicate("a", 30) <> "!"
+
+    for draft <- [
+          "https://json-schema.org/draft/2020-12/schema",
+          "http://json-schema.org/draft-07/schema#"
+        ],
+        {schema, rejected, accepted} <- [
+          {
+            %{"patternProperties" => %{pattern => %{"type" => "integer"}}},
+            %{expensive => "not an integer"},
+            %{"aaa!" => 1}
+          },
+          {
+            %{"properties" => %{"value" => %{"not" => %{"pattern" => pattern}}}},
+            %{value: expensive},
+            %{value: "safe"}
+          },
+          {
+            %{
+              "properties" => %{
+                "value" => %{"anyOf" => [%{"not" => %{"pattern" => pattern}}, true]}
+              }
+            },
+            %{value: expensive},
+            %{value: "safe"}
+          }
+        ] do
+      Process.put(:tool_effects, 0)
+      assert {:ok, prepared} = Tool.prepare(tool(Map.put(schema, "$schema", draft)))
+      assert {:error, errors} = invoke(prepared, rejected)
+      assert Enum.any?(errors, &(&1.keyword == "indeterminate_pattern"))
+      assert {:ok, _} = Jason.encode(errors)
+      assert Process.get(:tool_effects) == 0
+      assert {:ok, ^accepted} = invoke(prepared, accepted)
+      assert Process.get(:tool_effects) == 1
+    end
+  end
+
   test "invalid schemas fail preparation and cannot execute a callable" do
     for schema <- [
           nil,

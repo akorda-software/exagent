@@ -1,5 +1,28 @@
 # Roadmap ejecutable de ExAgent v2.0.0
 
+**Release 2.2.4 autorizada 2026-11-16 — actualización validada, publicación en preparación:**
+el usuario solicita publicar un patch después de verificar el refresh. Se actualizan ReqLLM
+1.30, JSV 0.27, Ecto 3.14.3, LLMDB 2026.11.2, Zoi 0.19, NimbleOptions 1.2
+y SSLVerifyFun 1.1.9. Los mínimos publicados de ReqLLM/JSV/Ecto se alinean con
+el backend y las correcciones de seguridad; sin overrides para gproc/IDNA.
+No cambia el runtime de ExAgent; se añade una regresión de regex indeterminada
+antes de efectos y se alinean los probes de versión. Pasan 235 focales,
+`hex.audit` y las nueve fases de `bin/check`: 2.321 pruebas / 0 fallos /
+28 exclusiones, 1.991,4 s de suite; docs, enlaces y TAR/aislamiento correctos.
+Cinco consumidores sin lock pasan 40 contratos en 1.18/1.20 y las 27 pruebas
+de validación pasan también contra el paquete instalado en 1.18. El diagnóstico
+estricto de consumidores conserva warnings stock TOML/WebSockex/gproc. Los
+102 archivos de biblioteca/manifiesto coinciden; el cierre documental regenera
+el TAR sin repetir las pruebas funcionales.
+El catálogo retira modelos y cambia metadata; se documenta la migración sin
+relajar bindings. Se alinean versión y notas para 2.2.4: 34 guards, 19 ejemplos,
+compilación dev/test, metadatos/formato, docs/enlaces y TAR/aislamiento pasan.
+El manifiesto sólo cambia versión y conserva las 101 fuentes de biblioteca,
+tests y lock aceptados; no se repite la suite completa por metadatos/prosa.
+Se prepara commit/push/tag/release. No cambia ninguna aplicación
+consumidora; la disponibilidad se confirmará con lectura de Hex y HexDocs.
+Evidencia y límites en [dependencias](dependencies.md).
+
 **Release 2.2.3 autorizada 2026-10-28 — publicada:** actualizar todas las
 dependencias compatibles y publicar el siguiente patch. El resolver actualiza
 LLMDB 2026.10.7 y Splode 0.3.3; Zoi/gproc conservan sus restricciones upstream.

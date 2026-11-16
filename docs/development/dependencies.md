@@ -1,6 +1,104 @@
 # Dependencias
 
-## Revisión vigente — 2026-10-28, patch 2.2.3
+## Revisión vigente — 2026-11-16, patch 2.2.4
+
+Se revisan los 45 paquetes reales del lock contra la API oficial de Hex y
+`hex.outdated --all`, incluyendo los alias `ts_chatterbox` y `hpack_erl`.
+`deps.update --all` actualiza siete paquetes; 43 quedan en la última estable.
+
+| Paquete | Antes | Después | Decisión |
+|---|---|---|---|
+| req_llm | 1.29.0 | 1.30.0 | Mínimo publicado `~> 1.30.0`; backend stock. |
+| jsv | 0.26.1 | 0.27.0 | Mínimo publicado `~> 0.27.0`; incluye la corrección de seguridad 0.26.2. |
+| ecto | 3.14.2 | 3.14.3 | Mínimo publicado `~> 3.14 and >= 3.14.3`; excluye la caché vulnerable. |
+| llm_db | 2026.10.7 | 2026.11.2 | Catálogo requerido por ReqLLM 1.30, sin catálogo privado. |
+| zoi | 0.18.11 | 0.19.0 | Requisito stock de ReqLLM y LLMDB. |
+| nimble_options | 1.1.1 | 1.2.0 | Requisito stock de ReqLLM 1.30. |
+| ssl_verify_fun | 1.1.7 | 1.1.9 | Transitiva test-only; correcciones de validación de nombres TLS. |
+| gproc | 1.2.0 | 1.2.0 | Grpcbox 0.18 exige `~> 1.2.0`; no permite 1.3. |
+| idna | 7.1.0 | 7.1.0 | JSV 0.27 exige `~> 6.0 or ~> 7.0`; no permite 8.0. |
+
+No se añaden overrides ni dependencias directas para fijar transitivas. Elixir
+sigue en `~> 1.18`. Tras verificar la actualización, el usuario solicita publicar
+el patch 2.2.4 sobre 2.2.3. Las aplicaciones
+consumidoras tienen su propio lock: después de adoptar este manifiesto, usar
+`mix deps.update exagent req_llm jsv ecto llm_db zoi nimble_options` y revisar
+el resultado. No se modifica ninguna aplicación existente. La publicación sigue
+el flujo GitHub → Hex y se acredita por separado con lectura del artefacto público.
+
+**Integración y seguridad:** ReqLLM 1.30 reorganiza generación y streaming detrás
+de sus APIs públicas. Se conservan las llamadas públicas de ExAgent, retries
+backend desactivados, deadlines propios, envelope, guards y codecs. JSV mantiene
+`validate/3` y reorganiza campos internos del contexto que nuestra extensión no
+consulta; no usamos la nueva ruta `valid?/2`. La regresión nueva verifica el
+rechazo `indeterminate_pattern` al agotar una regex, también con `not`, `anyOf`
+y `patternProperties`, sin ejecutar el callable. Longitudes Unicode, unicidad
+numérica y formatos sin casts siguen cubiertos por sus regresiones existentes.
+La corrección de Ecto afecta a consultas interpoladas que ExAgent no construye;
+el mínimo declarado evita resolver una versión vulnerable en consumidores.
+No hacen falta cambios de fuentes runtime, firmas o formatos persistidos.
+
+El snapshot empaquetado de LLMDB pasa de 10.100 a 10.276 modelos: 434 altas,
+258 retiros y 1.802 IDs con metadata modificada. Entre los retiros OpenRouter
+están `minimax/minimax-m2`, `inception/mercury-2` y `openai/gpt-4-turbo`.
+Se revisan IDs, precios, límites y capabilities; una spec explícita requiere
+hechos verificados por la aplicación. No se recupera metadata retirada ni se
+relajan los bindings de continuación. Las altas no cualifican transportes.
+
+Fuentes oficiales: [ReqLLM 1.30](https://github.com/agentjido/req_llm/blob/v1.30.0/CHANGELOG.md),
+[JSV 0.27](https://github.com/lud/jsv/blob/v0.27.0/CHANGELOG.md),
+[advisory JSV](https://github.com/lud/jsv/security/advisories/GHSA-cvmg-hgv6-jqcp),
+[advisory Ecto](https://github.com/elixir-ecto/ecto/security/advisories/GHSA-cxjx-vmm2-qr8r),
+[LLMDB](https://github.com/agentjido/llmdb/compare/2026.10.7...2026.11.2),
+[NimbleOptions](https://github.com/dashbitco/nimble_options/blob/v1.2.0/CHANGELOG.md)
+y [SSLVerifyFun](https://hexdocs.pm/ssl_verify_fun/changelog.html).
+
+**Verificación:** 235 pruebas focales pasan con warnings-as-errors en
+dos lotes de 66 y 169. `hex.audit` sale 0 sin paquetes retirados ni advisories.
+`hex.outdated --all` sale 1 sólo por gproc/IDNA. Cinco consumidores nuevos sin
+lock de entrada pasan **40/40 contratos**, sin fallos, skips ni exclusiones:
+none/API/SDK/exporter en Elixir 1.20/OTP29 y mínimo en 1.18/OTP28. Todos resuelven
+los nuevos mínimos; sus 102 archivos de biblioteca/manifiesto coinciden con
+el checkout. El diagnóstico estricto agregado conserva exit 1 por warnings
+stock de TOML (15 en 1.18; 19 en 1.20), WebSockex (19 en 1.20) y gproc
+(nueve en el grafo exporter de 1.20), sin warnings de ExAgent.
+
+Además, las 27 pruebas de validación de herramientas pasan directamente contra
+el paquete instalado en 1.18, incluyendo la nueva regresión de regex en ambos
+dialectos. El primer arranque de ese probe apuntaba por error a `_build/test/lib`;
+se conserva su fallo previo a cargar ExAgent y el resultado corregido con la
+ruta efectiva del runner, `_build/lib`. No se sobrescriben los recibos de los
+ocho contratos del consumidor.
+
+`bin/check` pasa sus nueve fases: **2.321 pruebas / 0 fallos / 28 exclusiones**,
+seed 37556, en 1.991,4 s de suite. Pasan formato, compilación estricta, harness
+finito (incluidos los 19 casos documentados), ExDoc estricto, enlaces HTML/
+Markdown/EPUB, TAR y aislamiento. El paquete contiene 186 archivos. El cierre
+de este recibo, roadmap y estado sólo cambia documentación interna empaquetada:
+se regenera el TAR y se comprueba su identidad de biblioteca/manifiesto contra
+los cinco consumidores, sin repetir la suite ni las instalaciones.
+Evidencia local: `.exagent-local/dependency-refresh-20261116/`. No se ejecutan
+proveedores pagados ni SQL externo; el runner live se alinea con 1.30 para una
+futura cualificación, sin atribuir una nueva prueba real.
+La rutina completa conserva sus logs y exits en
+`.exagent-local/checks/20261116T143616Z-79052/`.
+
+### Preparación 2.2.4
+
+El usuario autoriza el patch y su publicación después de la suite aceptada.
+Se alinean versión, changelog, notas de release e introducciones del manual.
+El delta posterior sólo cambia metadatos y prosa; 377 archivos de biblioteca,
+tests y lock conservan sus identidades verificadas. El manifiesto sólo cambia
+`@version` de 2.2.3 a 2.2.4. Pasan 17 guards de release y 17 docs-only, metadatos,
+formato, compilación estricta dev/test, 19 ejemplos documentados, ExDoc/enlaces
+y TAR/aislamiento. No se repite la suite completa ni las cinco instalaciones
+por ese delta de metadatos. El paquete final se regenera tras cerrar este recibo;
+sus 101 fuentes de biblioteca coinciden con el TAR y los consumidores aceptados.
+Evidencia de esta fase:
+`.exagent-local/release-2.2.4/`. La disponibilidad queda pendiente del workflow
+y de la lectura pública de Hex/HexDocs.
+
+## Revisión histórica — 2026-10-28, patch 2.2.3
 
 Actualización y publicación solicitadas por el usuario sobre 2.2.2. Se consultan
 los 45 paquetes del lock contra la API oficial de Hex y `hex.outdated --all`,

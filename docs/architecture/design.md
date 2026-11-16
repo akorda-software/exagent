@@ -13,6 +13,47 @@
 > Conserva sus reproducciones y guards como estado runtime, no como aceptación
 > del nuevo contrato. C7 y los contratos de autoridad/recuperación permanecen.
 
+## Refresh de dependencias para 2.2.4 (2026-11-16)
+
+**Problema y beneficio:** el usuario solicita actualizar las dependencias y
+adaptar ExAgent cuando cambien sus fronteras de integración. ReqLLM 1.30 migra
+su runtime interno de peticiones y exige el catálogo de noviembre, Zoi 0.19 y
+JSV corregido. JSV < 0.26.2 permite eludir schemas al agotar el presupuesto de
+regex; Ecto < 3.14.3 permite crecimiento ilimitado de caché en ciertas consultas.
+Se exige `req_llm ~> 1.30.0`, `jsv ~> 0.27.0` y
+`ecto ~> 3.14 and >= 3.14.3` en el manifiesto publicado, además del lock.
+
+**Decisión y alternativas:** usar las versiones stock estables y sus APIs
+públicas existentes. No se adopta el runtime privado nuevo de ReqLLM ni se
+cambia a `JSV.valid?/2`: necesitamos los errores de `JSV.validate/3` y conservar
+la validación sin casts. La extensión de vocabulario existente no accede a los
+campos internos que JSV 0.27 reorganiza. Los cambios upstream no requieren
+modificar el runtime de ExAgent. Actualizar sólo el lock no excluiría versiones
+vulnerables en aplicaciones consumidoras. No se fuerzan gproc 1.3 ni IDNA 8,
+incompatibles con los requisitos stock de sus padres.
+
+**Impacto observable:** el agotamiento de una regex produce rechazo
+`indeterminate_pattern` antes de efectos, incluso bajo `not`/`anyOf` o
+`patternProperties`. Se conserva la forma pública de errores y el contrato de
+longitudes Unicode, unicidad numérica y formatos como anotaciones. La caché
+vulnerable de Ecto no forma parte del SQL parametrizado del store. LLMDB
+2026.11.2 añade 434 IDs, retira 258 y modifica metadata de 1.802 IDs respecto
+de 2026.10.7. Es un cambio de catálogo externo, no una nueva cualificación de
+transporte. Firmas, eventos, formatos persistidos y bindings no cambian.
+
+**Migración y verificación:** actualizar el lock de la aplicación junto con
+ReqLLM/JSV/Ecto y sus transitivas; reescribir patrones con backtracking
+patológico y revisar IDs/precios/límites/capabilities antes de reanudar trabajo.
+Se conservan las specs explícitas y los rechazos de continuación incompatible;
+no se reescriben aprobaciones. Una regresión en ambos dialectos comprueba cero
+efectos para regex indeterminadas y controles positivos. Focales HTTP/SSE stock,
+schemas, timeout, fallback y observabilidad, seguidas de la rutina offline y
+consumidores TAR, se registran en [dependencias](../development/dependencies.md).
+Tras verificar el refresh, el usuario solicita publicar un patch nuevo: se
+prepara 2.2.4 mediante el flujo main/tag/release GitHub → Hex. El delta posterior
+de versión/prosa se verifica sin repetir la suite completa de fuentes idénticas.
+No se modifica ninguna aplicación consumidora existente.
+
 ## Refresh de dependencias para 2.2.3 (2026-10-28)
 
 **Problema y beneficio:** el usuario solicita actualizar todas las dependencias

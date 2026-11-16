@@ -7,7 +7,7 @@
 
 <!-- MDOC -->
 
-> **ExAgent 2.2.3** — see the [Hex release](https://hex.pm/packages/exagent/2.2.3).
+> **ExAgent 2.2.4** — see the [Hex release](https://hex.pm/packages/exagent/2.2.4).
 > When upgrading from 1.x, read the [migration guide](docs/guides/migration.md)
 > for the runtime, model, event and snapshot changes. See
 > [supported features and limits](docs/guides/support.md) for deployment requirements.
@@ -93,7 +93,7 @@ Add the published package to your application:
 
 ```elixir
 def deps do
-  [{:exagent, "~> 2.2.3"}]
+  [{:exagent, "~> 2.2.4"}]
 end
 ```
 

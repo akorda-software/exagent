@@ -1,5 +1,22 @@
 # Support and release status
 
+**Maintenance release 2026-11-16 — 2.2.4 preparation:** the checkout requires ReqLLM 1.30,
+JSV 0.27 and Ecto >= 3.14.3, including the upstream schema-regex and query-cache
+security fixes. Seven locked packages are updated; gproc and IDNA remain within
+their stock parent requirements. ExAgent runtime sources and persisted formats
+are unchanged. All nine local validation phases pass: 2,321 offline tests,
+zero failures and 28 provider/PostgreSQL exclusions, plus strict docs, links
+and TAR/isolation. 235 focused tests, 40 installed-consumer contracts on
+Elixir 1.18/1.20 and 27 tool-validation cases on the installed 1.18 package pass.
+Hex audit is clean; strict consumer diagnostics retain stock TOML/WebSockex/gproc
+warnings. Catalogue removals require reviewing application metadata.
+The user has authorized patch 2.2.4 publication. The later version/prose delta
+passes 34 release/docs guards, 19 documentation examples, strict dev/test compilation,
+metadata, format, ExDoc/links and package/isolation. Runtime sources, tests and lock
+retain their verified identities; the complete suite is not repeated for metadata.
+Availability requires the GitHub workflow and public Hex/HexDocs
+readback. See the [dependency record](development/dependencies.md).
+
 **Maintenance release 2026-10-28 — published 2.2.3:** the dependency refresh
 updates LLMDB to 2026.10.7 and Splode to 0.3.3, preserving ExAgent runtime sources,
 public requirements and persisted formats. Catalogue IDs and metadata change;

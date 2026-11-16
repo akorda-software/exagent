@@ -58,6 +58,12 @@ ends the run. Tests can inspect the actual tool-return part in `result.messages`
 Arguments are validated **before invocation**. Tool results must be JSON-portable
 and can be returned as a value, `{:ok, value}` or `{:error, reason}`.
 
+When a schema regex exhausts its backtracking budget, validation rejects with
+`indeterminate_pattern`, including inside `not`, `anyOf` and `patternProperties`.
+The tool is not invoked. Rewrite nested quantifiers or overlapping alternatives
+if legitimate input reaches that limit. This security correction is included in
+ExAgent 2.2.4's JSV 0.27 dependency update; no error-shape migration is required.
+
 For a correctable rejection before an uncertain effect, use `ExAgent.ModelRetry`.
 An execution exception or timeout may occur after an external effect; it does not
 authorize automatic replay. Your application owns idempotency and reconciliation.
