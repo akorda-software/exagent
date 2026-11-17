@@ -1,6 +1,6 @@
 # Support and release status
 
-**Feature release 2026-11-17 — 2.3.0 prepared for publication:** long-term
+**Feature release 2026-11-17 — published 2.3.0:** long-term
 memory (`ExAgent.Memory`, ETS/PostgreSQL), background jobs, output validators,
 `Judge` reviewers, the advisor tool, tool search/output limits/repeat guard,
 per-tool timeouts and exclusive tools, compaction memo, OpenRouter reasoning
@@ -9,6 +9,12 @@ additive and opt-in. Each feature had one independent review and the release an
 integrated review (runtime, modules, documentation); the offline suite passes
 with zero failures. Lock refresh: transitive telemetry 1.4.3 and nimble_pool
 1.2.0; Hex audit clean. The user requested publication on 2026-11-17.
+[Hex 2.3.0](https://hex.pm/packages/exagent/2.3.0) and
+[versioned HexDocs](https://hexdocs.pm/exagent/2.3.0/) are available. Release
+commit/tag `16a9484` and successful
+[workflow 44125523810](https://github.com/akorda-software/exagent/actions/runs/44125523810)
+bind the publication; the workflow verified the public package bytes and
+versioned documentation, and the new memory guide and module pages answer.
 
 **Maintenance release 2026-11-16 — published 2.2.4:** the checkout requires ReqLLM 1.30,
 JSV 0.27 and Ecto >= 3.14.3, including the upstream schema-regex and query-cache

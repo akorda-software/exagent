@@ -4,7 +4,8 @@
 iteraciones post-2.2.4 como versión menor (elige 2.3.0 frente a 2.4.0 para no
 dejar hueco). Lock: telemetry 1.4.3 y nimble_pool 1.2.0; `hex.audit` limpio.
 Metadatos: `release_workflow_test.py` 17/17 y `release-check v2.3.0 --prepare`
-correctos. `./bin/check` con versión y lock finales: 2443 pasan, 31 excluidos; docs, enlaces, TAR 2.3.0 y aislamiento correctos.
+correctos. `./bin/check` con versión y lock finales: 2443 pasan, 31 excluidos; docs, enlaces, TAR 2.3.0 y aislamiento correctos. Publicada: commit/tag `16a9484`, workflow 44125523810 correcto (bytes
+públicos y HexDocs verificados); Hex muestra 2.3.0 como última estable.
 
 **Evolución post-2.2.4, cuarta iteración, 2026-11-17 — sin commit, versión ni publicación:**
 siguiendo el objetivo de la tercera iteración, se cubren tres huecos frente a
