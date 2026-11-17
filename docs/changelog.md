@@ -6,6 +6,123 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.3.0]
+
+Feature release, 2026-11-17. Additive: no published signature, default or
+persisted format changes meaning, and existing agents behave as before unless
+they opt in. See Migration for the few observable differences.
+
+### Added
+
+- **Reasoning with tools on OpenRouter.** `Models.ReqLLM.new(reasoning_mode:
+  :enabled)` with `tool_profile: :openrouter_chat_tools_v1` runs tool loops on
+  models whose reasoning cannot be disabled, such as Claude 5.x, or should stay
+  on. Thinking parts and stock `reasoning_details` (signatures, encrypted data)
+  are stored in the response continuation and replayed unchanged. Optional
+  `reasoning_effort` (`:minimal`…`:xhigh`) is checked against declared values
+  before IO. These endpoints reject forced tool use, so this mode sends `auto`
+  for typed output and the final step; the loop's existing output retries and
+  final-step guard still apply. Previously every tool-capable profile required
+  reasoning disabled or `none`.
+- **`ExAgent.Compaction.Memo`** and the `:memo` option of
+  `Compaction.Summary`. A bounded in-memory store lets compaction reuse the
+  previous summary while it fits the threshold and merge only newly
+  replaceable messages when it no longer does, instead of summarizing every
+  step past the threshold, including across user turns. Stored summaries are
+  used only while the messages they replaced are unchanged; an unavailable memo
+  falls back to an ordinary summary.
+- **Per-tool `timeout` and `concurrency`** on `ExAgent.Tool`. `:exclusive`
+  calls run alone between the parallel calls around them; `timeout` replaces
+  the agent's `:tool_timeout` for that tool, capped by the run deadline, and
+  parallel calls with different timeouts still run together. A call pausing for
+  approval does not hold back later calls. `Tool.new/1` and `ExAgent.new/1`
+  reject invalid values.
+- **`ExAgent.Tool.OutputLimit`** capability: shortens large successful tool
+  results to head/tail with an omission notice and an optional `on_truncate`
+  callback to keep the full output elsewhere.
+- **`ExAgent.Tool.RepeatGuard`** capability: adds a runtime note to the request
+  when the model repeats an identical call `warn_at` times since the latest user
+  message. The note is projection-only and placed stably for prompt caches; it
+  never blocks a call.
+- **`ExAgent.Jobs`**: background jobs for long tools and sub-agents.
+  `Jobs.background/2` and `Jobs.agent_tool/1` return a job id at once;
+  `Jobs.tools/2` gives the model `job_status`, `wait_job` and `cancel_job`; an
+  optional `notify` callback, such as `Jobs.notify_server/2`, posts the result to
+  an `ExAgent.Server` conversation as a new turn. Running jobs, retained jobs and
+  result text are bounded; jobs are volatile and run outside the starting run's
+  deadline, usage limits and cancellation.
+- **`ExAgent.Tool.Search`** capability: hides a large tool catalogue (such as
+  MCP tools) behind a `search_tools` tool. Tools a search returns are offered
+  from the next request on, in a stable order derived from the history, so a
+  restored or later run offers the same tools.
+- **`:output_validators`** agent option: host checks on the final output,
+  after schema validation and before the run accepts it. A check returns `:ok`,
+  `{:ok, replaced}`, `{:retry, message}` (feedback to the model, sharing
+  `:output_retries`) or `{:error, reason}` (`{:output_validation_failed,
+  reason}`). Works for text, native JSON and output-tool results; durable
+  compositions support it only with typed (output-tool) results.
+- **`ExAgent.Judge`**: a reviewer model as an output validator (PASS/FAIL with
+  feedback the agent acts on) and as an `:approve` callback for `:ask` tools
+  (ALLOW/DENY/ASK with optional human escalation). As an output validator the
+  reviewer shares the run's usage, limits and deadline; the approver runs
+  separately within the tool's timeout, bounded by its own `:timeout`, and its
+  usage is not added to the run.
+- **`ExAgent.Tool.Advisor`**: a tool that lets a fast model consult a stronger
+  model mid-task with a bounded, provider-neutral transcript, limited to
+  `max_uses` per user message; its usage counts toward the run. If the advisor
+  fails or exceeds its `:timeout` (default 120 s, which also sets the tool's
+  timeout), the agent gets a note and continues instead of the run failing.
+- **`ExAgent.Memory`**: long-term memory the agent curates across runs and
+  sessions. A tool with the commands of Anthropic's memory tool (`view`,
+  `create`, `str_replace`, `insert`, `delete`, `rename`) over small text files
+  per host-chosen scope, for any provider; `preload/3` renders memory into the
+  instructions; `files/2`, `update/3` and `clear/2` let the host inspect and
+  reset it. Backends `ExAgent.Memory.ETS` (a default table is started) and
+  `ExAgent.Memory.Postgres` (host repo, `migrate/2`), with compare-and-swap
+  writes, size limits, path validation and `read_only` mode. Telemetry
+  `[:exagent, :memory, :command]`.
+- **`ExAgent.Eval`**: measure an agent on a set of cases. Runs with bounded
+  concurrency, per-run timeouts and repeats; evaluators (`equals`, `contains`,
+  `matches`, `tool_called`, a `judge` reviewer model that sees the run's tool
+  results, or any named function) score each run; `Eval.Report` summarizes pass
+  rate, latency percentiles, tokens and cost, formats a CI-friendly summary and
+  compares two reports to list regressions.
+
+### Changed
+
+- **MCP tool results with non-text content.** Image, audio, embedded resource
+  and resource-link blocks become explicit text notices (type, MIME type,
+  approximate size or URI); embedded text resources contribute their text, and
+  `structuredContent` is used when there are no content blocks. Previously stdio
+  inserted the raw block, including base64 payloads, into the tool result and
+  Streamable HTTP rejected the call with `:unsupported_tool_content`. HTTP still
+  rejects malformed blocks with that error.
+- MCP `initialize` reports the running ExAgent version as `clientInfo.version`
+  instead of a stale constant.
+- **MCP tool discovery follows pagination.** `MCP.Client.tools/1` requests
+  every page of a paginated `tools/list` (up to 32), checks duplicate names
+  (and, over Streamable HTTP, `:max_tools`) across the whole catalogue and
+  rejects repeated cursors.
+  Previously Streamable HTTP returned `{:error, :pagination_unsupported}` and
+  stdio silently returned only the first page.
+
+### Dependencies
+
+- Transitive `telemetry` 1.4.2 → 1.4.3 and `nimble_pool` 1.1.0 → 1.2.0 in the
+  lock; public requirements are unchanged. `hex.audit` is clean.
+
+### Migration
+
+- OpenRouter continuation version 4 now also records `reasoning_mode:
+  "enabled"`. Earlier ExAgent readers reject such history (they accept only
+  `disabled` and `none`); do not roll back a conversation that used the new mode.
+- New `ExAgent.Tool` fields default to the previous behavior and are not part
+  of persisted continuation fingerprints. Code that pattern matches the full
+  struct keeps working; code that builds it with `struct!/2` gains validation
+  only through `Tool.new/1` and `ExAgent.new/1`.
+- `%ExAgent{}` gains the `output_validators` field (default `[]`). Code that
+  enumerates the struct's keys sees one more key.
+
 ## [2.2.4]
 
 Security and dependency maintenance release, 2026-11-16. ExAgent runtime

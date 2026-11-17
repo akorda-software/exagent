@@ -166,10 +166,48 @@ defmodule ExAgent.MCP.Client do
   @doc """
   List the server's tools as `ExAgent.Tool`s. Each tool's `call` forwards a
   `tools/call` to the server and returns its text result.
+
+  Paginated catalogues are followed through `nextCursor`, up to
+  32 pages; Streamable HTTP's `:max_tools` bounds the whole catalogue. A
+  name repeated across pages, a repeated cursor or too many pages return
+  `{:error, :invalid_tools}` or `{:error, :discovery_limit}`, never a truncated
+  catalogue.
   """
   @spec tools(GenServer.server()) :: {:ok, [ExAgent.Tool.t()]} | {:error, term()}
-  def tools(client) do
-    GenServer.call(client, :tools, :infinity)
+  def tools(client), do: tool_pages(client, nil, [], MapSet.new(), MapSet.new())
+
+  @max_tool_pages 32
+
+  defp tool_pages(client, cursor, acc, names, cursors) do
+    case GenServer.call(client, {:tools, cursor}, :infinity) do
+      {:ok, tools, next, limit} ->
+        page_names = Enum.map(tools, & &1.name)
+        names_after = MapSet.union(names, MapSet.new(page_names))
+        acc = [tools | acc]
+
+        cond do
+          MapSet.size(names_after) != MapSet.size(names) + length(page_names) ->
+            {:error, :invalid_tools}
+
+          limit != nil and MapSet.size(names_after) > limit ->
+            {:error, :discovery_limit}
+
+          next == nil ->
+            {:ok, acc |> Enum.reverse() |> Enum.concat()}
+
+          MapSet.member?(cursors, next) ->
+            {:error, :invalid_tools}
+
+          MapSet.size(cursors) + 2 > @max_tool_pages ->
+            {:error, :discovery_limit}
+
+          true ->
+            tool_pages(client, next, acc, names_after, MapSet.put(cursors, next))
+        end
+
+      {:error, _} = error ->
+        error
+    end
   end
 
   @doc """
@@ -303,7 +341,7 @@ defmodule ExAgent.MCP.Client do
     %{
       "protocolVersion" => Keyword.get(opts, :protocol_version, "2024-11-05"),
       "capabilities" => %{},
-      "clientInfo" => %{"name" => "exagent", "version" => "1.1.0"}
+      "clientInfo" => %{"name" => "exagent", "version" => ExAgent.MCP.Protocol.client_version()}
     }
   end
 
@@ -353,8 +391,9 @@ defmodule ExAgent.MCP.Client do
     {:stop, :normal, :ok, fail_all(state, :closed)}
   end
 
-  def handle_call(:tools, from, %__MODULE__{ready: true} = state) do
-    {:noreply, async_request(state, "tools/list", %{}, from)}
+  def handle_call({:tools, cursor}, from, %__MODULE__{ready: true} = state) do
+    params = if cursor, do: %{"cursor" => cursor}, else: %{}
+    {:noreply, async_request(state, "tools/list", params, from)}
   end
 
   def handle_call({:call_tool, name, arguments}, from, %{http: http, ready: true} = state)
@@ -684,10 +723,18 @@ defmodule ExAgent.MCP.Client do
     error -> {:error, {:invalid_response, error}}
   end
 
-  defp map_tools_reply({:ok, %{"tools" => _} = result}, state),
-    do: {:ok, map_tools(result, state)}
+  defp map_tools_reply({:ok, %{"tools" => _} = result}, state) do
+    case result["nextCursor"] do
+      next when is_nil(next) or is_binary(next) ->
+        # The caller bounds the whole catalogue across pages.
+        {:ok, map_tools(result, state), next, state.http && state.http.max_tools}
 
-  defp map_tools_reply({:ok, _}, _state), do: {:ok, []}
+      _ ->
+        {:error, :invalid_tools}
+    end
+  end
+
+  defp map_tools_reply({:ok, _}, _state), do: {:ok, [], nil, nil}
   defp map_tools_reply({:error, _} = e, _state), do: e
 
   defp tools_call_reply({:ok, result}), do: Protocol.result_to_text(result)

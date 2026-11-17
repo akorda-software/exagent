@@ -14,8 +14,9 @@ upgrading an application from 1.x.
 | Select a model, provider route and budget | [Models and limits](models-and-limits.md) |
 | Keep conversation history and stream UI updates | [Runtime and events](runtime-and-events.md) |
 | Persist state, approve a tool and resume work | [Durability and approvals](durability-and-approvals.md) |
+| Remember users and progress across sessions | [Long-term memory](memory.md) |
 | Coordinate participants, delegate or run a workflow | [Coordination](coordination.md) |
-| Write deterministic tests | [Testing](testing.md) |
+| Write deterministic tests and measure quality with evals | [Testing](testing.md) |
 | Export traces and metrics | [Observability](observability.md) |
 | Connect external tools | [MCP](mcp.md) |
 | Diagnose a failed operation | [Troubleshooting](troubleshooting.md) |

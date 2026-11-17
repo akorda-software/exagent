@@ -73,7 +73,7 @@ defmodule ExAgent.MCP.ClientE2ETest do
     on_exit(fn -> if Process.alive?(client), do: Client.close(client) end)
     client_monitor = Process.monitor(client)
     tag = make_ref()
-    send(client, {:"$gen_call", {self(), tag}, :tools})
+    send(client, {:"$gen_call", {self(), tag}, {:tools, nil}})
     state = :sys.get_state(client)
     [{id, entry}] = Map.to_list(state.pending)
     port = state.transport_ref
@@ -143,7 +143,7 @@ defmodule ExAgent.MCP.ClientE2ETest do
     [{_, client, :worker, _}] = Supervisor.which_children(supervisor)
     monitor = Process.monitor(client)
     tag = make_ref()
-    send(client, {:"$gen_call", {self(), tag}, :tools})
+    send(client, {:"$gen_call", {self(), tag}, {:tools, nil}})
     port = :sys.get_state(client).transport_ref
 
     Supervisor.stop(supervisor)

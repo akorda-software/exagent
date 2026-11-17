@@ -110,11 +110,20 @@ defmodule ExAgent.MCP.StreamableHTTP.Message do
 
   def tools(%{"tools" => tools} = result, limit) when is_list(tools) do
     cond do
-      not is_nil(result["nextCursor"]) -> {:error, :pagination_unsupported}
-      length(tools) > limit -> {:error, :discovery_limit}
-      not Enum.all?(tools, &tool?/1) -> {:error, :invalid_tools}
-      length(Enum.uniq_by(tools, & &1["name"])) != length(tools) -> {:error, :invalid_tools}
-      true -> {:ok, result}
+      not (is_nil(result["nextCursor"]) or is_binary(result["nextCursor"])) ->
+        {:error, :invalid_tools}
+
+      length(tools) > limit ->
+        {:error, :discovery_limit}
+
+      not Enum.all?(tools, &tool?/1) ->
+        {:error, :invalid_tools}
+
+      length(Enum.uniq_by(tools, & &1["name"])) != length(tools) ->
+        {:error, :invalid_tools}
+
+      true ->
+        {:ok, result}
     end
   end
 
@@ -127,13 +136,24 @@ defmodule ExAgent.MCP.StreamableHTTP.Message do
 
   defp tool?(_), do: false
 
+  # Text blocks pass through; other well-formed blocks are accepted and become
+  # explicit notices in `Protocol.result_to_text/1`, never raw payloads.
   def tool_result(%{"content" => content} = result) when is_list(content) do
-    if Map.get(result, "isError", false) in [true, false] and
-         Enum.all?(content, fn
-           %{"type" => "text", "text" => text} -> is_binary(text)
-           _ -> false
-         end), do: {:ok, result}, else: {:error, :unsupported_tool_content}
+    if Map.get(result, "isError", false) in [true, false] and Enum.all?(content, &block?/1),
+      do: {:ok, result},
+      else: {:error, :unsupported_tool_content}
   end
 
   def tool_result(_), do: {:error, :invalid_tool_result}
+
+  defp block?(%{"type" => "text", "text" => text}), do: is_binary(text)
+
+  defp block?(%{"type" => type, "data" => data} = block) when type in ["image", "audio"],
+    do: is_binary(data) and is_binary(block["mimeType"])
+
+  defp block?(%{"type" => "resource", "resource" => %{"uri" => uri} = resource}),
+    do: is_binary(uri) and (is_binary(resource["text"]) or is_binary(resource["blob"]))
+
+  defp block?(%{"type" => "resource_link", "uri" => uri}), do: is_binary(uri)
+  defp block?(_block), do: false
 end

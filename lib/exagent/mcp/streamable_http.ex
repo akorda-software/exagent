@@ -105,7 +105,7 @@ defmodule ExAgent.MCP.StreamableHTTP do
     params = %{
       "protocolVersion" => "2025-06-18",
       "capabilities" => %{},
-      "clientInfo" => %{"name" => "exagent", "version" => "1.3.0"}
+      "clientInfo" => %{"name" => "exagent", "version" => ExAgent.MCP.Protocol.client_version()}
     }
 
     with {:ok, result, session} <- request(config, "initialize", params, id, nil, deadline),

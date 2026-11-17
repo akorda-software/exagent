@@ -421,12 +421,68 @@ defmodule ExAgent.MCP.StreamableHTTPTest do
     assert length(calls(ctx.server)) == 3
   end
 
-  test "discovery pagination and count reject rather than returning a truncated catalog", ctx do
+  test "non-text tool content becomes explicit notices; malformed blocks reject", ctx do
+    c = client(ctx)
+    png = Base.encode64("not really a png")
+
+    intercept(ctx.server, fn %{json: %{"id" => id}} ->
+      Server.json(id, %{
+        "content" => [
+          %{"type" => "text", "text" => "Captured."},
+          %{"type" => "image", "data" => png, "mimeType" => "image/png"}
+        ]
+      })
+    end)
+
+    assert {:ok, text} = Client.call_tool(c, "echo", %{})
+    assert text =~ "Captured."
+    assert text =~ "[image image/png, about 18 bytes not shown: tool results are text]"
+    refute text =~ png
+
+    intercept(ctx.server, fn %{json: %{"id" => id}} ->
+      Server.json(id, %{"content" => [%{"type" => "image", "mimeType" => "image/png"}]})
+    end)
+
+    assert {:error, :unsupported_tool_content} = Client.call_tool(c, "echo", %{})
+  end
+
+  test "discovery follows pages within max_tools for the whole catalogue", ctx do
+    c = client(ctx, max_tools: 3)
+    tool = fn name -> %{"name" => name, "inputSchema" => %{}} end
+
+    pages = %{
+      nil => %{"tools" => [tool.("a")], "nextCursor" => "2"},
+      "2" => %{"tools" => [tool.("b"), tool.("c")]}
+    }
+
+    Server.handler(ctx.server, fn req ->
+      if req.json && req.json["method"] == "tools/list",
+        do: Server.json(req.json["id"], pages[req.json["params"]["cursor"]]),
+        else: Server.normal(req)
+    end)
+
+    assert {:ok, tools} = Client.tools(c)
+    assert Enum.map(tools, & &1.name) == ["a", "b", "c"]
+
+    pages = %{pages | "2" => %{"tools" => [tool.("b"), tool.("c"), tool.("d")]}}
+
+    Server.handler(ctx.server, fn req ->
+      if req.json && req.json["method"] == "tools/list",
+        do: Server.json(req.json["id"], pages[req.json["params"]["cursor"]]),
+        else: Server.normal(req)
+    end)
+
+    # Three on the second page fit the per-page check, not the catalogue limit.
+    assert {:error, :discovery_limit} = Client.tools(c)
+  end
+
+  test "discovery count and malformed pages reject rather than returning a truncated catalog",
+       ctx do
     c = client(ctx, max_tools: 1)
     assert {:ok, [_]} = Client.tools(c)
 
     for result <- [
-          %{"tools" => [], "nextCursor" => "next"},
+          %{"tools" => [], "nextCursor" => 5},
           %{
             "tools" => [
               %{"name" => "a", "inputSchema" => %{}},

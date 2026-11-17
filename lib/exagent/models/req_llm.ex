@@ -64,8 +64,21 @@ defmodule ExAgent.Models.ReqLLM do
    reasoning_mode binding and rejects legacy/different-mode response history.
    Persisted none execution additionally exposes a static, nonsecret Model binding
    checked before and after app-codec load, even before a first response exists.
-   OpenRouter writes continuation4 with bounded routing and disabled/none mode;
-   both modes bind routing statically and reject changed or legacy routed history.
+   OpenRouter writes continuation4 with bounded routing and disabled/none/enabled
+   mode; every mode binds routing statically and rejects changed or legacy routed
+   history.
+
+   `reasoning_mode: :enabled` (OpenRouter profile only) keeps provider reasoning on
+   for models whose capabilities declare `reasoning.enabled: true`, including
+   endpoints where reasoning is mandatory. Returned thinking parts and stock
+   `reasoning_details` (text, signatures, encrypted data) are stored in the
+   response continuation and replayed unchanged on the next request of the same
+   route and mode. Optional `reasoning_effort` (`:minimal`, `:low`, `:medium`,
+   `:high`, `:xhigh`) is sent as-is and, when the model declares effort values,
+   must be one of them. Forced tool choices are never sent in this mode, because
+   reasoning endpoints such as Claude 5.x reject them: typed tool output and the
+   final step use `auto`, the loop retries an answer that skipped the output tool,
+   and calls on the final step are still not executed.
    Pre-envelope call history rejects, without repair
   or migration by guessing. Other profiles reject tool requests because
   stock normalization can turn non-object arguments into `{}`. Select the
@@ -151,6 +164,7 @@ defmodule ExAgent.Models.ReqLLM do
     :tool_profile,
     :output_profile,
     :reasoning_mode,
+    :reasoning_effort,
     :prompt_cache,
     foreign_history: :reject,
     provider_options: [],
@@ -165,7 +179,8 @@ defmodule ExAgent.Models.ReqLLM do
           total_timeout: pos_integer() | nil,
           tool_profile: :chat_tools_v1 | :openrouter_chat_tools_v1 | nil,
           output_profile: :chat_json_schema_v1 | nil,
-          reasoning_mode: :none | nil,
+          reasoning_mode: :none | :enabled | nil,
+          reasoning_effort: :minimal | :low | :medium | :high | :xhigh | nil,
           prompt_cache: boolean() | keyword() | nil,
           foreign_history: :reject | :portable,
           provider_options: keyword(),
@@ -195,9 +210,10 @@ defmodule ExAgent.Models.ReqLLM do
     thinking =
       case Backend.model(model.model) do
         {:ok, resolved} ->
-          model.reasoning_mode != :none and resolved.provider == :openai and
-            get_in(resolved.capabilities || %{}, [:reasoning, :enabled]) == true and
-            get_in(resolved.capabilities || %{}, [:reasoning, :thinking, :supported]) != false
+          model.reasoning_mode == :enabled or
+            (model.reasoning_mode != :none and resolved.provider == :openai and
+               get_in(resolved.capabilities || %{}, [:reasoning, :enabled]) == true and
+               get_in(resolved.capabilities || %{}, [:reasoning, :thinking, :supported]) != false)
 
         _ ->
           false
@@ -249,21 +265,27 @@ defmodule ExAgent.Models.ReqLLM do
          "model" => resolved.id,
          "endpoint" => endpoint,
          "tool_profile" => "openrouter_chat_tools_v1",
-         "reasoning_mode" => if(model.reasoning_mode == :none, do: "none", else: "disabled"),
+         "reasoning_mode" => mode_name(model),
          "capabilities" => %{
            "tools" =>
              Continuation.metadata!(Map.take(resolved.capabilities.tools, [:enabled, :strict])),
            "reasoning" =>
-             if(model.reasoning_mode == :none,
-               do: %{
-                 "enabled" => true,
-                 "disable_supported" => true,
-                 "effort_supported" => true,
-                 "effort_values" =>
-                   resolved.capabilities.reasoning.effort.values |> Enum.uniq() |> Enum.sort()
-               },
-               else: %{"enabled" => false}
-             ),
+             case model.reasoning_mode do
+               :none ->
+                 %{
+                   "enabled" => true,
+                   "disable_supported" => true,
+                   "effort_supported" => true,
+                   "effort_values" =>
+                     resolved.capabilities.reasoning.effort.values |> Enum.uniq() |> Enum.sort()
+                 }
+
+               :enabled ->
+                 %{"enabled" => true}
+
+               nil ->
+                 %{"enabled" => false}
+             end,
            "protocol" => "openai_chat"
          },
          "routing" => routing_data(model)
@@ -487,6 +509,7 @@ defmodule ExAgent.Models.ReqLLM do
   defp chat_tools_model?(resolved, mode, profile) do
     ((profile == :chat_tools_v1 and resolved.provider == :openai) or
        (profile == :openrouter_chat_tools_v1 and resolved.provider == :openrouter)) and
+      (mode != :enabled or profile == :openrouter_chat_tools_v1) and
       reasoning_admitted?(resolved, mode) and
       get_in(resolved.capabilities || %{}, [:tools, :enabled]) == true and
       get_in(resolved.capabilities || %{}, [:tools, :strict]) != true and
@@ -515,6 +538,12 @@ defmodule ExAgent.Models.ReqLLM do
       get_in(caps, [:reasoning, :thinking, :disable_supported]) == true
   end
 
+  # Reasoning stays on and its returned blocks are replayed unchanged. Only the
+  # routed OpenRouter profile qualifies this: stock ReqLLM round-trips its
+  # `reasoning_details`, while OpenAI Chat does not return reasoning to replay.
+  defp reasoning_admitted?(resolved, :enabled),
+    do: get_in(resolved.capabilities || %{}, [:reasoning, :enabled]) == true
+
   defp reasoning_admitted?(_, _), do: false
 
   defp none_supported?(model, resolved),
@@ -522,7 +551,25 @@ defmodule ExAgent.Models.ReqLLM do
       model.tool_profile in [:chat_tools_v1, :openrouter_chat_tools_v1] and
         chat_tools_model?(resolved, :none, model.tool_profile)
 
+  @reasoning_efforts [:minimal, :low, :medium, :high, :xhigh]
+
+  defp validate_reasoning_mode!(%{reasoning_effort: effort, reasoning_mode: mode}, _)
+       when not is_nil(effort) and (mode != :enabled or effort not in @reasoning_efforts),
+       do: fail!({:invalid_option, :reasoning_effort})
+
   defp validate_reasoning_mode!(%{reasoning_mode: nil}, _), do: :ok
+
+  defp validate_reasoning_mode!(%{reasoning_mode: :enabled} = model, resolved) do
+    unless model.tool_profile == :openrouter_chat_tools_v1 and
+             chat_tools_model?(resolved, :enabled, model.tool_profile),
+           do: fail!({:unsupported, :reasoning_mode})
+
+    values = get_in(resolved.capabilities || %{}, [:reasoning, :effort, :values])
+
+    if model.reasoning_effort && is_list(values) &&
+         to_string(model.reasoning_effort) not in Enum.map(values, &to_string/1),
+       do: fail!({:unsupported, :reasoning_effort})
+  end
 
   defp validate_reasoning_mode!(%{reasoning_mode: :none} = model, resolved) do
     unless none_supported?(model, resolved), do: fail!({:unsupported, :reasoning_mode})
@@ -685,7 +732,7 @@ defmodule ExAgent.Models.ReqLLM do
        [
          base_url: endpoint,
          tools: tools,
-         tool_choice: tool_choice(params),
+         tool_choice: tool_choice(model, params),
          max_retries: 0,
          telemetry: [payloads: :none],
          json_repair: false,
@@ -703,6 +750,18 @@ defmodule ExAgent.Models.ReqLLM do
     |> Enum.reject(fn {_, value} -> is_nil(value) end)
     |> reasoning_options!(model, settings)
   end
+
+  # Reasoning endpoints reject forced tool use (Claude 5.x returns 400 for
+  # `any`/named choices). Keep `auto`: the loop already retries a text answer
+  # that skipped the output tool, and never executes calls on the final step.
+  defp tool_choice(%{reasoning_mode: :enabled}, params) do
+    case tool_choice(params) do
+      choice when choice in [:auto, :none] -> choice
+      _forced -> :auto
+    end
+  end
+
+  defp tool_choice(_model, params), do: tool_choice(params)
 
   # The final step keeps tool definitions visible (providers can reject tool
   # history without them) and only lets the model answer.
@@ -731,6 +790,10 @@ defmodule ExAgent.Models.ReqLLM do
       &Keyword.put(&1, :max_completion_tokens, settings.max_tokens)
     )
   end
+
+  defp reasoning_options!(options, %{reasoning_mode: :enabled, reasoning_effort: effort}, _)
+       when not is_nil(effort),
+       do: Keyword.put(options, :reasoning_effort, effort)
 
   defp reasoning_options!(options, _, _), do: options
 
@@ -849,9 +912,7 @@ defmodule ExAgent.Models.ReqLLM do
                    continuation["routing"] == routing_data(model)) ->
         :continuation_routing_mismatch
 
-      openrouter? and
-          continuation["reasoning_mode"] !=
-            if(model.reasoning_mode == :none, do: "none", else: "disabled") ->
+      openrouter? and continuation["reasoning_mode"] != mode_name(model) ->
         :continuation_mode_mismatch
 
       not openrouter? and
@@ -913,8 +974,9 @@ defmodule ExAgent.Models.ReqLLM do
   defp native_message!(response, continuation, resolved, model, definitions) do
     {parts, calls} = Enum.split_with(response.parts, &(not match?(%Part.ToolCall{}, &1)))
 
-    if (tools_supported?(model) and continuation) && continuation["reasoning_details"] != [],
-      do: fail!({:unsupported, :tool_profile_content})
+    if model.reasoning_mode != :enabled and
+         ((tools_supported?(model) and continuation) && continuation["reasoning_details"] != []),
+       do: fail!({:unsupported, :tool_profile_content})
 
     tool_codec!(calls, continuation, model)
 
@@ -924,7 +986,8 @@ defmodule ExAgent.Models.ReqLLM do
           Content.text(part.content, part.metadata |> metadata!() |> put_if(:id, part.id))
 
         %Part.Thinking{} = part ->
-          if tools_supported?(model), do: fail!({:unsupported, :tool_profile_content})
+          if tools_supported?(model) and model.reasoning_mode != :enabled,
+            do: fail!({:unsupported, :tool_profile_content})
 
           Content.thinking(
             part.content,
@@ -1040,10 +1103,13 @@ defmodule ExAgent.Models.ReqLLM do
 
     %BackendMessage{} = message = response.message
 
+    reasoning? = model.reasoning_mode == :enabled
+
     if tools_supported?(model) and
-         ((message.reasoning_details || []) != [] or
+         (((message.reasoning_details || []) != [] and not reasoning?) or
             Enum.any?(message.content, fn part ->
-              part.type != :text and not (output_mode == :native and part.type == :object)
+              part.type != :text and not (reasoning? and part.type == :thinking) and
+                not (output_mode == :native and part.type == :object)
             end)),
        do: fail!({:unsupported, :tool_profile_content})
 
@@ -1119,10 +1185,7 @@ defmodule ExAgent.Models.ReqLLM do
       if model.tool_profile == :openrouter_chat_tools_v1 do
         continuation
         |> Map.put("version", 4)
-        |> Map.put(
-          "reasoning_mode",
-          if(model.reasoning_mode == :none, do: "none", else: "disabled")
-        )
+        |> Map.put("reasoning_mode", mode_name(model))
         |> Map.put("routing", routing_data(model))
       else
         continuation
@@ -1192,6 +1255,10 @@ defmodule ExAgent.Models.ReqLLM do
       end
     end)
   end
+
+  defp mode_name(%{reasoning_mode: :none}), do: "none"
+  defp mode_name(%{reasoning_mode: :enabled}), do: "enabled"
+  defp mode_name(_), do: "disabled"
 
   defp put_if(map, _, nil), do: map
   defp put_if(map, key, value), do: Map.put(map, key, value)

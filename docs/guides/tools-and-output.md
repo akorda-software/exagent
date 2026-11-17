@@ -70,6 +70,141 @@ authorize automatic replay. Your application owns idempotency and reconciliation
 Use [persisted approvals](durability-and-approvals.md) when a decision must survive
 process loss or wait for a human.
 
+## Control how tool calls run
+
+When one model response requests several calls, they run concurrently and each
+is bounded by the agent's `:tool_timeout` (30 seconds by default). Two optional
+`ExAgent.Tool` fields refine that per tool:
+
+```elixir
+write = ExAgent.Tool.new(
+  name: "write_file",
+  parameters_json_schema: %{type: "object"},
+  call: fn _ctx, args -> MyApp.Files.write(args) end,
+  concurrency: :exclusive,
+  timeout: 5_000
+)
+
+tools = [write | Enum.map(DocumentationTools.tools(), &%{&1 | timeout: 2_000})]
+```
+
+An `:exclusive` call runs alone: calls listed before it finish first, and calls
+after it start only when it has finished. Consecutive `:parallel` calls (the
+default) still run together, whatever their timeouts. `timeout` replaces
+`:tool_timeout` for that tool's calls, may be shorter or longer, and remains
+capped by the run deadline. A call that exceeds it is killed and reported with
+an `:unknown` outcome, which fails the run with `{:tool_execution_failed, name,
+{:exit, :timeout}}`; use `ExAgent.Jobs` for work that may outlast it. Results
+keep the order the model requested.
+
+Ordering applies to the calls executed in one attempt: a call that pauses for
+[approval](durability-and-approvals.md) does not hold back later calls of the
+same response. Neither field is sent to the model or included in persisted
+continuation fingerprints, so a resumed run uses the current definition, even
+when its timeout exceeds the persisted `:tool_timeout`.
+
+## Keep tool results and loops in check
+
+A tool result stays in the conversation and is sent again on every later step.
+`ExAgent.Tool.OutputLimit` shortens large successful results to their beginning
+and end, with a notice of how much was omitted:
+
+```elixir
+limit = ExAgent.Tool.OutputLimit.new(
+  max_bytes: 16_000,
+  on_truncate: fn %{tool_call_id: id, content: full} ->
+    MyApp.Outputs.store(id, full)
+    "The full output is stored as #{id}; call read_output to page through it."
+  end
+)
+
+guard = ExAgent.Tool.RepeatGuard.new(warn_at: 3)
+
+ExAgent.new(model: model, tools: tools, capabilities: [limit, guard])
+```
+
+`:keep` chooses `:head_tail` (default), `:head` or `:tail`, and `:tools` limits
+the capability to named tools. Structured results are shortened as their JSON
+encoding, so the model then receives a string. Later requests, the history and
+events see the shortened result; the raw outcome confirmed before hooks run, as
+kept in persisted effect records, may still hold the full one. Results over the
+run's `:max_payload_bytes` retention ceiling (1 MiB by default) still fail
+before any capability sees them.
+
+`ExAgent.Tool.RepeatGuard` notices when the latest response repeats an identical
+call (same tool name and equal arguments) for the `warn_at`-th time since the
+latest user message, and adds a short runtime note to the model request asking
+it to use the earlier result or change approach. The note is not added to the
+canonical history or events, and is rebuilt in the same position on later
+requests, so it keeps provider cache prefixes stable. It never blocks a call. List it after
+compaction, and exclude tools that are expected to repeat, such as polling.
+
+## Offer a large catalogue on demand
+
+Every tool schema is sent with every model request. When an agent has dozens of
+tools, for example from several MCP servers, `ExAgent.Tool.Search` keeps the
+rarely used ones out of the request until the model searches for them:
+
+```elixir
+search = ExAgent.Tool.Search.new(deferred: mcp_tools, max_results: 5)
+
+ExAgent.new(
+  model: model,
+  tools: [lookup_order | ExAgent.Tool.Search.tools(search)],
+  capabilities: [search]
+)
+```
+
+The model sees `lookup_order` and `search_tools`. A search returns the best
+matching deferred tools by name and description, or exactly the tools it names,
+and those tools are offered from the next request on. Which tools are loaded is
+read from the conversation history, so a restored conversation or a later run
+offers the same tools in the same order, which keeps provider prompt caches
+valid. Deferred tools keep their permissions and approvals; hiding a tool does
+not restrict it. Do not gate the same tools with skills.
+
+## Check the final answer
+
+`:output_validators` runs your checks on the final output after it passed its
+schema and before the run accepts it. Return `{:retry, message}` to send
+feedback to the model and let it continue:
+
+```elixir
+cites_sources = fn output, _ctx ->
+  if output =~ "Source:", do: :ok, else: {:retry, "Cite the source of each figure."}
+end
+
+ExAgent.new(model: model, tools: tools, output_validators: [cites_sources], output_retries: 2)
+```
+
+`:ok` accepts, `{:ok, replaced}` replaces the output, and `{:error, reason}`
+fails the run with `{:output_validation_failed, reason}`. Retries share the
+`:output_retries` budget. Checks also see Ecto structs and native JSON output.
+
+`ExAgent.Judge.output_validator/1` lets another model do the check against
+written criteria; its PASS/FAIL feedback reaches the agent the same way, and
+its usage counts toward the run (with a persisted continuation it runs
+separately and its usage is not added). `ExAgent.Judge.approver/1` reviews tool
+calls whose permission is `:ask`; each review is a separate run inside the tool
+call, so it counts toward the tool's timeout and not toward the run's usage:
+
+```elixir
+review = ExAgent.Judge.output_validator(model: reviewer, criteria: "Answers every question asked.")
+
+approve =
+  ExAgent.Judge.approver(
+    model: reviewer,
+    policy: "Writes only under /tmp/. Never touch system files.",
+    escalate: &MyApp.ask_a_human/1
+  )
+
+agent = ExAgent.new(model: model, tools: tools, output_validators: [review])
+ExAgent.run(agent, prompt, permissions: permissions, approve: approve)
+```
+
+A reviewer is a model and can be wrong; keep hard limits in permissions and in
+the tools themselves.
+
 ## Return an Ecto struct
 
 ```elixir

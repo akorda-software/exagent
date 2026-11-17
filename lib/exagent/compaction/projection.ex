@@ -79,6 +79,21 @@ defmodule ExAgent.Compaction.Projection do
   defp continuation?(_), do: false
 
   def partition(messages, keep) do
+    with {:ok, old_indices} <- old_indices(messages, keep) do
+      old = MapSet.new(old_indices)
+
+      {old, retained} =
+        messages
+        |> Enum.with_index()
+        |> Enum.split_with(fn {_message, index} -> MapSet.member?(old, index) end)
+
+      {:ok, Enum.map(old, &elem(&1, 0)), Enum.map(retained, &elem(&1, 0))}
+    end
+  end
+
+  # Positions (ascending) of the messages a summary may replace. Groups are
+  # contiguous, so cumulative lengths map each group to its message indices.
+  def old_indices(messages, keep) do
     with {:ok, groups} <- groups(messages) do
       latest_user_from_end =
         groups
@@ -90,20 +105,23 @@ defmodule ExAgent.Compaction.Projection do
 
       recent_start = recent_start(groups, keep)
 
-      {retained, old} =
-        groups
+      {_, ranges} =
+        Enum.reduce(groups, {0, []}, fn group, {start, acc} ->
+          {start + length(group), [Enum.to_list(start..(start + length(group) - 1)//1) | acc]}
+        end)
+
+      old =
+        ranges
+        |> Enum.reverse()
+        |> Enum.zip(groups)
         |> Enum.with_index()
-        |> Enum.split_with(fn {group, index} ->
+        |> Enum.reject(fn {{_range, group}, index} ->
           index >= recent_start or index == latest_user_group or
             Enum.any?(group, &instructions?/1)
         end)
+        |> Enum.flat_map(fn {{range, _group}, _index} -> range end)
 
-      retained = Enum.flat_map(retained, &elem(&1, 0))
-      old = Enum.flat_map(old, &elem(&1, 0))
-
-      if is_nil(latest_user_group),
-        do: {:ok, [], messages},
-        else: {:ok, old, retained}
+      if is_nil(latest_user_group), do: {:ok, []}, else: {:ok, old}
     end
   end
 

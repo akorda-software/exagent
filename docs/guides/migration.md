@@ -71,8 +71,9 @@ does not supply credentials or enable a tool/stream/native-output profile.
 
 Tools require `:chat_tools_v1` or OpenRouter's `:openrouter_chat_tools_v1`, with
 truthful Chat protocol and capability metadata. Models with reasoning enabled
-require the separately supported `reasoning_mode: :none` capabilities; merely
-declaring those flags cannot establish provider compatibility. See
+require the separately supported `reasoning_mode: :none` capabilities or, on
+OpenRouter's profile, `reasoning_mode: :enabled`, which replays reasoning blocks
+unchanged; merely declaring those flags cannot establish provider compatibility. See
 [Models](models-and-limits.md) for constructors and routing options.
 
 The provider sees each function's mandatory outer `arguments` object. Callers,

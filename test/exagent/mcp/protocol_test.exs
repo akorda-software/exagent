@@ -75,6 +75,35 @@ defmodule ExAgent.MCP.ProtocolTest do
       assert Protocol.result_to_text(result) == {:ok, "hello world"}
     end
 
+    test "non-text blocks become explicit notices, never raw payloads" do
+      png = Base.encode64(:binary.copy(<<0>>, 3_000))
+
+      result = %{
+        "content" => [
+          %{"type" => "text", "text" => "Screenshot taken."},
+          %{"type" => "image", "data" => png, "mimeType" => "image/png"},
+          %{"type" => "resource", "resource" => %{"uri" => "file:///a.txt", "text" => "alpha"}},
+          %{"type" => "resource", "resource" => %{"uri" => "file:///b.bin", "blob" => png}},
+          %{"type" => "resource_link", "uri" => "file:///c.md", "name" => "c"},
+          %{"type" => "hologram"}
+        ]
+      }
+
+      assert {:ok, text} = Protocol.result_to_text(result)
+      refute text =~ png
+      assert text =~ "Screenshot taken."
+      assert text =~ "[image image/png, about 3000 bytes not shown: tool results are text]"
+      assert text =~ "[resource file:///a.txt]\nalpha"
+      assert text =~ "[binary resource file:///b.bin (unknown type), about 3000 bytes not shown]"
+      assert text =~ "[resource link file:///c.md (c)]"
+      assert text =~ "[hologram content not shown]"
+    end
+
+    test "structured content is used when there is no content block" do
+      result = %{"content" => [], "structuredContent" => %{"temperature" => 21}}
+      assert Protocol.result_to_text(result) == {:ok, ~s({"temperature":21})}
+    end
+
     test "an isError result becomes an error" do
       result = %{"isError" => true, "content" => [%{"type" => "text", "text" => "boom"}]}
       assert {:error, "boom"} = Protocol.result_to_text(result)

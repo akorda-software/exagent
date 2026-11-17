@@ -75,6 +75,39 @@ the final validated result. Enumerate once: a second enumeration starts a new
 run. Halting closes owned resources; a suspended stream continuation must be
 resumed or halted by its owner.
 
+## Run work in the background
+
+A long tool call blocks the run and is killed by its timeout. `ExAgent.Jobs`
+runs it as a supervised background job instead: the call returns a job id at
+once, and the model can keep working or answer the user.
+
+```elixir
+children = [{ExAgent.Jobs, name: MyApp.Jobs}, ...]
+
+research =
+  ExAgent.Jobs.agent_tool(
+    jobs: MyApp.Jobs,
+    name: "research",
+    description: "Research a topic in depth. Takes minutes.",
+    agent: research_agent,
+    notify: fn job, _ctx -> ExAgent.Jobs.notify_server(MyApp.Chat, job) end
+  )
+
+crawl = ExAgent.Jobs.background(crawl_tool, jobs: MyApp.Jobs)
+
+agent = ExAgent.new(model: model, tools: [research, crawl | ExAgent.Jobs.tools(MyApp.Jobs)])
+```
+
+`ExAgent.Jobs.tools/2` adds `job_status`, `wait_job` and `cancel_job`. With
+`notify_server/2`, a finished job sends its result to the Server conversation as
+a message marked as coming from the runtime, which starts a new turn through the
+ordinary queue. No message is sent when `wait_job` already returned the result.
+The job output is marked as data, but it reaches the model as a user message:
+treat it as untrusted, like any tool result. Jobs are volatile and bounded (`:max_running`, `:max_finished`,
+`:max_result_bytes`, `:timeout`). A job runs outside the run that started it:
+that run's deadline, usage limits and cancellation do not apply, and permissions
+see only the start.
+
 ## Cancel and checkpoint
 
 `Server.abort/1` cancels in-flight work and is idempotent. It does not reverse a
@@ -85,6 +118,6 @@ state, rather than submitting the prompt again.
 [Durability and approvals](durability-and-approvals.md) explains the difference
 between conversation snapshots and resumable execution.
 
-API: `ExAgent.Server`,
+API: `ExAgent.Server`, `ExAgent.Jobs`,
 `ExAgent.Event`, `ExAgent.PubSub`,
 `ExAgent.run_stream/3`.

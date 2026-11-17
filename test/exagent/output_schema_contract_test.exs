@@ -29,6 +29,7 @@ defmodule ExAgent.OutputSchemaContractTest do
                :output_mode,
                :output_retries,
                :output_type,
+               :output_validators,
                :settings,
                :tool_timeout,
                :tools,

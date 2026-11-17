@@ -1,6 +1,16 @@
 # Dependencias
 
-## Revisión vigente — 2026-11-16, patch 2.2.4
+## Revisión vigente — 2026-11-17, release 2.3.0
+
+`hex.outdated --all` sobre el lock de 2.2.4: sólo `telemetry` 1.4.2 → 1.4.3 y
+`nimble_pool` 1.1.0 → 1.2.0 (transitivas) tienen versión nueva permitida;
+`deps.update telemetry nimble_pool` las sube. gproc 1.3 e IDNA 8 siguen fuera
+del rango de grpcbox 0.18 y JSV 0.27. `hex.audit`: sin paquetes retirados ni
+advisories. Los requisitos públicos de `mix.exs` no cambian; las demás
+dependencias ya estaban en su última estable. Verificación: `./bin/check`
+completo con el lock nuevo (ver roadmap).
+
+## Revisión anterior — 2026-11-16, patch 2.2.4
 
 Se revisan los 45 paquetes reales del lock contra la API oficial de Hex y
 `hex.outdated --all`, incluyendo los alias `ts_chatterbox` y `hpack_erl`.

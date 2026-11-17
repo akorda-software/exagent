@@ -80,6 +80,44 @@ A skipped or excluded case never ran. A selected case that times out fails.
 TestModel covers local execution contracts; it cannot prove a provider's wire
 compatibility, database durability or successful trace ingestion.
 
+## Measure quality with evals
+
+Deterministic tests prove your integration; they cannot tell whether a new
+prompt, model or tool makes the agent answer better. `ExAgent.Eval` runs the
+agent on a set of cases with a real model, scores each run and summarizes pass
+rate, latency, tokens and cost:
+
+```elixir
+alias ExAgent.Eval
+
+cases = [
+  Eval.Case.new("total", "What is the total of order 7?", expected: "120"),
+  Eval.Case.new("status", "Has order 9 shipped?", expected: "pending")
+]
+
+report =
+  Eval.run(agent, cases,
+    evaluators: [
+      Eval.contains(),
+      Eval.tool_called("lookup_order"),
+      Eval.judge(model: reviewer_model, criteria: "Accurate, concise, no invented data.")
+    ],
+    repeat: 3,
+    concurrency: 4
+  )
+
+IO.puts(Eval.Report.format(report))
+```
+
+An evaluator is a named function of the run's outcome that returns `true`,
+`false` or a score from 0 to 1 (`Eval.evaluator/3`); built-ins check the text,
+the tools called, or ask a reviewer model, which sees the run's tool results
+and treats `:expected` as key content rather than exact wording. `repeat`
+shows how stable the agent is. `Eval.Report.compare(baseline, candidate)` lists
+the cases that regressed, so a prompt or model change can be gated in CI on a
+pass rate. Evals call real models and cost money; keep them out of the default
+`mix test` run, for example behind a tag.
+
 See [Supported features and limits](support.md) for the supported configurations.
 
-API: `ExAgent.Models.Test`, `ExAgent.RunError`.
+API: `ExAgent.Models.Test`, `ExAgent.RunError`, `ExAgent.Eval`.

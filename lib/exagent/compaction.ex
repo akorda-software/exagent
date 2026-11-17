@@ -63,11 +63,28 @@ defmodule ExAgent.Compaction.Summary do
       or `{:error, reason}`; other non-string results are rejected.
     * `:token_counter` — `(messages -> non_neg_integer())`, default
       `ExAgent.Compaction.estimate_tokens/1`.
+    * `:memo` — an `ExAgent.Compaction.Memo` process (pid or registered name).
+      Recommended for long conversations; see "Reusing summaries".
 
   `:summarize` may perform external IO. The callback's model requests, tokens and
   costs are not automatically observable or charged to this run by this API.
   Repeated model requests can invoke it repeatedly; applications must not treat
   compaction as an exactly-once side effect.
+
+  ## Reusing summaries
+
+  The canonical history stays append-only, so without `:memo` every model request
+  above the threshold summarizes again: one extra model call per step, and a new
+  prefix that defeats provider prompt caching.
+
+  With `:memo`, the last summary of each conversation is kept with the positions
+  and a digest of the exact messages it replaced. While those messages are still
+  replaceable and unchanged, later requests reuse the same summary text and send
+  the other messages verbatim. `:summarize` runs again only when that projection exceeds the
+  threshold, and then receives the previous summary (as a user context message)
+  followed by the newly replaceable messages, producing one merged summary. A
+  changed or different history never matches a stored digest and is summarized
+  from scratch. Memo failures fall back to an ordinary summary.
 
   ## Wiring
 
@@ -109,14 +126,28 @@ defmodule ExAgent.Compaction.Summary do
         not is_integer(threshold) or threshold < 0 or not is_integer(keep) or keep < 0 ->
         {:error, :invalid_compaction_options}
 
+      not valid_memo?(opts[:memo]) ->
+        {:error, :invalid_compaction_options}
+
       true ->
-        with {:ok, old, retained} <- Projection.partition(messages, keep) do
+        with {:ok, old_indices} <- Projection.old_indices(messages, keep) do
           estimate = counter.(messages)
 
           cond do
-            not is_integer(estimate) or estimate < 0 -> {:error, :invalid_token_estimate}
-            old == [] or estimate <= threshold -> {:no_change}
-            true -> summarize(old, retained, messages, summarize)
+            not is_integer(estimate) or estimate < 0 ->
+              {:error, :invalid_token_estimate}
+
+            old_indices == [] or estimate <= threshold ->
+              {:no_change}
+
+            is_nil(opts[:memo]) ->
+              {old, retained} = split(messages, old_indices)
+
+              with {:ok, _text, candidate} <- summarize(old, retained, messages, summarize),
+                   do: {:ok, candidate}
+
+            true ->
+              memoized(messages, old_indices, opts[:memo], threshold, counter, summarize)
           end
         end
     end
@@ -127,12 +158,92 @@ defmodule ExAgent.Compaction.Summary do
     kind, reason -> {:error, {:compaction_failed, {kind, reason}}}
   end
 
+  defp valid_memo?(memo),
+    do:
+      is_nil(memo) or is_pid(memo) or is_atom(memo) or match?({:global, _}, memo) or
+        match?({:via, _, _}, memo)
+
+  defp memoized(messages, old_indices, memo, threshold, counter, summarize) do
+    key = digest(hd(messages))
+
+    case Compaction.Memo.fetch(memo, key) do
+      %{indices: [_ | _] = covered_indices, digest: covered, summary: text}
+      when is_binary(text) ->
+        covered_set = MapSet.new(covered_indices)
+        newer_indices = Enum.reject(old_indices, &MapSet.member?(covered_set, &1))
+
+        # A new user turn makes earlier positions replaceable, so the covered
+        # positions need not be a prefix; they must all still be replaceable
+        # and hold exactly the messages that were summarized.
+        with true <- length(old_indices) - length(newer_indices) == MapSet.size(covered_set),
+             {replaced, rest} = split(messages, covered_indices),
+             true <- digest(replaced) == covered do
+          reuse(messages, rest, text, newer_indices, threshold, counter, fn ->
+            newer = Enum.map(newer_indices, &Enum.at(messages, &1))
+            previous = Projection.insert_summary([], text)
+            remember(messages, old_indices, memo, key, summarize, previous ++ newer)
+          end)
+        else
+          _ -> remember(messages, old_indices, memo, key, summarize, nil)
+        end
+
+      _ ->
+        remember(messages, old_indices, memo, key, summarize, nil)
+    end
+  end
+
+  # The stored summary covers earlier replaceable messages; the rest is sent
+  # verbatim until that projection exceeds the threshold again.
+  defp reuse(messages, rest, text, newer_indices, threshold, counter, merge) do
+    candidate = Projection.insert_summary(rest, text)
+    estimate = counter.(candidate)
+
+    cond do
+      not is_integer(estimate) or estimate < 0 ->
+        {:error, :invalid_token_estimate}
+
+      estimate <= threshold or newer_indices == [] ->
+        with :ok <- Projection.validate(messages, candidate), do: {:ok, candidate}
+
+      true ->
+        merge.()
+    end
+  end
+
+  defp remember(messages, old_indices, memo, key, summarize, input) do
+    {old, retained} = split(messages, old_indices)
+
+    with {:ok, text, candidate} <- summarize(input || old, retained, messages, summarize) do
+      Compaction.Memo.store(memo, key, %{
+        indices: old_indices,
+        digest: digest(old),
+        summary: text
+      })
+
+      {:ok, candidate}
+    end
+  end
+
+  defp split(messages, indices) do
+    set = MapSet.new(indices)
+
+    {old, retained} =
+      messages
+      |> Enum.with_index()
+      |> Enum.split_with(fn {_message, index} -> MapSet.member?(set, index) end)
+
+    {Enum.map(old, &elem(&1, 0)), Enum.map(retained, &elem(&1, 0))}
+  end
+
+  defp digest(term),
+    do: :crypto.hash(:sha256, :erlang.term_to_binary(term, [:deterministic]))
+
   defp summarize(old, retained, original, summarize) do
     case summarize.(old) do
       text when is_binary(text) ->
         if String.valid?(text) do
           candidate = Projection.insert_summary(retained, text)
-          with :ok <- Projection.validate(original, candidate), do: {:ok, candidate}
+          with :ok <- Projection.validate(original, candidate), do: {:ok, text, candidate}
         else
           {:error, :invalid_summary}
         end

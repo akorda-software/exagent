@@ -4,7 +4,7 @@ defmodule ExAgent.MixProject do
   use Mix.Project
 
   @source_url "https://github.com/akorda-software/exagent"
-  @version "2.2.4"
+  @version "2.3.0"
 
   def project do
     [
@@ -103,6 +103,7 @@ defmodule ExAgent.MixProject do
         "docs/guides/models-and-limits.md",
         "docs/guides/runtime-and-events.md",
         "docs/guides/durability-and-approvals.md",
+        "docs/guides/memory.md",
         "docs/guides/coordination.md",
         "docs/guides/testing.md",
         "docs/guides/mcp.md",
@@ -132,6 +133,7 @@ defmodule ExAgent.MixProject do
           "docs/guides/models-and-limits.md",
           "docs/guides/runtime-and-events.md",
           "docs/guides/durability-and-approvals.md",
+          "docs/guides/memory.md",
           "docs/guides/coordination.md",
           "docs/guides/testing.md",
           "docs/guides/observability.md",
@@ -163,11 +165,26 @@ defmodule ExAgent.MixProject do
         Robustness: [
           ExAgent.Compaction,
           ExAgent.Compaction.Summary,
+          ExAgent.Compaction.Memo,
           ExAgent.Compaction.Capability,
           ExAgent.Permissions,
+          ExAgent.Judge,
           ExAgent.CostGuard
         ],
-        "Stateful Runtime": [ExAgent.Server, ExAgent.AgentSupervisor, ExAgent.Server.Snapshot],
+        Evaluation: [
+          ExAgent.Eval,
+          ExAgent.Eval.Case,
+          ExAgent.Eval.Evaluator,
+          ExAgent.Eval.Result,
+          ExAgent.Eval.Report
+        ],
+        "Stateful Runtime": [
+          ExAgent.Server,
+          ExAgent.AgentSupervisor,
+          ExAgent.Server.Snapshot,
+          ExAgent.Jobs,
+          ExAgent.Jobs.Job
+        ],
         "Session & Coordination": [
           ExAgent.Session,
           ExAgent.Session.Snapshot,
@@ -189,7 +206,14 @@ defmodule ExAgent.MixProject do
           ExAgent.PubSub.Local,
           ExAgent.PubSub.Phoenix
         ],
-        Persistence: [ExAgent.Store, ExAgent.Store.ETS, ExAgent.Store.Postgres],
+        Persistence: [
+          ExAgent.Store,
+          ExAgent.Store.ETS,
+          ExAgent.Store.Postgres,
+          ExAgent.Memory,
+          ExAgent.Memory.ETS,
+          ExAgent.Memory.Postgres
+        ],
         "Continuation & Recovery": [
           ExAgent.Continuation,
           ExAgent.Continuation.Record,
@@ -202,7 +226,16 @@ defmodule ExAgent.MixProject do
           ExAgent.MCP.StreamableHTTP
         ],
         Messages: [ExAgent.Message],
-        "Tools & Output": [ExAgent.Tool, ExAgent.Tools, ExAgent.Schema, ExAgent.OutputSchema],
+        "Tools & Output": [
+          ExAgent.Tool,
+          ExAgent.Tools,
+          ExAgent.Tool.Search,
+          ExAgent.Tool.Advisor,
+          ExAgent.Tool.OutputLimit,
+          ExAgent.Tool.RepeatGuard,
+          ExAgent.Schema,
+          ExAgent.OutputSchema
+        ],
         Skills: [ExAgent.Skills, ExAgent.Skill, ExAgent.Skills.Gate, ExAgent.Skills.Restore],
         Models: [
           ExAgent.Model,

@@ -1,5 +1,15 @@
 # Support and release status
 
+**Feature release 2026-11-17 — 2.3.0 prepared for publication:** long-term
+memory (`ExAgent.Memory`, ETS/PostgreSQL), background jobs, output validators,
+`Judge` reviewers, the advisor tool, tool search/output limits/repeat guard,
+per-tool timeouts and exclusive tools, compaction memo, OpenRouter reasoning
+with tools, MCP pagination and non-text results, and `ExAgent.Eval`. All are
+additive and opt-in. Each feature had one independent review and the release an
+integrated review (runtime, modules, documentation); the offline suite passes
+with zero failures. Lock refresh: transitive telemetry 1.4.3 and nimble_pool
+1.2.0; Hex audit clean. The user requested publication on 2026-11-17.
+
 **Maintenance release 2026-11-16 — published 2.2.4:** the checkout requires ReqLLM 1.30,
 JSV 0.27 and Ecto >= 3.14.3, including the upstream schema-regex and query-cache
 security fixes. Seven locked packages are updated; gproc and IDNA remain within

@@ -94,9 +94,14 @@ private Finch API. HTTP2 behavior is outside the supported configuration.
   Unknown request methods receive -32601; ping receives an empty result. No sampling
   or roots capability is advertised. Notifications consume control count/byte caps.
 - Discovery preserves inputSchema for common Tool validation. Duplicate names,
-  malformed entries, excessive count and nonnil nextCursor reject; no truncation.
-  Tool results currently support text content only; nontext content rejects
-  explicitly (`:unsupported_tool_content`) instead of silently dropping modalities.
+  malformed entries and excessive count reject; no truncation. Since 2026-11-17
+  (design 8.65) `Client.tools/1` follows string `nextCursor` values on both
+  transports, at most 32 pages, with `max_tools`, duplicates and repeated cursors
+  checked across the whole catalogue (previously HTTP rejected any cursor and
+  stdio silently kept only the first page).
+  Tool results are text: since 2026-11-17 (design 8.63) image, audio, resource and
+  resource-link blocks become explicit notices instead of rejecting the call;
+  malformed blocks still reject with `:unsupported_tool_content`.
 - 401/403 return `:unauthorized`/`:forbidden`; other unsupported statuses return
   `{:http_status, status}`. A session404 returns `:session_expired`, invalidates the
   generation and every pending call, and clears ready/session. `Client.reconnect/1`

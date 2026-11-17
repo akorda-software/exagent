@@ -5559,6 +5559,439 @@ sum/count de los cuatro histogramas, cardinalidad, default off, restart y bridge
 2xx/503/partial,3ciclos y cierre de POST retenido por deadline/owner kill. Estas
 pruebas no reemplazan API/UI cloud, cuyo recibo A10 permanece identificado aparte.
 
+### 8.55. Reasoning activo con tools en OpenRouter (2026-11-16)
+
+**Estado:** implementado y verificado offline + live acotado; sin publicar.
+
+**Problema demostrado:** todo perfil de tools exigía reasoning desactivado o
+`none`. En el catálogo OpenRouter vigente casi todos los modelos con tools
+razonan, y Claude 5.x no admite desactivarlo («Reasoning is mandatory») ni
+`tool_choice` forzado (400). ExAgent no podía ejecutar tools con esos modelos.
+
+**Decisión:** `reasoning_mode: :enabled` sólo con `:openrouter_chat_tools_v1` y
+`reasoning.enabled: true` declarado. Stock ReqLLM ya devuelve y reenvía los
+`reasoning_details` de OpenRouter; el adapter deja de rechazarlos en este modo,
+los guarda en continuation4 (`reasoning_mode: "enabled"`) y los reenvía sin
+transformar. `reasoning_effort` opcional se valida contra los valores declarados
+antes de IO. En este modo el `tool_choice` forzado se sustituye por `auto`: el
+loop ya reintenta una respuesta de texto sin output tool y nunca ejecuta calls
+en el paso final. El binding persistido registra el modo; historial de otro modo
+es foreign. Disabled/none, OpenAI y el sobre obligatorio no cambian.
+
+**Alternativas:** parser/fork propio de reasoning (viola stock-only); habilitarlo
+para OpenAI Chat (no devuelve reasoning reenviable); mantener `tool_choice`
+forzado (400 en Claude 5.x); stripping del reasoning (rompe firmas).
+
+**Impacto/migración:** aditivo y opt-in. Lectores anteriores rechazan
+continuation4 `enabled` (fail-closed). Límites: proveedores que validan el
+prefijo firmado pueden rechazar compaction; conviene fijar upstream (se observó
+una vez `invalid_tool_arguments` con routing libre); stream mantiene
+`max_tokens` ≤ 4096 incluyendo reasoning.
+
+**Verificación:** 8 tests offline con transporte fixture (replay de firma,
+`auto`, effort, typed output con retry, paso final, negativos de admisión,
+historial foreign, binding y regresión: respuesta sin continuation en modos sin
+reasoning, detectada por la revisión independiente). Live OpenRouter: Sonnet 5.5 y DeepSeek V4.1 Flash
+en texto, Ecto tipado, `on_max_steps: :final`, streaming, Server multi-turno y
+roundtrip JSON; firmas de Sonnet reenviadas en tres requests.
+
+### 8.56. Reutilización de resúmenes de compactación (2026-11-16)
+
+**Problema:** `Compaction.Summary` recalcula desde la historia canónica en cada
+request; pasado el umbral llamaba al resumidor en cada paso y cambiaba el
+prefijo, anulando la caché del proveedor (test de loop: 5 llamadas en 8 pasos).
+
+**Decisión:** opción `:memo` con `ExAgent.Compaction.Memo` (Agent acotado,
+evicción FIFO). Clave: hash del primer mensaje (incluye run_id y timestamps);
+entrada `{indices, digest, summary}` válida sólo si esas posiciones siguen
+siendo reemplazables y conservan el mismo digest. Con posiciones (no un prefijo)
+un nuevo turno de usuario, que vuelve reemplazable el mensaje de usuario previo,
+sigue reutilizando el resumen. Si resumen + nuevos cabe en el umbral se reutiliza sin llamada;
+si no, se resume el resumen previo junto con los mensajes nuevos. Toda
+proyección sigue pasando `Projection.validate`. Memo caído/ausente → resumen
+normal. `Projection.old_indices/2` factoriza `partition/2` sin cambiar su
+resultado.
+
+**Alternativas:** guardar el resumen en la historia canónica (cambia el
+contrato append-only y la persistencia); slot de estado por capability (API
+nueva más amplia sin segundo consumidor).
+
+**Verificación:** 9 tests (reuso/merge, nuevo turno de usuario, sin memo,
+historia editada, no_change y error no guardados, memo caído, opción inválida,
+evicción, loop 5→≤2 llamadas) y los 75 tests previos de compaction.
+
+### 8.57. Timeout y concurrencia por tool (2026-11-16)
+
+**Problema:** un único `tool_timeout` para todas las tools y ejecución siempre
+concurrente: una tool lenta legítima obligaba a subir el timeout de todas, y
+tools que mutan estado compartido no podían ordenarse.
+
+**Decisión:** campos `timeout` (ms, `nil` = `tool_timeout`) y `concurrency`
+(`:parallel` | `:exclusive`) en `ExAgent.Tool`. El batch se divide en grupos
+consecutivos: las calls paralelas consecutivas comparten grupo; una exclusiva es
+su propio grupo. Cada grupo usa el mismo `Task.async_stream` con el timeout más
+largo (acotado por el deadline); una call con timeout menor termina con
+`:timer.exit_after`, mismo resultado `{:exit, :timeout}`, así timeouts distintos
+no serializan. Resultados en orden de llamada. Con tools por defecto hay un único
+grupo, idéntico al comportamiento previo. No entran en `definition/1` ni en
+fingerprints: un resume usa la definición actual, aunque supere el
+`tool_timeout` persistido (documentado). Una call pendiente de aprobación no
+retiene las posteriores: el orden aplica a las calls ejecutadas en un intento.
+
+**Verificación:** 8 tests: exclusiva sin solapamiento con paralelas antes y
+después, timeout por tool que mata sólo su call (`:unknown`), timeout mayor que
+el default, timeouts distintos concurrentes, grupo mixto que mata sólo la call
+vencida, batch por defecto concurrente, validación y definición inalterada.
+
+### 8.58. Higiene de resultados y bucles de tools (2026-11-16)
+
+**Problema:** resultados grandes se reenvían en cada paso (o fallan sólo al
+superar 1 MiB de retención) y los modelos repiten llamadas idénticas hasta
+agotar `max_steps`. Harnesses actuales (DeepSeek harness, Codex, Claude Code,
+OpenCode) truncan salidas y detectan bucles.
+
+**Decisión:** dos capabilities opt-in sobre hooks existentes, sin cambiar el
+loop. `Tool.OutputLimit` (`after_tool_execute`) recorta resultados exitosos a
+cabeza/cola UTF-8 con aviso dentro de `max_bytes` (el hint de `on_truncate` se
+recorta si hace falta); lo recortado es lo que ven requests posteriores,
+historia y eventos. El outcome bruto se confirma antes de los hooks, así que el
+registro de efecto persistido puede contener el original.
+`Tool.RepeatGuard` (`before_model_request`) cuenta calls idénticas desde el
+último mensaje de usuario y añade una nota sólo en la proyección (no en historia
+ni eventos; el registro persistido de la request sí captura lo enviado),
+reconstruida en la misma posición en cada request para no romper prefijos de
+caché ni reasoning firmado. Nunca bloquea.
+
+**Alternativas:** truncado obligatorio en el núcleo (cambia defaults); bloquear
+repeticiones (ya cubierto por permisos/límites y puede romper polling legítimo).
+
+**Verificación:** 7 tests de OutputLimit (cabeza/cola, UTF-8 en 9 combinaciones,
+JSON estructurado, `on_truncate`, hint largo, filtros/estados, opciones) y 3 de RepeatGuard
+(umbral, prefijo estable, reinicio por usuario, tools no vigiladas, opciones).
+
+### 8.59. Trabajos en segundo plano (2026-11-17)
+
+**Problema:** una tool o sub-agente largo bloquea el run hasta terminar y muere
+por `tool_timeout`; el usuario no puede seguir conversando mientras tanto. Los
+harnesses actuales (Claude Code, Codex, OpenCode, DeepSeek harness) ya lanzan
+tareas y sub-agentes en segundo plano y avisan al terminar.
+
+**Decisión:** `ExAgent.Jobs`, GenServer con su propio `Task.Supervisor`, fuera
+del loop. Una tool envuelta (`background/2`, `agent_tool/1`) arranca un job y
+devuelve `job_id` como outcome de la call; `tools/2` añade `job_status`,
+`wait_job` (espera acotada, con timeout de tool propio) y `cancel_job`. Al
+terminar, un `notify` opcional recibe el `Job` y una copia del contexto;
+`notify_server/2` usa el `send_message/3` existente del Server, así el aviso es
+un mensaje de usuario marcado como del runtime que abre un turno nuevo con la
+cola y límites actuales (`max_pending`). Límites: jobs en ejecución
+(`max_running`, `{:error, :busy}` visible al modelo), jobs terminados retenidos
+(FIFO) y texto de resultado (cabeza/cola UTF-8 como `OutputLimit`). El
+resultado se convierte a texto acotado dentro del proceso del job, así ningún
+valor no codificable llega al store. Fallos, excepciones, salidas y timeouts se
+reportan como estado del job; un sub-agente fallido reporta sólo la razón, no su
+estado parcial. Cancelar no notifica, y tampoco se notifica un resultado que
+`wait_job` ya entregó. El aviso al Server es un mensaje de usuario: la salida va
+entre etiquetas `<job_output>` escapadas y marcada como datos, pero sigue siendo
+contenido no confiable. `background/2` rechaza tools exclusivas y usa su
+`timeout` como timeout del job.
+
+**Límites explícitos:** volátil como la cola del Server; los permisos y
+continuaciones ven el arranque, no los efectos posteriores; el job no hereda
+deadline, límites de uso ni cancelación del run, y su uso de tokens no se suma.
+Los handles de run del contexto copiado (p. ej. `execution_scope`) se cierran al
+acabar el run.
+
+**Alternativas:** jobs dentro del loop o del Server (acopla ciclos de vida y
+persistencia); persistirlos (requiere un contrato de reanudación de efectos que
+no existe hoy). Ambos se pueden añadir encima sin cambiar este contrato.
+
+**Verificación:** 13 tests: espera/notificación/listado, fallo, excepción y
+timeout, cancelación sin aviso y `not_found`, límites (busy, expulsión FIFO,
+resultado ≤ límite y UTF-8 válido), tool en segundo plano + `wait_job` en un
+run, sub-agente que avisa a un Server y abre un segundo turno, validación y
+seis regresiones de la revisión (resultado no codificable sin tumbar el store,
+`false`, sin aviso duplicado tras `wait_job`, segundos como float, timeout de la
+tool y exclusivas, error de sub-agente sin conversación, etiquetas escapadas).
+Live: DeepSeek V4.1 Flash y Sonnet 5.5 responden al momento y el aviso abre un
+segundo turno con el resultado.
+
+### 8.60. Búsqueda de tools diferidas (2026-11-17)
+
+**Problema:** cada esquema de tool viaja en cada request. Con decenas de tools
+MCP el coste por paso crece y la elección empeora. Anthropic (tool search),
+OpenAI y Claude Code ya cargan tools bajo demanda.
+
+**Decisión:** capability `ExAgent.Tool.Search` (`before_model_request`). Las
+tools diferidas siguen en el inventario del agente (validación, permisos,
+aprobaciones y continuaciones sin cambios), pero se retiran de
+`function_tools` hasta que un resultado exitoso de `search_tools` las nombra.
+Lo cargado se deriva de la historia, sin estado propio, así que sobrevive a
+restore y a runs nuevos con `message_history`. Orden estable: tools normales en
+su orden y después las cargadas en orden de carga, igual entre pasos y runs; la
+lista sólo cambia cuando una búsqueda encuentra una tool nueva. Si otra
+capability reescribe el resultado de la búsqueda (p. ej. `OutputLimit`), los
+nombres se recalculan desde la consulta de la call, porque la búsqueda es
+función pura de consulta y catálogo. Ranking local
+por solapamiento de palabras (nombre ×3, descripción, plurales simples); una
+consulta con nombres exactos devuelve sólo esas tools; sin coincidencias se
+listan hasta 200 nombres.
+
+**Alternativas:** búsqueda nativa del proveedor (no portable con stock
+ReqLLM); embeddings (dependencia y coste); cargar por skill (`Skills.Gate`, que
+no debe combinarse con esta capability sobre las mismas tools).
+
+**Verificación:** 5 tests: ocultas hasta la búsqueda, orden estable dentro del
+run y en un run nuevo sobre la historia, carga con el resultado recortado por
+`OutputLimit` (regresión de la revisión), una tool no cargada no se ejecuta,
+ranking (nombre, descripción, camelCase, plural, nombres exactos, sin
+coincidencias) y validación de opciones. Live con 25 tools diferidas: DeepSeek
+V4.1 Flash y Sonnet 5.5 buscan y usan las dos tools correctas; tokens de entrada
+4.879 frente a 7.196 y 3.563 frente a 10.905 ofreciendo todo.
+
+### 8.61. Validación de la respuesta final y revisor (2026-11-17)
+
+**Problema:** el loop sólo validaba la forma de la salida (esquema Ecto o JSON).
+No había forma de rechazar una respuesta con forma válida pero incompleta,
+insegura o que no cumple un criterio, ni de pedir al modelo que siga. Frameworks
+actuales lo ofrecen: Pydantic AI (`output_validator`, `RefineOutput`), OpenAI
+Agents SDK (`before_complete`), Vercel (steering tras la respuesta final). Las
+aprobaciones revisadas por modelo (OpenAI automatic review, Anthropic `auto`,
+Pydantic Approval Reviewer) reducen la fatiga de aprobar a mano.
+
+**Decisión:** opción `:output_validators` del agente: funciones
+`fn output, ctx -> ...` que corren en orden tras la validación de esquema en los
+tres caminos de salida (texto, nativo y tool de salida). `{:retry, msg}` o
+`ExAgent.ModelRetry` reutilizan el camino de reintento existente (mismo
+presupuesto `:output_retries`, mismos registros de continuación; en la tool de
+salida el reintento lleva el `tool_call_id`); `{:error, r}` falla con
+`{:output_validation_failed, r}`; `{:ok, v}` reemplaza la salida. Un resume no
+re-valida una salida ya aceptada. `ExAgent.Judge` construye sobre ello: un
+validador que pide PASS/FAIL a otro modelo con una transcripción de texto
+acotada (sin datos de replay de proveedor) y un callback `:approve`
+ALLOW/DENY/ASK con escalado opcional. Dentro de un run el revisor usa
+`run_child/4` y comparte uso, límites y deadline; el aprobador no recibe
+contexto y su uso es aparte.
+
+**Alternativas:** capability nueva `before_complete` (duplica el camino de
+reintento y el contrato de hooks); salida estructurada para el veredicto
+(requiere perfil de tools en el revisor; una línea de texto funciona con
+cualquier modelo y un formato inválido se trata explícitamente).
+
+**Impacto:** campo nuevo `output_validators: []` en `%ExAgent{}`; sin cambio de
+defaults ni de formatos persistidos. Tras los validadores se comprueban de nuevo
+deadline, límites y cancelación del run. En composiciones durables (frame 10/11)
+la salida de texto o nativa no persiste una resolución propia, así que con
+validadores el run falla con `{:unsupported,
+:output_validators_without_output_tool}`; la salida tipada sí los admite.
+
+### 8.62. Asesor durante la tarea (2026-11-17)
+
+**Problema:** un modelo rápido y barato a veces necesita el criterio de uno más
+capaz sólo en momentos puntuales. Anthropic (advisor tool), Google ADK
+(`ModelConsultTool`) y Pydantic (Advisor) lo ofrecen.
+
+**Decisión:** `ExAgent.Tool.Advisor.new/1` devuelve una tool normal: envía la
+pregunta y una transcripción acotada (último mensaje del usuario y entradas
+recientes, sin reasoning firmado) al modelo asesor, sin tools. Usa `run_child/4`
+cuando hay ámbito de run; con continuación persistida corre aparte y devuelve
+su uso en el resultado de la tool. `max_uses` por mensaje de usuario. Si el
+asesor falla, la tool devuelve un aviso normal y el agente sigue solo (un
+`{:error, _}` de tool terminaría el run); los límites del run lo paran en su
+siguiente comprobación.
+
+**Revisión independiente:** 7 defectos confirmados y corregidos con regresión:
+parser de veredictos que leía «Allow? No: DENY» como ALLOW y «Pass-fail: FAIL»
+como PASS (ahora la etiqueta debe ser un token exacto; un formato inválido se
+pregunta otra vez); validadores de texto que en composiciones durables fallaban
+o perdían la salida reemplazada (rechazo explícito); respuestas aceptadas sin
+revisar al agotarse límites o deadline del run (nunca se aceptan y el scope se
+comprueba tras validar); transcripción que perdía la tarea actual en
+conversaciones de varios turnos (se fija el último mensaje del usuario); calls
+paralelas del asesor que superaban `max_uses`; salida tipada rechazada descrita
+como no ejecutada; revisor construido en cada revisión.
+
+**Verificación (8.61–8.62):** 19 tests: reintento de texto con feedback, orden y
+reemplazo, error y reintentos agotados, `ModelRetry` y excepción, salida tipada
+por tool de salida, validación de opciones, revisor que devuelve feedback y
+acepta la revisión, fallo del revisor (`:accept`/`:fail`), aprobador
+ALLOW/DENY/ASK en un run con permisos, parser de veredictos, asesor con límite
+de usos y uso agregado, transcripción acotada. Live (OpenRouter, céntimos):
+DeepSeek V4.1 Flash revisado por sí mismo con el criterio «en español» corrige
+su respuesta en inglés tras el FAIL; el aprobador permite `/tmp/notes.txt` y
+deniega `/etc/motd`; Flash consulta a Sonnet 5.5 como asesor y el uso se agrega.
+
+### 8.63. Contenido no textual en resultados MCP (2026-11-17)
+
+**Problema:** servidores MCP habituales (navegador, capturas, ficheros)
+devuelven bloques `image`, `audio`, `resource` o `resource_link`. Por stdio el
+bloque entero, base64 incluido, se insertaba como texto (`inspect`) y llenaba el
+contexto; por HTTP la llamada fallaba con `:unsupported_tool_content` aunque el
+efecto remoto ya hubiese ocurrido, así que el modelo no sabía qué había pasado.
+
+**Decisión:** los resultados de tool de ExAgent son texto; cada bloque no
+textual se convierte en un aviso explícito con tipo, MIME, tamaño aproximado o
+URI (no se descarta en silencio, que era el motivo de la regla anterior). Los
+recursos embebidos de texto aportan su texto y `structuredContent` se usa si no
+hay bloques. Mismo mapeo en stdio y HTTP; HTTP sigue rechazando bloques mal
+formados. Paginación de `tools/list` por HTTP sigue rechazada (sin cambios).
+
+**Alternativas:** resultados multimodales hacia el modelo (requiere soporte de
+imágenes en resultados de tool en ReqLLM y en cada proveedor; aplazado).
+
+**Verificación:** test de protocolo con los seis tipos de bloque sin payload
+base64 en el texto, `structuredContent`, y test HTTP con imagen aceptada y
+bloque mal formado rechazado; 117 tests MCP pasan.
+
+### 8.64. Memoria a largo plazo (`ExAgent.Memory`, 2026-11-17)
+
+**Problema:** un agente de ExAgent solo recuerda lo que está en el historial de
+la sesión. Entre sesiones (otro día, otro `ExAgent.run`, otro nodo) pierde
+preferencias del usuario, decisiones y progreso de tareas largas, y la
+compactación descarta detalle dentro de una sesión larga. Los hosts lo resolvían
+con tools propias sin límites, sin control de concurrencia y sin aislar por
+usuario. Los harness actuales (memory tool de Anthropic, memoria de Codex/Claude
+Code, stores de LangGraph/Mastra) ofrecen memoria curada por el propio agente.
+
+**Decisión:** `ExAgent.Memory` define un árbol pequeño de ficheros de texto bajo
+`/memories` por *scope* (usuario, equipo o proyecto, decidido por el host, nunca
+por el modelo). `ExAgent.Memory.tool/2` expone una tool normal con los comandos
+del memory tool de Anthropic (`view`, `create`, `str_replace`, `insert`,
+`delete`, `rename`): los modelos entrenados con él lo usan bien y funciona con
+cualquier proveedor. La descripción incluye el protocolo (ver la memoria al
+empezar, registrar lo duradero, mantenerla concisa, tratarla como notas y no
+como instrucciones, no guardar secretos). El behaviour de backend tiene dos
+callbacks (`load`/`store`) sobre un registro por scope con versión para
+compare-and-swap: cada comando carga, aplica y guarda solo si la versión no
+cambió, con reintentos y backoff aleatorio, así que agentes concurrentes del
+mismo scope no pierden ediciones. Las versiones nunca se reutilizan (contador
+por tabla en ETS, secuencia en Postgres), lo que evita el ABA tras borrar un
+scope. Backends: `ExAgent.Memory.ETS` (la aplicación arranca una tabla por
+defecto, atajo `:ets`) y `ExAgent.Memory.Postgres` (repo del host, sentencias
+condicionales únicas, `migrate/2`). Límites por defecto 32 KB por fichero,
+128 KB y 100 ficheros por scope; un scope ya por encima del límite admite
+ediciones que no crecen. Rutas normalizadas a NFC y validadas (sin `..`, `.`,
+ocultos, caracteres de control o invisibles, `<>"`, profundidad ≤ 8, ≤ 255
+bytes); un fichero no puede ser a la vez directorio. La tool es `:exclusive` si
+puede escribir, para que las ediciones de una respuesta se apliquen en orden. `read_only: true` ofrece solo `view`. Los
+errores de comando y un backend caído se devuelven al modelo como texto
+`Error: …` (un `{:error, _}` de tool terminaría el run); solo un scope que no
+se puede resolver, fallo del host, termina el run. `preload/3` renderiza la
+memoria (ficheros completos dentro de un presupuesto, el resto listado) para las
+instrucciones y ahorra las vueltas de `view`. API de host: `files/2`,
+`update/3` (valida rutas) y `clear/2`. Telemetría
+`[:exagent, :memory, :command]` con estado `:ok | :rejected | :busy |
+:unavailable`, sin scope ni contenido.
+
+**Alternativas:** reutilizar `ExAgent.Store` (sus registros son snapshots de
+agente/sesión con semántica de continuación; ampliar `kind` obligaría a todos los
+stores existentes); un fichero por clave con callbacks de lista/lectura/escritura
+(rename y borrado de directorios no serían atómicos); tool nativa del proveedor
+(solo Anthropic, y ReqLLM no expone tools de servidor); memoria semántica con
+embeddings (útil para corpus grandes, pero requiere un proveedor de embeddings y
+otro contrato; se puede añadir como backend o tool aparte).
+
+**Impacto:** aditivo. La aplicación arranca un proceso más (`ExAgent.Memory.ETS`).
+Las ediciones de memoria son efectos fuera del run: no se deshacen si el run
+falla. La memoria persiste texto escrito por el modelo, posiblemente tras leer
+contenido no fiable; la mitigación es el scope estrecho, `read_only`, límites,
+el aviso en la descripción y la API de host para inspeccionar o borrar.
+
+**Revisión independiente:** 10 hallazgos corregidos con regresión: `old_str`
+vacío que tumbaba el run; nombre de comando vía `String.to_existing_atom`;
+ediciones paralelas de una respuesta fuera de orden (ahora `:exclusive`);
+salidas (`exit`) del backend y registros mal formados que escapaban del aviso
+«no disponible»; colisión fichero/directorio aceptada por `update/3`; mensaje de
+excepción del scope que podía citar `ctx.deps`; fichero sobredimensionado que no
+se podía reducir; configuración de backend inválida detectada solo al usarla
+(callback opcional `validate/1`); texto de `preload` que podía cerrar el marco
+`<memory>` y listado fuera del presupuesto; nombres sin normalizar Unicode o con
+separadores invisibles. Un hallazgo sobre el asesor se resolvió documentando que
+los fallos cuentan en `max_uses` y sumando su uso parcial.
+
+**Verificación:** 23 tests de memoria (comandos, errores, confinamiento de
+rutas, límites, solo lectura, scopes, concurrencia sin pérdidas, CAS sin ABA,
+API de host, preload, telemetría, agente que recuerda entre runs y las 9
+regresiones) y 3 contra Postgres real (contenedor temporal): CAS, borrado,
+versiones no reutilizadas, concurrencia y tablas propias. En vivo (OpenRouter,
+céntimos): DeepSeek V4.1 Flash y Sonnet 5.5 ven la memoria, guardan las
+preferencias del usuario en la primera sesión y las usan en la segunda; con
+`preload` Flash pasa de 3 llamadas a 1 y de ~3.000 a ~2.100 tokens de entrada.
+
+### 8.65. Paginación de `tools/list` en MCP (2026-11-17)
+
+**Problema:** servidores MCP con catálogos grandes (GitHub, plataformas SaaS,
+agregadores) paginan `tools/list` con `nextCursor`. Por HTTP ExAgent devolvía
+`{:error, :pagination_unsupported}` y el servidor no se podía usar; por stdio se
+ignoraba el cursor y el agente recibía solo la primera página sin aviso.
+
+**Decisión:** `MCP.Client.tools/1` pide páginas sucesivas con `cursor` hasta que
+no hay `nextCursor`, como máximo 32. Nombres duplicados entre páginas, cursor
+repetido, cursor no textual o más de `:max_tools` en el catálogo completo (HTTP)
+devuelven error, nunca un catálogo truncado. Cada página es una petición normal
+con su timeout; el estado del cliente no cambia. Con catálogos grandes,
+`Tool.Search` (8.60) evita ofrecerlo todo al modelo.
+
+**Alternativas:** paginar dentro del GenServer (más estado y otra fuente de
+carreras entre llamadas concurrentes a `tools/1`); mantener el rechazo (deja
+fuera servidores conformes con la especificación).
+
+**Impacto:** el error `:pagination_unsupported` desaparece; un servidor
+paginado ahora funciona por HTTP y devuelve el catálogo completo por stdio. La
+respuesta interna del GenServer a `{:tools, cursor}` es privada.
+
+**Verificación:** tests stdio (tres páginas en orden con sus cursores; duplicado
+entre páginas, bucle de cursor, páginas sin fin y cursor no textual) y HTTP
+(catálogo en dos páginas dentro de `max_tools` y rechazo cuando el total lo
+supera aunque cada página quepa); 110 tests MCP pasan.
+
+### 8.66. Evaluaciones de calidad (`ExAgent.Eval`, 2026-11-17)
+
+**Problema:** los tests con `Models.Test` prueban la integración, pero no dicen
+si un cambio de prompt, modelo o tools hace que el agente responda mejor o peor.
+Sin una forma estándar de medirlo, cada equipo escribía bucles ad hoc sin
+concurrencia acotada, sin repeticiones ni comparación. Pydantic Evals, OpenAI
+Evals, LangSmith y Jido ofrecen evaluación como parte del framework.
+
+**Decisión:** `ExAgent.Eval.run/3` ejecuta un agente (o una función
+`fn input, run_opts -> ... end`) sobre `Eval.Case` con concurrencia, timeout por
+run y repeticiones; los evaluadores (`Eval.evaluator/3`: función con nombre que
+devuelve booleano, puntuación 0–1, `{score, reason}` o `:skip`, con umbral)
+puntúan cada run. Incluidos: `equals`, `contains`, `matches`, `tool_called`
+(trayectoria) y `judge` (modelo revisor PASS/FAIL que ve la transcripción
+acotada del run, resultados de tools incluidos, y trata `:expected` como
+contenido clave). Un run que falla, lanza o agota el tiempo no puntúa y no pasa;
+un evaluador que lanza puntúa 0. `Eval.Report` resume tasa de aprobados, por
+evaluador y por caso, latencia p50/p95, tokens, peticiones y coste (solo si
+todos los runs lo conocen), `format/1` para consola/CI y `compare/2` para listar
+regresiones entre dos informes.
+
+**Alternativas:** integrarlo en ExUnit (mezcla tests deterministas con medidas
+estadísticas y llamadas de pago); un servicio externo de trazas/evals (útil, pero
+no sustituye a medir en local o en CI sin dependencias).
+
+**Impacto:** aditivo, sin cambios de contratos existentes. Las evaluaciones
+llaman a modelos reales y cuestan dinero; el uso del revisor no entra en el
+informe.
+
+**Revisión independiente:** 12 hallazgos corregidos con tests de regresión. Los
+graves: un evaluador lento descartaba un run ya terminado (ahora corren en una
+fase aparte con su propio `:evaluator_timeout`); los runs fallidos perdían el uso
+gastado (se conserva el parcial de `RunError`); una función objetivo que
+devolvía un mapa mínimo, salía o lanzaba un `throw` rompía la evaluación; y el
+prompt del revisor podía crecer sin límite con la tarea, el contenido clave o
+una imagen en base64 (cada campo va acotado y los adjuntos se muestran como
+`[image]`/`[file …]`). Los menores: nombres de caso duplicados, opciones
+inválidas validadas al empezar, `contains` con lista vacía o números,
+argumentos de tools en JSON textual, `compare/2` con casos añadidos y
+eliminados, y coste `nil` salvo que todos los runs lo conozcan.
+
+**Verificación:** 14 tests de `ExAgent.Eval`. En vivo (OpenRouter, céntimos),
+DeepSeek V4.1 Flash y Sonnet 5.5 sobre los mismos casos con tool de consulta:
+el primer revisor marcaba como inventados datos que venían de la tool; tras
+darle la transcripción, ambos pasan el 100 %, con p95 de 9,5 s frente a 2,5 s y
+6,8k frente a 8,8k tokens. Un control negativo que responde datos falsos saca
+0 %.
+
 ## 9. Estado actual y no-goals
 
 **Hecho (núcleo funcional):** loop, backend ReqLLM stock cualificado, Model custom/Test,

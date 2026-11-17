@@ -15,6 +15,12 @@ defmodule ExAgent.MCP.Protocol do
           | {:notification, method :: String.t(), params :: map()}
           | :ignore
 
+  @version Mix.Project.config()[:version]
+
+  @doc false
+  # The ExAgent version reported as `clientInfo.version` in `initialize`.
+  def client_version, do: @version
+
   @doc "Encode a JSON-RPC request (with an `id`) as a newline-terminated binary."
   @spec encode_request(term(), String.t(), map()) :: iodata()
   def encode_request(id, method, params) when is_binary(method) do
@@ -100,24 +106,69 @@ defmodule ExAgent.MCP.Protocol do
     )
   end
 
-  @doc "Extract the concatenated text from an MCP `tools/call` result."
+  @doc """
+  Extract the text of an MCP `tools/call` result.
+
+  Text blocks are concatenated. ExAgent tool results are text, so other blocks
+  become explicit notices instead of raw payloads: images and audio name their
+  MIME type and size, embedded text resources contribute their text, binary
+  resources and resource links are named by URI. A result with no content but
+  `structuredContent` returns that content as JSON. `isError: true` becomes
+  `{:error, text}`.
+  """
   @spec result_to_text(map()) :: {:ok, String.t()} | {:error, term()}
   def result_to_text(%{"isError" => true} = result),
     do: {:error, extract_text(result)}
 
-  def result_to_text(%{"content" => content}) when is_list(content),
-    do: {:ok, extract_text(%{"content" => content})}
+  def result_to_text(%{"content" => content} = result) when is_list(content),
+    do: {:ok, extract_text(result)}
 
   def result_to_text(other), do: {:ok, inspect(other)}
 
-  defp extract_text(%{"content" => content}) when is_list(content) do
-    content
-    |> Enum.map_join(fn
-      %{"type" => "text", "text" => t} -> t
-      %{"text" => t} -> t
-      block -> inspect(block)
-    end)
-  end
+  defp extract_text(%{"content" => [], "structuredContent" => structured})
+       when is_map(structured),
+       do: Jason.encode!(structured)
+
+  defp extract_text(%{"content" => content}) when is_list(content),
+    do: Enum.map_join(content, &block_text/1)
 
   defp extract_text(other), do: inspect(other)
+
+  defp block_text(%{"type" => "text", "text" => text}) when is_binary(text), do: text
+
+  defp block_text(%{"type" => type} = block) when type in ["image", "audio"],
+    do: notice("#{type} #{mime(block)}#{size(block["data"])} not shown: tool results are text")
+
+  defp block_text(%{"type" => "resource", "resource" => %{"text" => text} = resource})
+       when is_binary(text),
+       do: "\n[resource #{uri(resource)}]\n" <> text <> "\n"
+
+  defp block_text(%{"type" => "resource", "resource" => %{} = resource}),
+    do:
+      notice(
+        "binary resource #{uri(resource)} #{mime(resource)}#{size(resource["blob"])} not shown"
+      )
+
+  defp block_text(%{"type" => "resource_link"} = link),
+    do:
+      notice("resource link #{uri(link)}#{if is_binary(link["name"]), do: " (#{link["name"]})"}")
+
+  defp block_text(%{"text" => text}) when is_binary(text), do: text
+
+  defp block_text(%{"type" => type}) when is_binary(type),
+    do: notice("#{String.slice(type, 0, 64)} content not shown")
+
+  defp block_text(_block), do: notice("unrecognized content not shown")
+
+  defp notice(text), do: "\n[" <> text <> "]\n"
+
+  defp mime(%{"mimeType" => mime}) when is_binary(mime), do: String.slice(mime, 0, 128)
+  defp mime(_), do: "(unknown type)"
+
+  defp uri(%{"uri" => uri}) when is_binary(uri), do: String.slice(uri, 0, 2_048)
+  defp uri(_), do: "(no uri)"
+
+  # Base64 payload size in decoded bytes, approximately.
+  defp size(data) when is_binary(data), do: ", about #{div(byte_size(data) * 3, 4)} bytes"
+  defp size(_), do: ""
 end

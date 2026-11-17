@@ -26,9 +26,13 @@ defmodule ExAgent do
             max_history_bytes: 8_388_608,
             usage_limits: nil,
             capabilities: [],
+            output_validators: [],
             name: nil,
             observability: nil
 
+  @type output_validator ::
+          (term(), RunContext.t() ->
+             :ok | {:ok, term()} | {:retry, String.t()} | {:error, term()})
   @type output_type :: :text | module()
   @type prompt :: String.t() | [ExAgent.Message.Part.User.content_part()]
   @type t :: %__MODULE__{
@@ -46,6 +50,7 @@ defmodule ExAgent do
           max_history_bytes: pos_integer(),
           usage_limits: ExAgent.UsageLimits.t() | nil,
           capabilities: [module() | struct()],
+          output_validators: [output_validator()],
           name: String.t() | nil,
           observability: Observability.t() | nil
         }
@@ -101,6 +106,22 @@ defmodule ExAgent do
   `ExAgent.Skills.Restore` after them; see `ExAgent.Skills`. Invalid skills or
   clashing tool names raise `ArgumentError`.
 
+  `:output_validators` is a list of `fn output, ctx -> ... end` checks that run,
+  in order, on a final output that already passed schema validation, before
+  the run accepts it. Return `:ok`, `{:ok, output}` to replace the output for
+  later validators and the result, `{:retry, message}` (or an
+  `ExAgent.ModelRetry`) to send `message` back to the model and continue the
+  run, or `{:error, reason}` to fail it with `{:output_validation_failed,
+  reason}`. Retries share the `:output_retries` budget. A validator may call
+  another model through `ExAgent.run_child/4` with its `ctx`, as
+  `ExAgent.Judge.output_validator/1` does, so that usage counts toward the
+  run's limits. A resumed run does not check an output it already accepted.
+  The run's deadline, usage limits and cancellation are checked again after the
+  validators. A retry on the last step allowed by `:max_steps` ends the run with
+  `:max_steps_exceeded`. In durable compositions validators require typed
+  output (the output tool); with text or native output the run fails with
+  `{:unsupported, :output_validators_without_output_tool}`.
+
   `:on_max_steps` chooses what the last allowed step does. `:error` (default)
   keeps the previous behaviour. `:final` asks the model for its final answer in
   step `max_steps`: function tools stay declared but cannot be called, and a
@@ -132,6 +153,7 @@ defmodule ExAgent do
       max_history_bytes: Keyword.get(opts, :max_history_bytes, 8_388_608),
       usage_limits: Keyword.get(opts, :usage_limits),
       capabilities: Keyword.get(opts, :capabilities, []),
+      output_validators: output_validators!(Keyword.get(opts, :output_validators, [])),
       name: Keyword.get(opts, :name),
       observability: Keyword.get(opts, :observability)
     }
@@ -142,10 +164,17 @@ defmodule ExAgent do
   defp on_max_steps!(value),
     do: raise(ArgumentError, "on_max_steps must be :error or :final, got: #{inspect(value)}")
 
+  defp output_validators!(validators) do
+    unless is_list(validators) and Enum.all?(validators, &is_function(&1, 2)),
+      do: raise(ArgumentError, "output_validators must be a list of two-argument functions")
+
+    validators
+  end
+
   defp prepare_definition_tools(tools) when is_list(tools) do
     Enum.map(tools, fn
       %Tool{} = tool ->
-        case Tool.prepare(tool) do
+        case tool |> Tool.validate_execution!() |> Tool.prepare() do
           {:ok, prepared} -> prepared
           {:error, _} -> tool
         end
@@ -2257,7 +2286,7 @@ defmodule ExAgent do
       end
 
     case validation do
-      {:ok, data} -> succeed(data, state)
+      {:ok, data} -> accept_output(data, state)
       {:error, errors} -> retry_or_fail(state, errors)
     end
   end
@@ -2424,7 +2453,8 @@ defmodule ExAgent do
         end
       )
 
-    with {:ok, data} <- validation do
+    with {:ok, data} <- validation,
+         {:ok, data} <- check_output(data, state) do
       parts = [
         %Part.ToolReturn{tool_name: @output_tool_name, content: "ok", tool_call_id: id}
         | Enum.map(siblings, &stub_return/1)
@@ -2460,6 +2490,28 @@ defmodule ExAgent do
           :ok -> retry_or_fail(state, errors, retry, stubs)
           {:error, reason} -> fail(state, reason)
         end
+
+      {:fail, reason} ->
+        # Resolve the output call (and its siblings) as rejected rather than
+        # leaving fail/2 to describe it as never executed.
+        state =
+          if state.continuation_version in [10, 11],
+            do: state,
+            else:
+              append_returns(state, [
+                %Part.ToolReturn{
+                  tool_name: @output_tool_name,
+                  content: "Output rejected by a validator.",
+                  tool_call_id: id,
+                  status: :failed
+                }
+                | Enum.map(siblings, &stub_return/1)
+              ])
+
+        fail(state, {:output_validation_failed, reason})
+
+      {:stop, reason} ->
+        fail(state, reason)
     end
   end
 
@@ -2490,72 +2542,70 @@ defmodule ExAgent do
 
           results =
             ExAgent.Continuation.Worker.run(state, :producer, nil, fn ->
-              try do
-                Task.async_stream(
-                  calls,
-                  fn call ->
-                    ExAgent.Continuation.Worker.run(state, :tool, call.tool_call_id, fn ->
-                      start = System.monotonic_time()
+              execute_call =
+                fn call ->
+                  ExAgent.Continuation.Worker.run(state, :tool, call.tool_call_id, fn ->
+                    start = System.monotonic_time()
 
-                      outcome =
-                        try do
-                          watched =
-                            if state.continuation_version in [10, 11],
-                              do: {:ok, nil},
-                              else: ExecutionScope.watch_worker(state.execution_scope)
+                    outcome =
+                      try do
+                        watched =
+                          if state.continuation_version in [10, 11],
+                            do: {:ok, nil},
+                            else: ExecutionScope.watch_worker(state.execution_scope)
 
-                          case watched do
-                            {:ok, _guardian} ->
-                              attrs =
-                                Map.put(
-                                  Observability.ids(state),
-                                  "exagent.tool_call_id",
-                                  Observability.label(call.tool_call_id)
-                                )
-
-                              Observability.around(
-                                state.observability,
-                                :tool,
-                                attrs,
-                                state.trace_context,
-                                fn operation ->
-                                  ctx = %{
-                                    base_ctx
-                                    | trace_context: Observability.context(operation)
-                                  }
-
-                                  outcome =
-                                    run_tool_raw(call, ctx, state, owner, batch_ref, operation)
-
-                                  {part, _, _} = outcome
-
-                                  if part.status == :succeeded,
-                                    do: Observability.content(operation, :output, part.content)
-
-                                  outcome
-                                end
+                        case watched do
+                          {:ok, _guardian} ->
+                            attrs =
+                              Map.put(
+                                Observability.ids(state),
+                                "exagent.tool_call_id",
+                                Observability.label(call.tool_call_id)
                               )
 
-                            {:error, reason} ->
-                              {tool_return(call, :not_executed, reason_msg(reason)), false,
-                               reason}
-                          end
-                        catch
-                          kind, reason ->
-                            {tool_return(call, :unknown, reason_msg(reason)), false,
-                             {:tool_execution_failed, call.tool_name, {kind, reason}}}
-                        end
+                            Observability.around(
+                              state.observability,
+                              :tool,
+                              attrs,
+                              state.trace_context,
+                              fn operation ->
+                                ctx = %{
+                                  base_ctx
+                                  | trace_context: Observability.context(operation)
+                                }
 
-                      {Retention.tool_outcome(outcome, state.tool_return_bytes),
-                       System.monotonic_time() - start}
-                    end)
-                  end,
-                  ordered: true,
-                  timeout:
-                    ExecutionScope.remaining_timeout(state.execution_scope, state.tool_timeout),
-                  on_timeout: :kill_task
-                )
-                |> Enum.zip(calls)
+                                outcome =
+                                  run_tool_raw(call, ctx, state, owner, batch_ref, operation)
+
+                                {part, _, _} = outcome
+
+                                if part.status == :succeeded,
+                                  do: Observability.content(operation, :output, part.content)
+
+                                outcome
+                              end
+                            )
+
+                          {:error, reason} ->
+                            {tool_return(call, :not_executed, reason_msg(reason)), false, reason}
+                        end
+                      catch
+                        kind, reason ->
+                          {tool_return(call, :unknown, reason_msg(reason)), false,
+                           {:tool_execution_failed, call.tool_name, {kind, reason}}}
+                      end
+
+                    {Retention.tool_outcome(outcome, state.tool_return_bytes),
+                     System.monotonic_time() - start}
+                  end)
+                end
+
+              try do
+                # Consecutive parallel calls share a concurrent group; an
+                # exclusive tool runs alone, as a barrier between groups.
+                calls
+                |> tool_batch_groups(state)
+                |> Enum.flat_map(&run_tool_group(&1, execute_call, state))
               catch
                 kind, reason -> Enum.map(calls, &{{:exit, {kind, reason}}, &1})
               end
@@ -2605,8 +2655,10 @@ defmodule ExAgent do
                 Map.get(confirmed, call.tool_call_id) ||
                   tool_return(call, :unknown, reason_msg(reason))
 
+              timeout = tool_timeout(find_tool(state, call.tool_name), state.tool_timeout)
+
               {{part, false, {:tool_execution_failed, call.tool_name, {:exit, reason}}},
-               System.convert_time_unit(state.tool_timeout, :millisecond, :native)}
+               System.convert_time_unit(timeout, :millisecond, :native)}
           end
 
         emit(state, :tool_call_finished, %{
@@ -2628,6 +2680,76 @@ defmodule ExAgent do
 
     {parts, controls, state}
   end
+
+  # Results stay in call order: groups preserve it, and run one after another.
+  defp tool_batch_groups(calls, state) do
+    calls
+    |> Enum.map(fn call ->
+      tool = find_tool(state, call.tool_name)
+      {{call, tool_timeout(tool, state.tool_timeout)}, exclusive_tool?(tool)}
+    end)
+    |> Enum.chunk_while(
+      [],
+      fn
+        {entry, false}, [{_, false} | _] = group -> {:cont, [{entry, false} | group]}
+        {entry, exclusive}, [] -> {:cont, [{entry, exclusive}]}
+        {entry, exclusive}, group -> {:cont, tool_group(group), [{entry, exclusive}]}
+      end,
+      fn
+        [] -> {:cont, []}
+        group -> {:cont, tool_group(group), []}
+      end
+    )
+  end
+
+  defp tool_group(group), do: group |> Enum.reverse() |> Enum.map(&elem(&1, 0))
+
+  # One concurrent stream per group, bounded by its longest timeout. A call
+  # with a shorter timeout ends itself with the same `{:exit, :timeout}`
+  # result, so different timeouts never serialize parallel calls.
+  defp run_tool_group(entries, execute_call, state) do
+    entries =
+      Enum.map(entries, fn {call, timeout} ->
+        {call, ExecutionScope.remaining_timeout(state.execution_scope, timeout)}
+      end)
+
+    longest = entries |> Enum.map(&elem(&1, 1)) |> Enum.max()
+
+    entries
+    |> Task.async_stream(
+      fn
+        {call, ^longest} ->
+          execute_call.(call)
+
+        {call, limit} ->
+          # A kill, like :kill_task, so a tool that traps exits cannot outlive
+          # its own timeout.
+          {:ok, timer} = :timer.kill_after(limit)
+
+          try do
+            execute_call.(call)
+          after
+            :timer.cancel(timer)
+          end
+      end,
+      ordered: true,
+      timeout: longest,
+      on_timeout: :kill_task
+    )
+    |> Enum.zip(entries)
+    |> Enum.map(fn
+      {{:exit, :killed}, {call, limit}} when limit != longest -> {{:exit, :timeout}, call}
+      {result, {call, _limit}} -> {result, call}
+    end)
+  end
+
+  defp tool_timeout(%Tool{timeout: timeout}, _default) when is_integer(timeout) and timeout > 0,
+    do: timeout
+
+  defp tool_timeout(_tool, default), do: default
+
+  defp exclusive_tool?(%Tool{concurrency: :exclusive}), do: true
+  defp exclusive_tool?(_tool), do: false
 
   defp await_tool_batch(ref, monitor, calls, state, confirmed) do
     receive do
@@ -3334,8 +3456,66 @@ defmodule ExAgent do
   defp safe_reason(reason), do: reason
 
   # ----- finalising --------------------------------------------------------
-  defp finalize_text(text, %Run{} = state) do
-    succeed(text, state)
+  defp finalize_text(text, %Run{} = state), do: accept_output(text, state)
+
+  # Durable compositions (frame 10/11) rebuild a text or native result from the
+  # response and persist no output resolution for it, so a retry or replaced
+  # output could not be recorded; only the output tool path supports validators.
+  defp accept_output(
+         _output,
+         %Run{agent: %{output_validators: [_ | _]}, continuation_version: v} = state
+       )
+       when v in [10, 11],
+       do: fail(state, {:unsupported, :output_validators_without_output_tool})
+
+  defp accept_output(output, state) do
+    case check_output(output, state) do
+      {:ok, output} -> succeed(output, state)
+      {:error, message} -> retry_or_fail(state, message)
+      {:fail, reason} -> fail(state, {:output_validation_failed, reason})
+      {:stop, reason} -> fail(state, reason)
+    end
+  end
+
+  # Host output validators: `{:ok, output}`, `{:error, retry_message}` (the
+  # shape schema errors use, so callers share the retry path), `{:fail, reason}`
+  # or `{:stop, reason}` when the run's deadline, limits or cancellation ended
+  # it while validators ran.
+  defp check_output(output, %Run{agent: %{output_validators: []}}), do: {:ok, output}
+
+  defp check_output(output, %Run{agent: %{output_validators: validators}} = state)
+       when is_list(validators) do
+    ctx = build_context(state)
+
+    result =
+      Enum.reduce_while(validators, {:ok, output}, fn validator, {:ok, output} ->
+        case run_output_validator(validator, output, ctx) do
+          :ok -> {:cont, {:ok, output}}
+          {:ok, replaced} -> {:cont, {:ok, replaced}}
+          {:retry, message} when is_binary(message) -> {:halt, {:error, message}}
+          %ExAgent.ModelRetry{message: message} -> {:halt, {:error, message}}
+          {:error, %ExAgent.ModelRetry{message: message}} -> {:halt, {:error, message}}
+          {:error, reason} -> {:halt, {:fail, reason}}
+          other -> {:halt, {:fail, {:invalid_validator_result, inspect(other, limit: 5)}}}
+        end
+      end)
+
+    case state.execution_scope && ExecutionScope.check(state.execution_scope) do
+      {:error, reason} -> {:stop, reason}
+      _ -> result
+    end
+  end
+
+  defp check_output(output, _state), do: {:ok, output}
+
+  defp run_output_validator(validator, output, ctx) do
+    validator.(output, ctx)
+  rescue
+    error in ExAgent.ModelRetry -> error
+    error -> {:error, {:validator_raised, Exception.message(error)}}
+  catch
+    :throw, :exagent_stream_cancelled -> throw(:exagent_stream_cancelled)
+    kind, reason -> {:error, {:validator_raised, "#{kind}: " <> inspect(reason, limit: 10)}}
   end
 
   defp retry_or_fail(%Run{} = state, error) do

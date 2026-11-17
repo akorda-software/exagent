@@ -5,12 +5,12 @@ the result contract before introducing a provider, streaming or persistence.
 
 ## Install ExAgent 2.2
 
-This guide targets **ExAgent 2.2.4**. Published 1.x releases have older contracts.
+This guide targets **ExAgent 2.3.0**. Published 1.x releases have older contracts.
 Add the published package:
 
 ```elixir
 def deps do
-  [{:exagent, "~> 2.2.4"}]
+  [{:exagent, "~> 2.3.0"}]
 end
 ```
 

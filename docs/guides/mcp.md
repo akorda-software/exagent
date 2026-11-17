@@ -4,6 +4,9 @@
 exposes them as `ExAgent.Tool` values. Use those tools through the ordinary agent
 loop to retain local validation, permissions and scoped accounting.
 
+With many MCP tools, offer them on demand with `ExAgent.Tool.Search`
+([Tools and output](tools-and-output.md#offer-a-large-catalogue-on-demand)).
+
 The client supports stdio and opt-in Streamable HTTP. This page contains
 **external setup recipes**, not offline examples: install/start a trusted server
 and supply a qualified tools model before executing them.
@@ -35,6 +38,16 @@ end
 [Models](models-and-limits.md). The example command may download a package;
 production applications should manage and pin their chosen server separately.
 Stdio uses the 2024-11-05 protocol profile.
+
+`tools/1` follows paginated catalogues (`nextCursor`) on both transports, up to
+32 pages. A name repeated across pages, a repeated cursor or a catalogue past
+the limits returns an error rather than a partial list. For catalogues too large
+to offer at once, combine the tools with [`Tool.Search`](tools-and-output.md).
+
+Tool results reach the model as text. Images, audio, binary resources and
+resource links in a result become short notices with their type, size or URI,
+so a screenshot does not fill the context with base64 data; embedded text
+resources keep their text.
 
 ## Supply an HTTP pool
 

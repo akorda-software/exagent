@@ -1,6 +1,6 @@
 # Supported features and limits
 
-This guide describes [ExAgent 2.2.4](https://hex.pm/packages/exagent/2.2.4).
+This guide describes [ExAgent 2.3.0](https://hex.pm/packages/exagent/2.3.0).
 Its runtime targets are Elixir 1.18 / OTP 28 and Elixir 1.20 / OTP 29.
 The general model backend uses official ReqLLM 1.30; applications may implement
 `ExAgent.Model` for a different adapter.
@@ -12,6 +12,16 @@ The general model backend uses official ReqLLM 1.30; applications may implement
 | Text generation | `Model.resolve/2` or `Models.ReqLLM.new/1` with credentials | Resolving a catalogue identity does not enable tools or streaming. |
 | Chat tools and streaming | `tool_profile: :chat_tools_v1` and truthful Chat capability metadata | Requires a compatible non-reasoning Chat endpoint and the mandatory argument envelope. |
 | OpenRouter tool routing | `tool_profile: :openrouter_chat_tools_v1` | Provider routing and reasoning mode are bound to the conversation. |
+| Reasoning with tools | `:openrouter_chat_tools_v1` with `reasoning_mode: :enabled` | Reasoning blocks are replayed unchanged; tool choice is always `auto`. OpenRouter only. |
+| Tool timeouts and exclusive tools | `ExAgent.Tool` fields `timeout` and `concurrency` | Exclusive calls run alone; results keep call order. |
+| Tool output limits and repeated calls | `Tool.OutputLimit`, `Tool.RepeatGuard` capabilities | Results over `:max_payload_bytes` (1 MiB by default) still fail; repeated-call notes never block. |
+| Background tools and sub-agents | `ExAgent.Jobs` with `background/2`, `agent_tool/1`, `tools/2` | Volatile; jobs run outside the starting run's deadline, limits and cancellation. |
+| Large tool catalogues on demand | `Tool.Search` capability with `deferred:` tools | Keyword search, not semantic; hiding a tool is not a permission. |
+| Final answer checks and reviewers | `output_validators:`, `ExAgent.Judge` | Retries share `:output_retries`; an approver's own usage is not added to the run. |
+| Consulting a stronger model | `ExAgent.Tool.Advisor` | Text transcript only; the advisor has no tools. |
+| Measuring agent quality | `ExAgent.Eval` with `Eval.Report.compare/2` | Real model calls; a reviewer model can be wrong and its usage is not in the report. |
+| Long-term memory | `ExAgent.Memory.tool/2`, `preload/3`; ETS or Postgres backends | Small text files per host-chosen scope; no semantic search; edits are not undone when a run fails. |
+| Reusable compaction summaries | `Compaction.Summary` with `memo: Compaction.Memo` | In-memory and bounded; a lost memo costs one extra summary. |
 | Native JSON Schema output | `output_profile: :chat_json_schema_v1`, `output_mode: :native` | Non-strict remote schema; local Ecto validation remains authoritative. The routed OpenRouter tools profile does not enable this output profile. |
 | Images and documents | `ExAgent.run(agent, [%{type: "text", ...}, %{type: "image", ...}])` | Each modality must be declared by the model; PDFs need a document-capable transport such as OpenRouter. |
 | Prompt caching | `Models.ReqLLM.new(prompt_cache: ...)` | OpenRouter `cache_control` breakpoints or an OpenAI cache key; other providers reject it. |

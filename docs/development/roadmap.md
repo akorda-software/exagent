@@ -1,5 +1,174 @@
 # Roadmap ejecutable de ExAgent v2.0.0
 
+**Release 2.3.0, 2026-11-17:** el usuario pide publicar ya las cuatro
+iteraciones post-2.2.4 como versión menor (elige 2.3.0 frente a 2.4.0 para no
+dejar hueco). Lock: telemetry 1.4.3 y nimble_pool 1.2.0; `hex.audit` limpio.
+Metadatos: `release_workflow_test.py` 17/17 y `release-check v2.3.0 --prepare`
+correctos. `./bin/check` con versión y lock finales: 2443 pasan, 31 excluidos; docs, enlaces, TAR 2.3.0 y aislamiento correctos.
+
+**Evolución post-2.2.4, cuarta iteración, 2026-11-17 — sin commit, versión ni publicación:**
+siguiendo el objetivo de la tercera iteración, se cubren tres huecos frente a
+Jido, Pydantic AI, OpenAI Agents SDK y LangGraph (diseño 8.64–8.66):
+
+1. `ExAgent.Memory`: memoria a largo plazo por ámbito (usuario, tenant…) como
+   archivos `/memories`, con tool de comandos (view/create/str_replace/insert/
+   delete/rename), `preload/3` para inyectarla en las instrucciones, límites
+   por archivo/total/número, CAS con reintentos y backends ETS (por defecto) y
+   PostgreSQL (`migrate/2`, versiones de secuencia).
+2. MCP: `tools/list` sigue `nextCursor` por stdio y HTTP con tope de páginas,
+   bucles y duplicados; desaparece `:pagination_unsupported`.
+3. `ExAgent.Eval`: casos, evaluadores (`equals`, `contains`, `matches`,
+   `tool_called`, `judge`), repeticiones, concurrencia, timeouts, informe con
+   latencia/tokens/coste y `Report.compare/2` para regresiones.
+
+Además, el asesor (8.62) ya no tumba el run si falla: devuelve un aviso y
+conserva el uso parcial.
+
+**Evidencia:** memoria, 23 tests + 3 contra PostgreSQL 18 real; revisión
+independiente con 10 hallazgos corregidos (old_str vacío, escrituras paralelas
+desordenadas → tool `:exclusive`, salidas del backend, colisión archivo/
+directorio, ámbito que filtraba excepciones, validación de config, escape del
+marco de preload, NFC y caracteres invisibles en rutas…). En vivo, DeepSeek V4.1
+Flash y Sonnet 5.5 recuerdan entre sesiones y `preload` ahorra la ronda de
+lectura. Paginación MCP: 110 tests MCP. Eval: 14 tests; revisión con 12
+hallazgos corregidos (evaluador lento que descartaba runs, uso perdido en
+fallos, prompt del revisor sin acotar…); en vivo, Flash y Sonnet 100 % tras
+dar la transcripción al revisor (p95 9,5 s frente a 2,5 s), control negativo 0 %.
+`./bin/check`: 2437 pasan, 31 excluidos (PostgreSQL y proveedores reales, opt-in); formato, compilación estricta, docs y paquete correctos.
+
+**Revisión integral (a petición del usuario, tres revisores independientes:
+runtime, módulos nuevos y documentación):** 7 defectos de código corregidos con
+test de regresión: una tool con `timeout` propio que atrapa salidas sobrevivía a
+su límite si compartía grupo con otra más lenta (ahora `kill_after`); un
+validador que hace `exit`/`throw` daba `:execution_failed` en vez de
+`:output_validation_failed`; un asesor lento tumbaba el run por `:tool_timeout`
+(nueva opción `:timeout`, 120 s, que fija la de la tool y acota la consulta como
+deadline); la notificación de un job se perdía si quien esperaba moría; las tools
+de jobs fallaban el run con el almacén caído; un `scope` de memoria inválido
+copiaba su valor (posibles secretos de `deps`) al error; y un proceso enlazado
+que caía en un target de `Eval` tumbaba al llamador. Además: el aprobador de
+`Judge` gana `:timeout` (20 s) y documenta que su uso no cuenta en el run y que
+corre dentro del timeout de la tool; `Judge.output_validator` acota la respuesta
+que envía. Documentación: 11 imprecisiones corregidas (changelog del aprobador,
+guía de migración sin el modo `:enabled`, timeout de tool que sí falla el run,
+techo de retención `:max_payload_bytes`, `max_tools` solo HTTP, mapa de API para
+agentes sin las piezas nuevas…). No se cambió: el error crudo en
+`Eval.Result.error`, porque el informe es del desarrollador y sanearlo ocultaría
+la causa. `./bin/check` tras la revisión: 2443 pasan, 31 excluidos.
+
+**Aplazado, con causa:** MCP 2026-07-28 (Tasks, resources/prompts) hasta tener
+un servidor real que lo use; A2A y agente-como-servidor-MCP por falta de un
+consumidor concreto; memoria semántica (embeddings) porque requiere elegir
+almacén vectorial y la memoria por archivos cubre el caso común sin dependencias.
+
+**Evolución post-2.2.4, tercera iteración, 2026-11-17 — sin commit, versión ni publicación:**
+el usuario pide hacer de ExAgent el paquete de referencia para flujos agénticos
+en Elixir, revisar Jido y seguir incorporando lo que aporte. Revisión del
+ecosistema Jido (V3 consolida jido/jido_action/jido_signal/jido_ai en `release/v3`,
+sin Hex aún; estrategias de razonamiento, routing por turno, cuotas, señales,
+workflows durables, memoria, eval, VFS/shell) y de frameworks recientes (OpenAI
+Agents SDK, Pydantic AI, Vercel AI SDK, MAF, ADK, MCP 2026-07-28 y Tasks).
+Se eligen las ideas con más adopción y encaje (diseño 8.61–8.62):
+
+1. `:output_validators`: comprobaciones de la respuesta final con feedback y
+   reintento sobre el camino existente (texto, nativo y tool de salida).
+2. `ExAgent.Judge`: revisor de respuestas (PASS/FAIL) y aprobador de tools
+   `:ask` (ALLOW/DENY/ASK con escalado humano).
+3. `ExAgent.Tool.Advisor`: un modelo rápido consulta a uno más capaz.
+
+**Evidencia:** 19 tests nuevos (13 + 6 regresiones de la revisión
+independiente: parser de veredictos que podía aprobar una denegación,
+validadores de texto en composiciones durables, respuesta aceptada sin revisar
+al agotarse límites/deadline, tarea actual perdida en la transcripción, calls
+paralelas del asesor y salida tipada rechazada). MCP: bloques no textuales como
+avisos explícitos en stdio y HTTP (diseño 8.63), 117 tests MCP. Live OpenRouter (céntimos): el revisor hace
+que DeepSeek V4.1 Flash corrija una respuesta en inglés al español; el
+aprobador permite `/tmp` y deniega `/etc/motd`; Flash consulta a Sonnet 5.5 y
+el uso se agrega al run. `./bin/check`: 2395/2396, 28 excluidos; el fallo era el
+test de contrato que fija las claves de `%ExAgent{}` (falta `output_validators`,
+campo aditivo anotado en Migration) y pasa tras actualizarlo. Al probar la
+iteración siguiente se vio que un fallo del asesor devolvía `{:error, _}` y
+tumbaba el run; ahora el agente recibe un aviso y continúa (test de regresión).
+
+**Descartado o aplazado con causa:** Retry-After ya lo resuelve ReqLLM 1.30;
+la normalización de errores de ventana de contexto y el coste reportado por
+proveedor están en ReqLLM main sin publicar (esperar a la versión stock);
+estrategias de razonamiento por prompt aportan poco con modelos de reasoning;
+MCP 2026-07-28 cambia el binding persistido y requiere su propio diseño.
+
+**Evolución post-2.2.4, segunda iteración, 2026-11-17 — sin commit, versión ni publicación:**
+el usuario pide otra iteración si aporta al producto. Se eligen dos huecos frente
+a los harnesses actuales (diseño 8.59–8.60, changelog Unreleased, guías
+runtime/tools/MCP/soporte, grupos de módulos en `mix.exs`):
+
+1. `ExAgent.Jobs`: tools y sub-agentes en segundo plano con `job_id` inmediato,
+   `job_status`/`wait_job`/`cancel_job` y aviso opcional al Server como turno
+   nuevo; acotado y volátil.
+2. `Tool.Search`: catálogo de tools diferido tras `search_tools`; lo cargado se
+   deriva de la historia con orden estable entre pasos y runs.
+
+**Evidencia:** 18 tests nuevos (13 Jobs, 5 Search). Una revisión independiente
+encontró 7 defectos confirmados; corregidos con regresión: resultado no
+codificable que tumbaba el store y sus jobs (ahora se convierte en el proceso
+del job), aviso duplicado tras `wait_job`, `seconds` float que fallaba el run,
+Search sin cargar tools si `OutputLimit` recortaba el resultado (se recalcula
+desde la consulta), tools exclusivas en segundo plano (rechazadas; se respeta su
+`timeout`), error de sub-agente con su conversación (sólo razón) y `false` como
+resultado. La salida en el aviso va etiquetada como datos y escapada. Live OpenRouter (céntimos),
+25 tools diferidas + 1 normal, tarea que necesita dos de ellas: DeepSeek V4.1
+Flash y Sonnet 5.5 buscan solos, cargan las tools correctas y responden bien;
+tokens de entrada frente a ofrecer las 26 tools: 4.879 vs 7.196 (DeepSeek) y
+3.563 vs 10.905 (Sonnet). En una ejecución previa la línea base de DeepSeek con
+las 26 tools falló una vez con `invalid_tool_arguments`. Jobs + Server: ambos
+modelos responden al momento en el turno 1 y el aviso abre un turno 2 que
+informa del resultado del crawl.
+
+`bin/check` completo tras las correcciones: 2.374 pruebas / 0 fallos /
+28 exclusiones; formato, probes, docs, paquete y aislamiento correctos.
+
+**Límites:** búsqueda por palabras, no semántica; jobs sin persistencia ni
+límites del run que los arranca; el aviso al Server llega con rol de usuario y
+su contenido sigue sin ser confiable.
+
+**Evolución post-2.2.4 en el checkout, 2026-11-16 — sin commit, versión ni publicación:**
+el usuario delega de forma autónoma evolucionar ExAgent con lo aprendido del
+harness de DeepSeek y del mercado reciente, decidiendo con pruebas. Unidades
+implementadas (diseño 8.55–8.58, changelog Unreleased, guías tools/modelos/soporte):
+
+1. `reasoning_mode: :enabled` + `reasoning_effort` en el perfil OpenRouter: tools
+   con modelos de reasoning obligatorio (Claude 5.x) u opcional; reenvío stock
+   de `reasoning_details` firmados; `tool_choice` forzado → `auto`.
+2. `Compaction.Memo`: reutiliza/fusiona resúmenes por posiciones+digest, también
+   entre turnos de usuario (loop de prueba: 5 → ≤2 llamadas al resumidor).
+3. `timeout`/`concurrency` por `ExAgent.Tool`: exclusivas como barrera; timeouts
+   distintos siguen en paralelo.
+4. Capabilities `Tool.OutputLimit` (cabeza/cola + `on_truncate`) y
+   `Tool.RepeatGuard` (nota estable en proyección ante calls idénticas).
+
+**Evidencia:** 35 tests nuevos en cinco archivos, más los 75 previos de
+compaction. Una revisión independiente del delta encontró 8 puntos; corregidos
+con regresión: precedencia `and`/`&&` que rompía historia sin continuation en
+modos sin reasoning (alto), timeouts distintos que serializaban, memo que fallaba
+en cada turno nuevo y hint que excedía `max_bytes`. Documentados como límites:
+aprobación pendiente no retiene calls posteriores, timeout por tool en resume
+usa la definición actual, registros persistidos pueden contener el resultado
+completo o la nota. Probe documental 19/19. Live OpenRouter (coste de céntimos):
+Sonnet 5.5 y DeepSeek V4.1 Flash en texto, Ecto tipado, `on_max_steps: :final`,
+streaming, Server multi-turno y roundtrip JSON; firmas Sonnet reenviadas.
+RepeatGuard: Sonnet paró tras la nota en la 4.ª request sin 400 por reasoning
+firmado; DeepSeek siguió la orden del usuario con notas estables. OutputLimit:
+log de 3.000 líneas recortado a 2 KB y ambos modelos leen `exit_code=73` de la cola.
+`bin/check` completo: 2.356 pruebas / 0 fallos / 28 exclusiones, formato,
+probes, docs, paquete y aislamiento correctos. Un primer intento con la carga
+del servidor alta (media de 15) tuvo 9 fallos temporales en pruebas con
+timeouts y VMs nuevas; los 9 pasan al repetirse aislados y en la segunda
+ejecución completa.
+
+**Límites observados:** una ejecución Sonnet sin upstream fijado devolvió
+una vez `invalid_tool_arguments` (13+ repeticiones posteriores correctas): fijar
+proveedor. Compaction puede chocar con proveedores que validan prefijos firmados.
+Stream conserva `max_tokens` ≤ 4096 incluyendo reasoning.
+
 **Release 2.2.4 autorizada 2026-11-16 — publicada y verificada:**
 el usuario solicita publicar un patch después de verificar el refresh. Se actualizan ReqLLM
 1.30, JSV 0.27, Ecto 3.14.3, LLMDB 2026.11.2, Zoi 0.19, NimbleOptions 1.2

@@ -37,7 +37,12 @@ paths below are relative to `docs/guides/`; generated ExDoc pages are flattened.
 | Delegation | `Coordination.delegation_tool/2`, `ExAgent.run_child/4` | [Coordination](coordination.md) |
 | Durable sequence/router/parallel | `Coordination.Composition`, `Coordination.Flow` | [Coordination](coordination.md) |
 | MCP tools | `MCP.Client.start_link/1`, `tools/1`, `close/1` | [MCP](mcp.md) |
-| Retrieval/jobs | Host-owned integration recipes | [Documentation map](index.md) |
+| Background tools and sub-agents | `ExAgent.Jobs.background/2`, `agent_tool/1`, `tools/2` | [Runtime](runtime-and-events.md) |
+| Long-term memory | `ExAgent.Memory.tool/2`, `preload/3` | [Memory](memory.md) |
+| Answer checks, reviewers, advisor | `output_validators:`, `ExAgent.Judge`, `Tool.Advisor` | [Tools and output](tools-and-output.md) |
+| Large tool catalogues and outputs | `Tool.Search`, `Tool.OutputLimit`, `Tool.RepeatGuard` | [Tools and output](tools-and-output.md) |
+| Measure quality | `ExAgent.Eval.run/3`, `Eval.Report.compare/2` | [Testing](testing.md) |
+| Retrieval | Host-owned integration recipes | [Documentation map](index.md) |
 | Traces and mixed ReqLLM calls | `ExAgent.Observability.OpenTelemetry`, `ExAgent.Observability.ReqLLM.attach/1` | [Observability](observability.md) |
 | Long-lived tracing cleanup | Supervise `ExAgent.Observability.ReqLLM.Maintenance`; set a finite processor `max_exporter_restarts` when needed | [Observability](observability.md) |
 | ReqLLM metrics | `ReqLLM.attach(metrics: [models: [...]])`; host experimental API/SDK 0.6 and reader | [Observability](observability.md) |

@@ -51,6 +51,22 @@ of the parent's inclusive totals. For a custom auxiliary call, use
 `ExAgent.run_child/4` with the current `RunContext`; an unrelated `ExAgent.run/3`
 does not establish that parent scope.
 
+## Consult a stronger model
+
+`ExAgent.Tool.Advisor` lets a fast model ask a more capable one for guidance
+when it is stuck or before a risky step. The advisor sees a bounded text
+transcript of the conversation and the question, has no tools, and its usage
+counts toward the parent run:
+
+```elixir
+advisor = ExAgent.Tool.Advisor.new(model: strong_model, max_uses: 3)
+agent = ExAgent.new(model: fast_model, tools: [advisor | tools])
+```
+
+`max_uses` limits consultations per user message. If the advisor fails or
+takes longer than its `:timeout` (default 120 s, independent of the run's
+`:tool_timeout`), the agent gets a note saying so and continues on its own.
+
 ## Give shared state one writer
 
 ```elixir

@@ -112,6 +112,54 @@ uncertain request cannot resume through another route. Earlier unbound
 OpenRouter history is rejected. See [Migration](migration.md) for continuation
 version 4 and the unaffected OpenAI history versions.
 
+## Keep reasoning on with OpenRouter tools
+
+Some models cannot turn reasoning off; Claude 5.x on OpenRouter rejects requests
+that try. Use `reasoning_mode: :enabled` to run tools with reasoning on:
+
+```elixir
+model = ExAgent.Models.ReqLLM.new(
+  model: %{
+    provider: :openrouter,
+    id: qualified_model_id,
+    capabilities: %{
+      tools: %{enabled: true},
+      reasoning: %{enabled: true, effort: %{supported: true, values: ["low", "medium", "high"]}}
+    },
+    extra: %{wire: %{protocol: "openai_chat"}}
+  },
+  api_key: System.fetch_env!("OPENROUTER_API_KEY"),
+  tool_profile: :openrouter_chat_tools_v1,
+  reasoning_mode: :enabled,
+  reasoning_effort: :medium,
+  provider_options: [
+    openrouter_provider: %{only: [qualified_provider_id], allow_fallbacks: false}
+  ]
+)
+```
+
+The model must declare `reasoning.enabled: true`. Returned reasoning becomes
+`ExAgent.Message.Part.Thinking` parts, and the provider's `reasoning_details`
+(including signatures and encrypted blocks) are kept in the response's
+continuation and replayed unchanged on the next request, as tool loops on these
+models require. `reasoning_effort` is optional (`:minimal` to `:xhigh`) and must
+be one of the declared effort values when the model lists them.
+
+These endpoints reject forced tool use, so this mode always sends `auto`: typed
+output relies on the loop's output retries when the model answers in text, and
+`on_max_steps: :final` still never executes calls on its last step. Pin the
+upstream provider: one conversation must not move between upstreams that sign
+reasoning differently. The mode is bound to the conversation like routing;
+history from another mode is rejected unless `foreign_history: :portable` is set.
+OpenAI Chat does not return reasoning to replay, so `:enabled` applies only to
+this OpenRouter profile.
+
+Reasoning-signing providers may check that earlier messages did not change.
+Compaction rewrites older messages and can therefore be rejected by them; keep
+compaction thresholds high or start a new conversation on those routes. Output
+budgets usually include reasoning tokens; streaming keeps its `max_tokens` limit
+of 4096, which can be too small for high effort.
+
 ## Send images and documents
 
 `ExAgent.run/3` also accepts a list of content parts instead of a string:
@@ -154,6 +202,39 @@ On OpenRouter it marks the last system message and the newest message with a
 `prompt_cache: [key: "tenant:42"]` sends a stable `prompt_cache_key` to improve
 hits. Other providers reject the option before IO. Cache reads and writes show
 up in `result.usage.details` when the provider reports them.
+
+## Compact long conversations
+
+`ExAgent.Compaction.Capability` with `ExAgent.Compaction.Summary` replaces older
+messages in the request with a summary once the estimated size exceeds a
+threshold; the canonical history is unchanged. Each request is compacted again
+from that history, so by default every step past the threshold calls your
+summarizer and sends a different prefix. Add an `ExAgent.Compaction.Memo` to
+reuse the previous summary instead:
+
+```elixir
+# In your supervision tree:
+children = [{ExAgent.Compaction.Memo, name: MyApp.CompactionMemo, max_entries: 1024}]
+
+compaction = %ExAgent.Compaction.Capability{
+  compactor: ExAgent.Compaction.Summary,
+  opts: [
+    threshold_tokens: 60_000,
+    keep_recent: 8,
+    summarize: &MyApp.Summaries.summarize/1,
+    memo: MyApp.CompactionMemo
+  ]
+}
+```
+
+While the stored summary plus newer messages fits the threshold, the request is
+rebuilt without calling the summarizer, keeping an identical prefix for provider
+caches. Above it, the summarizer receives the previous summary and only the
+newly replaceable messages. Entries are keyed by the conversation's first
+message and are used only when the summarized messages are unchanged; edited or
+different histories summarize again. The memo is a bounded in-memory cache: an
+unavailable memo falls back to an ordinary summary, and losing it only costs one
+extra summarizer call.
 
 ## Retry and fall back to another model
 

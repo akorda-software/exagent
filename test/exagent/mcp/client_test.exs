@@ -163,7 +163,7 @@ defmodule ExAgent.MCP.ClientTest do
       for winner <- [:response, :timeout] do
         {client, ref} = controlled_client()
         tag = make_ref()
-        send(client, {:"$gen_call", {self(), tag}, :tools})
+        send(client, {:"$gen_call", {self(), tag}, {:tools, nil}})
         assert_receive {:outbound, ^client, ^ref, %{"id" => id}}, 1_000
         entry = Map.fetch!(:sys.get_state(client).pending, id)
 
@@ -175,7 +175,7 @@ defmodule ExAgent.MCP.ClientTest do
         terminal.(winner)
         terminal.(:response)
         terminal.(:timeout)
-        expected = if winner == :response, do: {:ok, []}, else: {:error, :timeout}
+        expected = if winner == :response, do: {:ok, [], nil, nil}, else: {:error, :timeout}
         assert_receive {^tag, ^expected}, 1_000
         assert_clean(client, [entry])
         refute_receive {^tag, _duplicate_reply}, 0
@@ -207,8 +207,8 @@ defmodule ExAgent.MCP.ClientTest do
 
       caller =
         spawn(fn ->
-          send(client, {:"$gen_call", {self(), make_ref()}, :tools})
-          send(client, {:"$gen_call", {self(), make_ref()}, :tools})
+          send(client, {:"$gen_call", {self(), make_ref()}, {:tools, nil}})
+          send(client, {:"$gen_call", {self(), make_ref()}, {:tools, nil}})
 
           receive do
             :stop -> :ok
@@ -627,6 +627,65 @@ defmodule ExAgent.MCP.ClientTest do
       {:ok, client} = client_with(ref, mock)
 
       assert {:ok, []} = Client.tools(client)
+    end
+
+    test "paginated catalogues are followed and checked across pages" do
+      ref = make_ref()
+      parent = self()
+      tool = fn name -> %{"name" => name, "inputSchema" => %{"type" => "object"}} end
+
+      respond = fn
+        "initialize", _ ->
+          {:ok, %{"capabilities" => %{}}}
+
+        "tools/list", params ->
+          send(parent, {:cursor, params["cursor"]})
+
+          case params["cursor"] do
+            nil -> {:ok, %{"tools" => [tool.("a")], "nextCursor" => "p2"}}
+            "p2" -> {:ok, %{"tools" => [tool.("b"), tool.("c")], "nextCursor" => "p3"}}
+            "p3" -> {:ok, %{"tools" => [tool.("d")]}}
+          end
+      end
+
+      {:ok, client} = client_with(ref, start_mock(ref, respond))
+      assert {:ok, tools} = Client.tools(client)
+      assert Enum.map(tools, & &1.name) == ["a", "b", "c", "d"]
+      assert_receive {:cursor, nil}
+      assert_receive {:cursor, "p2"}
+      assert_receive {:cursor, "p3"}
+    end
+
+    test "duplicate names across pages, cursor loops and endless pages are rejected" do
+      tool = fn name -> %{"name" => name, "inputSchema" => %{"type" => "object"}} end
+
+      cases = [
+        {fn
+           nil -> %{"tools" => [tool.("a")], "nextCursor" => "p2"}
+           "p2" -> %{"tools" => [tool.("a")]}
+         end, :invalid_tools},
+        {fn _ -> %{"tools" => [], "nextCursor" => "same"} end, :invalid_tools},
+        {fn
+           nil ->
+             %{"tools" => [], "nextCursor" => "0"}
+
+           cursor ->
+             %{"tools" => [], "nextCursor" => Integer.to_string(String.to_integer(cursor) + 1)}
+         end, :discovery_limit},
+        {fn _ -> %{"tools" => [], "nextCursor" => 7} end, :invalid_tools}
+      ]
+
+      for {page, error} <- cases do
+        ref = make_ref()
+
+        respond = fn
+          "initialize", _ -> {:ok, %{"capabilities" => %{}}}
+          "tools/list", params -> {:ok, page.(params["cursor"])}
+        end
+
+        {:ok, client} = client_with(ref, start_mock(ref, respond))
+        assert {:error, ^error} = Client.tools(client)
+      end
     end
 
     test "an error response surfaces as {:error, _}" do

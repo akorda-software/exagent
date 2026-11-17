@@ -16,6 +16,7 @@ defmodule ExAgent.Application do
     #   * `ExAgent.AgentSupervisor` — DynamicSupervisor for `ExAgent.Server`
     #                                 processes (one per live agent).
     #   * `ExAgent.Store.ETS`       — owner of the default snapshots table
+    #   * `ExAgent.Memory.ETS`      — owner of the default memory table
     #                                 (dev/test persistence; survives agent
     #                                 crashes).
     children = [
@@ -28,6 +29,7 @@ defmodule ExAgent.Application do
       {Registry, keys: :duplicate, name: ExAgent.PubSub.Registry},
       {Task.Supervisor, name: ExAgent.TaskSupervisor},
       {ExAgent.Store.ETS, []},
+      {ExAgent.Memory.ETS, []},
       {ExAgent.AgentSupervisor, []}
     ]
 

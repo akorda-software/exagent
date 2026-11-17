@@ -16,6 +16,30 @@ defmodule ExAgent.Tool do
   MCP creates a validated descriptor or marks missing host identity `:unbound`;
   the latter supports ordinary calls and rejects persisted execution before IO.
   Do not strip this field or put credentials in it to make a tool resumable.
+
+  ## Execution controls
+
+  Calls from one model response run concurrently by default, bounded by the
+  agent's `:tool_timeout`. Two optional fields refine that per tool:
+
+    * `timeout` — milliseconds for this tool's calls instead of the agent's
+      `:tool_timeout` (still capped by the run deadline). A call that exceeds it
+      is killed and reported with an `:unknown` outcome, which fails the run, as
+      with `:tool_timeout`.
+    * `concurrency` — `:parallel` (default) or `:exclusive`. An exclusive call
+      runs alone: calls before it finish first and calls after it start only once
+      it has finished. Use it for tools that mutate shared state (writing files,
+      running migrations) while read-only tools keep running in parallel.
+
+  Consecutive parallel calls run together even when their timeouts differ.
+  Results always keep the model's call order. A call that pauses for approval
+  does not hold back later calls in the same response: ordering applies to the
+  calls executed in one attempt. Neither field is sent to the model or recorded
+  in persisted continuation fingerprints, so a resumed run uses the current
+  definition, even when its timeout exceeds the persisted `:tool_timeout`.
+
+      tool = ExAgent.Tool.new(name: "apply_patch", call: &patch/2, concurrency: :exclusive)
+      tools = Enum.map(MyApp.Tools.tools(), &%{&1 | timeout: 5_000})
   """
 
   @type kind :: :function | :output | :external | :unapproved
@@ -29,7 +53,9 @@ defmodule ExAgent.Tool do
             max_retries: 1,
             delegation: nil,
             execution_binding: nil,
-            prepared_validator: nil
+            prepared_validator: nil,
+            timeout: nil,
+            concurrency: :parallel
 
   @type t :: %__MODULE__{
           name: String.t(),
@@ -41,7 +67,9 @@ defmodule ExAgent.Tool do
           max_retries: non_neg_integer(),
           delegation: term(),
           execution_binding: map() | :unbound | nil,
-          prepared_validator: term()
+          prepared_validator: term(),
+          timeout: pos_integer() | nil,
+          concurrency: :parallel | :exclusive
         }
 
   @type validation_error :: %{path: String.t(), keyword: String.t(), message: String.t()}
@@ -121,9 +149,25 @@ defmodule ExAgent.Tool do
     }
   end
 
-  @doc "Build a tool by hand."
+  @doc "Build a tool by hand. Raises `ArgumentError` for invalid execution controls."
   @spec new(keyword()) :: t()
   def new(opts) when is_list(opts) do
-    struct!(__MODULE__, opts)
+    __MODULE__ |> struct!(opts) |> validate_execution!()
   end
+
+  @doc false
+  def validate_execution!(%__MODULE__{timeout: timeout})
+      when not is_nil(timeout) and not (is_integer(timeout) and timeout > 0),
+      do:
+        raise(ArgumentError, "tool timeout must be a positive integer, got: #{inspect(timeout)}")
+
+  def validate_execution!(%__MODULE__{concurrency: concurrency})
+      when concurrency not in [:parallel, :exclusive],
+      do:
+        raise(
+          ArgumentError,
+          "tool concurrency must be :parallel or :exclusive, got: #{inspect(concurrency)}"
+        )
+
+  def validate_execution!(%__MODULE__{} = tool), do: tool
 end

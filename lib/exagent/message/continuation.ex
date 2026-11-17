@@ -25,7 +25,7 @@ defmodule ExAgent.Message.Continuation do
         "provider" => "openrouter",
         "arguments_codec" => "exagent.arguments/1"
       }
-      when mode in ["disabled", "none"] and is_map(routing) ->
+      when mode in ["disabled", "none", "enabled"] and is_map(routing) ->
         routing!(routing)
         value |> Map.drop(["routing", "reasoning_mode"]) |> Map.put("version", 2) |> validate!()
         value
